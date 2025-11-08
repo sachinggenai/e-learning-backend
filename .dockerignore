@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+.hypothesis/
+tests/
+
+# Development
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data and logs
+*.db
+*.sqlite3
+*.log
+data/
+temp_pip/
+
+# Scripts and documentation
+test_*.py
+debug_*.py
+*.md
+!README.md
+
+# Config
+.env
+.env.local
+.env.*.local
+
+# Development scripts
+run_dev.sh
+run_dev.ps1
+setup_user_venv.ps1
+
+# Git
+.git/
+.gitignore
+node_modules/

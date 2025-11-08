@@ -1,0 +1,341 @@
+INFO:     Will watch for changes in these directories: ['/Users/aiwork/e-learning-editor/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8500 (Press CTRL+C to quit)
+INFO:     Started reloader process [2576] using WatchFiles
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [2622]
+INFO:     Waiting for application startup.
+2025-10-08 13:20:12,777 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:20:12,777 - app.main - INFO - Environment: development
+2025-10-08 13:20:12,777 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+INFO:     127.0.0.1:49317 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49388 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49388 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49395 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49397 - "POST /api/v1/courses/frontend-test-course/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49399 - "GET /api/v1/courses/frontend-test-course/pages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49425 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49428 - "POST /api/v1/courses/integration-test/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49433 - "GET /api/v1/courses/integration-test/pages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49439 - "POST /api/v1/courses/integration-test/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49441 - "POST /api/v1/courses/integration-test/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49445 - "GET /api/v1/courses/integration-test/pages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49614 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49614 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49657 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49696 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49747 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49798 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49798 - "GET /api/v1/health HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py', 'app/main.py', 'app/models/enhanced_templates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:33:48,816 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2622]
+WARNING:  WatchFiles detected changes in 'app/routers/enhanced_templates.py'. Reloading...
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [9345]
+INFO:     Waiting for application startup.
+2025-10-08 13:33:49,768 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:33:49,768 - app.main - INFO - Environment: development
+2025-10-08 13:33:49,768 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/database.py'. Reloading...
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [9360]
+INFO:     Waiting for application startup.
+2025-10-08 13:33:50,306 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:33:50,306 - app.main - INFO - Environment: development
+2025-10-08 13:33:50,306 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [9376]
+INFO:     Waiting for application startup.
+2025-10-08 13:33:50,734 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:33:50,734 - app.main - INFO - Environment: development
+2025-10-08 13:33:50,734 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+INFO:     127.0.0.1:49818 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49822 - "GET /api/v1/health HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:36:50,586 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9376]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [9554]
+INFO:     Waiting for application startup.
+2025-10-08 13:36:51,023 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:36:51,023 - app.main - INFO - Environment: development
+2025-10-08 13:36:51,023 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:36:56,582 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9554]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [9565]
+INFO:     Waiting for application startup.
+2025-10-08 13:36:56,980 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:36:56,980 - app.main - INFO - Environment: development
+2025-10-08 13:36:56,980 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:37:01,428 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9565]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [9568]
+INFO:     Waiting for application startup.
+2025-10-08 13:37:01,816 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:37:01,816 - app.main - INFO - Environment: development
+2025-10-08 13:37:01,816 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:37:06,366 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9568]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [9577]
+INFO:     Waiting for application startup.
+2025-10-08 13:37:06,757 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:37:06,757 - app.main - INFO - Environment: development
+2025-10-08 13:37:06,757 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:37:11,105 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9577]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [9584]
+INFO:     Waiting for application startup.
+2025-10-08 13:37:11,503 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:37:11,503 - app.main - INFO - Environment: development
+2025-10-08 13:37:11,503 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+INFO:     127.0.0.1:49998 - "POST /api/v1/courses/course_001/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50000 - "GET /api/v1/courses/course_001/pages HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:39:18,335 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9584]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [10315]
+INFO:     Waiting for application startup.
+2025-10-08 13:39:18,760 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:39:18,760 - app.main - INFO - Environment: development
+2025-10-08 13:39:18,760 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:39:26,039 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10315]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [10326]
+INFO:     Waiting for application startup.
+2025-10-08 13:39:26,438 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:39:26,438 - app.main - INFO - Environment: development
+2025-10-08 13:39:26,438 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:39:31,490 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10326]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [10338]
+INFO:     Waiting for application startup.
+2025-10-08 13:39:31,977 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:39:31,977 - app.main - INFO - Environment: development
+2025-10-08 13:39:31,977 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:39:35,820 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10338]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [10347]
+INFO:     Waiting for application startup.
+2025-10-08 13:39:36,213 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:39:36,213 - app.main - INFO - Environment: development
+2025-10-08 13:39:36,213 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+INFO:     127.0.0.1:50067 - "POST /api/v1/courses/course_001/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50068 - "GET /api/v1/courses/course_001/pages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50077 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50077 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50113 - "POST /api/v1/courses/course_002/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50114 - "GET /api/v1/courses/course_002/pages HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/routers/courses.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 13:40:36,146 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10347]
+/Users/aiwork/e-learning-editor/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:373: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [10411]
+INFO:     Waiting for application startup.
+2025-10-08 13:40:36,595 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-10-08 13:40:36,595 - app.main - INFO - Environment: development
+2025-10-08 13:40:36,595 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+INFO:     Application startup complete.
+INFO:     127.0.0.1:50140 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50140 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50736 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50740 - "POST /api/v1/courses/test_course/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50867 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50869 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51538 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51593 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51689 - "POST /api/v1/courses/demo_course/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53746 - "POST /api/v1/courses/test_edit_functionality/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53841 - "POST /api/v1/courses/test_edit_functionality/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53842 - "POST /api/v1/courses/test_edit_functionality/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53843 - "GET /api/v1/courses/test_edit_functionality/pages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53961 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53961 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54878 - "GET /api/v1/courses/test_edit_functionality/pages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54879 - "GET /api/v1/courses HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54970 - "POST /api/v1/courses HTTP/1.1" 201 Created
+INFO:     127.0.0.1:54971 - "GET /api/v1/courses HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55830 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55830 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58316 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58317 - "POST /api/v1/courses/validation_test_course/pages/from-template HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:58318 - "POST /api/v1/courses/validation_test_course/pages/from-template HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:58319 - "POST /api/v1/courses/validation_test_course/pages/from-template HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:58406 - "POST /api/v1/courses/validation_test_course/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58407 - "POST /api/v1/courses/test_edit_functionality/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59131 - "POST /api/v1/courses HTTP/1.1" 201 Created
+INFO:     127.0.0.1:59132 - "POST /api/v1/courses/validation_comprehensive/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59133 - "POST /api/v1/courses/validation_comprehensive/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59134 - "POST /api/v1/courses/validation_comprehensive/pages/from-template HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59135 - "GET /api/v1/courses/validation_comprehensive/pages HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61234 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61234 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62477 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62479 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62776 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62778 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62778 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63577 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63577 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65460 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65462 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65462 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65462 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49905 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49905 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50812 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50814 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50814 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50814 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50859 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50861 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50863 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50863 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50863 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50865 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50863 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50865 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54317 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54325 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54325 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54327 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54633 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54814 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54814 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56581 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56583 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56583 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56583 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56589 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57007 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57007 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57604 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57604 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57606 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57606 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:0 - "GET /api/v1/courses/templates/available HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62809 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62811 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62811 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62811 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62813 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49932 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49934 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49934 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49934 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49940 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50733 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50735 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50735 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50735 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50737 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-10-08 15:59:29,528 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10411]
+INFO:     Stopping reloader process [2576]

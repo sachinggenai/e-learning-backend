@@ -1,0 +1,14 @@
+# Production requirements - extends base requirements.txt
+-r requirements.txt
+
+# Production WSGI server
+gunicorn>=21.2.0
+
+# PostgreSQL adapter for production (optional - if switching from SQLite)
+psycopg2-binary>=2.9.9
+
+# Monitoring and observability (optional)
+# sentry-sdk[fastapi]>=1.38.0
+
+# Security enhancements (optional)
+# python-jose[cryptography]>=3.3.0
