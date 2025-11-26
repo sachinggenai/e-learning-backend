@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>prakash</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="scorm-player">
+        <header class="player-header">
+            <h1 id="course-title">prakash</h1>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <span id="progress-text" class="progress-text">0%</span>
+            </div>
+        </header>
+
+        <main class="player-content">
+            <div id="slide-container" class="slide-container">
+                <div class="loading"><p>Loading...</p></div>
+            </div>
+        </main>
+
+        <footer class="player-controls">
+            <button id="prev-btn" class="nav-btn" disabled>← Prev</button>
+            <span id="slide-counter">1 of 5</span>
+            <button id="next-btn" class="nav-btn">Next →</button>
+            <button id="finish-btn" class="finish-btn" style="display:none;">
+                Finish
+            </button>
+        </footer>
+    </div>
+
+    <!-- Scripts in correct order with defer -->
+    <script src="scorm_wrapper.js" defer></script>
+    <script src="course_data.js" defer></script>
+
+    <script defer>
+    // ============================================
+    // PRODUCTION-GRADE PLAYER INITIALIZATION
+    // ============================================
+
+    var Player = {
+        state: {
+            currentSlide: 0,
+            totalSlides: 5,
+            courseData: null,
+            initialized: false,
+            quizAnswers: {},
+            scormReady: false
+        },
+
+        // FIX: Promise-based initialization with timeout
+        init: async function() {
+            console.log('Player: Starting initialization...');
+
+            try {
+                // Wait for courseData with 5-second timeout
+                await this.waitForCourseData(5000);
+
+                // Validate courseData structure
+                if (!this.validateCourseData()) {
+                    throw new Error('Invalid course data structure');
+                }
+
+                // Initialize SCORM and restore progress
+                // SCORM.initialize() is called by window.load in scorm_wrapper.js
+                // We just check if it's ready
+                if (!SCORM.initialized) {
+                    this.state.scormReady = SCORM.initialize();
+                } else {
+                    this.state.scormReady = true;
+                }
+                
+                // Restore quiz answers from SCORM session data
+                if (this.state.scormReady && SCORM.sessionData.answers) {
+                    // Map SCORM session answers back to Player state
+                    // SCORM stores by qId, Player stores by slideIdx
+                    // We need to map qId back to slideIdx
+                    for (var i = 0; i < this.state.totalSlides; i++) {
+                        var slide = this.state.courseData.templates[i];
+                        if (slide && slide.type === 'mcq' && slide.data.questions && slide.data.questions[0]) {
+                            var qId = slide.data.questions[0].id; // e.g. "q_page_..." or just "q_3"
+                            // Check if we have an answer for this qId
+                            // Note: scorm_wrapper might store it as "q_3" if we passed that, 
+                            // but renderMCQ uses "q_" + slideIdx in selectAnswer?
+                            // Let's check how selectAnswer records it.
+                            // It calls SCORM.recordQuizAnswer('q_' + slideIdx, ...)
+                            
+                            var storedAnswer = SCORM.sessionData.answers['q_' + i];
+                            if (storedAnswer) {
+                                this.state.quizAnswers[i] = storedAnswer.selected;
+                                console.log('Restored answer for slide', i, ':', storedAnswer.selected);
+                            }
+                        }
+                    }
+                }
+
+                var savedSlide = SCORM.restoreProgress(this.state.totalSlides);
+                this.state.currentSlide = Math.min(savedSlide, this.state.totalSlides - 1);
+
+                // DEBUG: Check objectives after initialization
+                console.log('DEBUG: Checking objectives after initialization...');
+                var objectivesAfterInit = SCORM.getAllObjectivesStatus(this.state.totalSlides);
+                console.log('DEBUG: Objectives after init:', objectivesAfterInit);
+
+                // Load first slide
+                this.loadSlide(this.state.currentSlide);
+                this.updateNavigation();
+                this.updateProgress();
+
+                this.state.initialized = true;
+                console.log('✓ Player initialized successfully');
+                return true;
+
+            } catch (error) {
+                console.error('❌ Player initialization failed:', error);
+                this.showError('Failed to load course: ' + error.message);
+                return false;
+            }
+        },
+
+        // FIX: Wait for courseData to be available
+        waitForCourseData: function(timeoutMs) {
+            return new Promise((resolve, reject) => {
+                var startTime = Date.now();
+
+                var checkData = () => {
+                    if (typeof courseData !== 'undefined' && courseData.templates) {
+                        console.log('✓ courseData ready, slides:', courseData.templates.length);
+                        resolve();
+                    } else if (Date.now() - startTime > timeoutMs) {
+                        reject(new Error('Timeout waiting for course data'));
+                    } else {
+                        setTimeout(checkData, 100);  // Check every 100ms
+                    }
+                };
+
+                checkData();
+            });
+        },
+
+        // FIX: Comprehensive data validation
+        validateCourseData: function() {
+            if (!courseData || typeof courseData !== 'object') {
+                console.error('courseData is not an object:', courseData);
+                return false;
+            }
+
+            if (!courseData.templates || !Array.isArray(courseData.templates)) {
+                console.error('courseData.templates missing or not array:', courseData.templates);
+                return false;
+            }
+
+            if (courseData.templates.length === 0) {
+                console.error('No templates in courseData');
+                return false;
+            }
+
+            this.state.totalSlides = courseData.templates.length;
+            this.state.courseData = courseData;
+            return true;
+        },
+
+        // FIX: Error boundaries in loadSlide
+        loadSlide: function(index) {
+            try {
+                console.log('Loading slide:', index + 1, 'of', this.state.totalSlides);
+
+                if (index < 0 || index >= this.state.totalSlides) {
+                    throw new Error('Invalid slide index: ' + index);
+                }
+
+                var slide = this.state.courseData.templates[index];
+                if (!slide) {
+                    throw new Error('Slide ' + index + ' not found in course data');
+                }
+
+                var content = '';
+                try {
+                    if (slide.type === 'content-text' || slide.type === 'content') {
+                        content = this.renderContent(slide);
+                    } else if (slide.type === 'mcq') {
+                        content = this.renderMCQ(slide, index);
+                    } else {
+                        content = '<div class="slide"><p>Unknown slide type: ' +
+                                 this.sanitize(slide.type || 'undefined') + '</p></div>';
+                    }
+                } catch (renderError) {
+                    console.error('Render error for slide', index, ':', renderError);
+                    content = '<div class="slide error"><p>Failed to render slide: ' +
+                             this.sanitize(renderError.message) + '</p></div>';
+                }
+
+                var container = document.getElementById('slide-container');
+                if (!container) {
+                    throw new Error('Slide container element not found');
+                }
+
+                container.innerHTML = content;
+                this.state.currentSlide = index;
+
+                // Mark as viewed and save progress (but don't mark as completed here)
+                if (this.state.scormReady) {
+                    SCORM.saveProgress(index, this.state.totalSlides);
+                }
+
+                this.updateNavigation();
+                this.updateProgress();
+
+                console.log('✓ Slide loaded successfully');
+
+            } catch (error) {
+                console.error('❌ loadSlide failed:', error);
+                this.showError('Error loading slide: ' + error.message);
+            }
+        },
+
+        renderContent: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Untitled');
+                var body = this.sanitize(data.content || '');
+                return '<div class="template content-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="content-body">' + body + '</div>' +
+                       '</div>';
+            } catch (error) {
+                console.error('renderContent error:', error);
+                return '<div class="template error">' +
+                       '<p>Content rendering failed</p></div>';
+            }
+        },
+
+        renderMCQ: function(slide, idx) {
+            try {
+                if (!slide.data || !slide.data.questions ||
+                    slide.data.questions.length === 0) {
+                    return '<div class="template"><p>No questions available</p></div>';
+                }
+
+                var question = slide.data.questions[0];
+                if (!question) {
+                    return '<div class="template"><p>Invalid question data</p></div>';
+                }
+
+                var safeQuestion = this.sanitize(question.question || 'Question');
+                var answeredIndex = this.state.quizAnswers[idx];
+
+                var optionsHTML = '';
+                if (question.options && Array.isArray(question.options)) {
+                    for (var i = 0; i < question.options.length; i++) {
+                        var option = question.options[i];
+                        if (!option) continue;
+
+                        var safeText = this.sanitize(option.text ||
+                                                   'Option ' + (i + 1));
+                        var isSelected = answeredIndex === i;
+                        var checked = isSelected ? ' checked' : '';
+                        var selectedClass = isSelected ? ' selected' : '';
+
+                        optionsHTML += '<label class="mcq-option' + selectedClass +
+                                     '">' +
+                                     '<input type="radio" name="answer_' + idx +
+                                     '" value="' + i +
+                                     '" onchange="Player.selectAnswer(' +
+                                     idx + ', ' + i + ')"' + checked + '>' +
+                                     '<span class="option-text">' + safeText +
+                                     '</span>' +
+                                     '</label>';
+                    }
+                }
+
+                return '<div class="template mcq-template">' +
+                       '<h2 class="mcq-question">' + safeQuestion + '</h2>' +
+                       '<div class="mcq-options">' + optionsHTML + '</div>' +
+                       '<div id="feedback-' + idx + '" class="mcq-feedback">' +
+                       '</div>' +
+                       '</div>';
+
+            } catch (error) {
+                console.error('❌ renderMCQ failed:', error);
+                return '<div class="template error">' +
+                       '<p>Failed to render question</p></div>';
+            }
+        },
+
+        selectAnswer: function(slideIdx, optIdx) {
+            try {
+                console.log('=== MCQ DEBUG: selectAnswer called ===');
+                console.log('Slide index:', slideIdx, 'Option index:', optIdx);
+                
+                var slide = this.state.courseData.templates[slideIdx];
+                if (!slide) {
+                    console.error('MCQ DEBUG: Slide not found at index', slideIdx);
+                    return;
+                }
+                console.log('Slide type:', slide.type, 'Title:', slide.title);
+                
+                if (!slide.data || !slide.data.questions) {
+                    console.error('MCQ DEBUG: Invalid slide data for slide', slideIdx, 'data:', slide.data);
+                    return;
+                }
+
+                var question = slide.data.questions[0];
+                if (!question) {
+                    console.error('MCQ DEBUG: No question found in slide', slideIdx);
+                    return;
+                }
+                console.log('Question text:', question.question);
+                
+                if (!question.options) {
+                    console.error('MCQ DEBUG: No options found for question in slide', slideIdx);
+                    return;
+                }
+                console.log('Total options:', question.options.length);
+
+                var option = question.options[optIdx];
+                if (!option) {
+                    console.error('MCQ DEBUG: Option not found at index', optIdx, 'for slide', slideIdx);
+                    return;
+                }
+                console.log('Selected option text:', option.text);
+                console.log('Raw option.isCorrect value:', option.isCorrect, 'Type:', typeof option.isCorrect);
+
+                // Robust boolean checking for isCorrect
+                var correct = false;
+                if (typeof option.isCorrect === 'boolean') {
+                    correct = option.isCorrect;
+                    console.log('MCQ DEBUG: isCorrect is boolean, value:', correct);
+                } else if (typeof option.isCorrect === 'string') {
+                    correct = option.isCorrect.toLowerCase() === 'true';
+                    console.log('MCQ DEBUG: isCorrect is string, converted to:', correct);
+                } else {
+                    console.warn('MCQ DEBUG: Unexpected isCorrect type:', typeof option.isCorrect, 'value:', option.isCorrect);
+                    correct = Boolean(option.isCorrect);
+                    console.log('MCQ DEBUG: Forced boolean conversion result:', correct);
+                }
+
+                console.log('MCQ DEBUG: Final correctness determination:', correct);
+                console.log('MCQ DEBUG: Recording answer in state...');
+                
+                this.state.quizAnswers[slideIdx] = optIdx;
+                console.log('MCQ DEBUG: Answer recorded in state.quizAnswers[' + slideIdx + '] =', optIdx);
+
+                // Record in SCORM
+                if (this.state.scormReady) {
+                    console.log('MCQ DEBUG: SCORM is ready, recording quiz answer...');
+                    SCORM.recordQuizAnswer(
+                        'q_' + slideIdx,
+                        optIdx,
+                        correct,
+                        question.options
+                    );
+                    console.log('MCQ DEBUG: SCORM recording completed');
+                } else {
+                    console.warn('MCQ DEBUG: SCORM not ready, skipping SCORM recording');
+                }
+
+                var fb = document.getElementById('feedback-' + slideIdx);
+                if (fb) {
+                    var feedbackText = correct ? '✓ Correct!' : '✗ Incorrect';
+                    fb.innerHTML = '<p class="' + (correct ? 'ok' : 'err') + '">' + feedbackText + '</p>';
+                    console.log('MCQ DEBUG: Updated feedback element for slide', slideIdx, 'to:', feedbackText);
+                } else {
+                    console.warn('MCQ DEBUG: Feedback element not found for slide', slideIdx);
+                }
+
+                console.log('=== MCQ DEBUG: selectAnswer completed successfully ===');
+
+            } catch (error) {
+                console.error('MCQ DEBUG: selectAnswer error:', error);
+                console.error('MCQ DEBUG: Error stack:', error.stack);
+            }
+        },
+
+        sanitize: function(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        },
+
+        updateNavigation: function() {
+            try {
+                var prev = document.getElementById('prev-btn');
+                var next = document.getElementById('next-btn');
+                var fin = document.getElementById('finish-btn');
+
+                if (prev) prev.disabled = this.state.currentSlide === 0;
+
+                if (this.state.currentSlide === this.state.totalSlides - 1) {
+                    if (next) next.style.display = 'none';
+                    if (fin) fin.style.display = 'inline-block';
+                } else {
+                    if (next) next.style.display = 'inline-block';
+                    if (fin) fin.style.display = 'none';
+                }
+
+                var cnt = document.getElementById('slide-counter');
+                if (cnt) {
+                    cnt.textContent = (this.state.currentSlide + 1) + ' of ' + this.state.totalSlides;
+                }
+
+            } catch (error) {
+                console.error('updateNavigation error:', error);
+            }
+        },
+
+        updateProgress: function() {
+            try {
+                var progressFill = document.getElementById('progress-fill');
+                var progressText = document.getElementById('progress-text');
+
+                if (!progressFill || !progressText) return;
+
+                var pct = Math.round(((this.state.currentSlide + 1) / this.state.totalSlides) * 100);
+                progressFill.style.width = pct + '%';
+                progressText.textContent = pct + '%';
+
+            } catch (error) {
+                console.error('updateProgress error:', error);
+            }
+        },
+
+    nextSlide: function() {
+        console.log("DEBUG: Next button clicked. Current:", this.state.currentSlide, "Total:", this.state.totalSlides);
+        try {
+            // Safety check
+            if (typeof this.state.totalSlides === 'undefined') {
+                throw new Error("totalSlides is undefined");
+            }
+
+            if (this.state.currentSlide < this.state.totalSlides - 1) {
+                // Mark current slide as completed before navigating
+                if (this.state.scormReady) {
+                    SCORM.markSlideComplete(this.state.currentSlide, this.state.totalSlides);
+                }
+                
+                this.state.currentSlide++;
+                console.log("DEBUG: Loading next slide:", this.state.currentSlide);
+                this.loadSlide(this.state.currentSlide);
+            } else {
+                console.log("DEBUG: Last slide reached, calling finishCourse");
+                this.finishCourse();
+            }
+        } catch (e) {
+            console.error("CRITICAL ERROR in nextSlide:", e);
+            alert("Navigation Error: " + e.message + "\nPlease check the browser console (F12) for details.");
+        }
+    },
+
+    previousSlide: function() {
+        try {
+            if (this.state.currentSlide > 0) {
+                this.state.currentSlide--;
+                this.loadSlide(this.state.currentSlide);
+            }
+        } catch (e) {
+            console.error("Navigation error:", e);
+            alert("Navigation Error: " + e.message);
+        }
+    },
+
+    finishCourse: function() {
+        try {
+            console.log("=== finishCourse initiated ===");
+            
+            // 1. Robust Data Retrieval (Fixes potential structure mismatch)
+            var slides = null;
+            if (this.state.courseData && Array.isArray(this.state.courseData.templates)) {
+                slides = this.state.courseData.templates;
+            } else if (Array.isArray(this.state.courseData)) {
+                slides = this.state.courseData;
+            } else {
+                console.error("Invalid courseData:", this.state.courseData);
+                throw new Error("Course data structure is invalid or not loaded.");
+            }
+
+            // 2. Validate Quiz Answers
+            if (!this.state.quizAnswers) this.state.quizAnswers = {}; // Safety init
+
+            var unanswered = 0;
+            try {
+                for (var i = 0; i < slides.length; i++) {
+                    if (slides[i].type === 'mcq' && !this.state.quizAnswers.hasOwnProperty(i)) {
+                        unanswered++;
+                    }
+                }
+            } catch (filterErr) {
+                console.warn("Warning: Could not check unanswered questions", filterErr);
+            }
+
+            if (unanswered > 0) {
+                if (!confirm("You have " + unanswered + " unanswered questions. Finishing now will result in a partial score. Are you sure?")) {
+                    console.log("User cancelled finishCourse");
+                    return; // Stop execution if user cancels
+                }
+            }
+
+            // 3. Mark Completion
+            console.log("Marking slides complete...");
+            for (var i = 0; i < this.state.totalSlides; i++) {
+                if (this.state.scormReady) {
+                    SCORM.markSlideComplete(i, this.state.totalSlides);
+                }
+            }
+
+            if (this.state.scormReady) {
+                console.log("Setting SCORM status...");
+                SCORM.setCourseComplete();
+                
+                console.log("Calculating score...");
+                var score = SCORM.calculateScore();
+                
+                alert("Course Completed!\nFinal Score: " + score + "%");
+                
+                console.log("Terminating connection...");
+                SCORM.terminate();
+                // Try to close window
+                try {
+                    window.close();
+                    if (!window.closed) {
+                        console.log("Window could not be closed automatically");
+                    }
+                } catch (e) {
+                    console.warn("Could not close window:", e);
+                }
+            } else {
+                alert("Course completed (local only - SCORM not available)");
+            }
+
+        } catch (e) {
+            console.error("CRITICAL ERROR in finishCourse:", e);
+            alert("Error finishing course: " + e.message);
+        }
+    },
+
+        showError: function(msg) {
+            try {
+                var container = document.getElementById('slide-container');
+                if (container) {
+                    container.innerHTML = '<div class="error">' + this.sanitize(msg) + '</div>';
+                }
+            } catch (error) {
+                console.error('showError failed:', error);
+            }
+        }
+    };
+
+    // FIX: Async initialization on page load
+    window.addEventListener('load', async function() {
+        console.log('Page loaded, starting player initialization...');
+        // SCORM.initialize() is already called in scorm_wrapper.js window.load
+        // We just need to wait for it or ensure Player.init doesn't double-init
+        await Player.init();
+    });
+
+    // FIX: Event handlers with error boundaries
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            var prevBtn = document.getElementById('prev-btn');
+            var nextBtn = document.getElementById('next-btn');
+            var finishBtn = document.getElementById('finish-btn');
+
+            if (prevBtn) {
+                prevBtn.onclick = function() {
+                    Player.previousSlide();
+                };
+            }
+
+            if (nextBtn) {
+                nextBtn.onclick = function() {
+                    Player.nextSlide();
+                };
+            }
+
+            if (finishBtn) {
+                finishBtn.onclick = function() {
+                    Player.finishCourse();
+                };
+            }
+
+        } catch (error) {
+            console.error('Event handler setup failed:', error);
+        }
+    });
+    </script>
+</body>
+</html>
