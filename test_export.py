@@ -9,7 +9,7 @@ import asyncio
 from pathlib import Path
 
 # Add the backend directory to Python path
-sys.path.insert(0, '/Users/aiwork/e-learning-editor/backend')
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from app.services.scorm_export import SCORMExportService
 from app.models.course import Course, Template, TemplateData
@@ -86,6 +86,46 @@ async def test_export_functionality():
             print(f"   📋 Contents: {len(file_list)} files")
             for file in sorted(file_list):
                 print(f"      - {file}")
+            
+            # Critical Revalidation: Check file contents
+            print("\n   🔍 Critical Content Validation:")
+            
+            # 1. Check imsmanifest.xml for single item structure
+            if 'imsmanifest.xml' in file_list:
+                with zip_file.open('imsmanifest.xml') as f:
+                    manifest_content = f.read().decode('utf-8')
+                    if '<item identifier="item_course_1"' in manifest_content:
+                        print("      ✅ imsmanifest.xml: Single item structure confirmed")
+                    else:
+                        print("      ❌ imsmanifest.xml: Single item structure NOT found")
+                        raise ValueError("imsmanifest.xml missing single item structure")
+            else:
+                raise ValueError("imsmanifest.xml missing from package")
+
+            # 2. Check scorm_wrapper.js for terminate
+            if 'scorm_wrapper.js' in file_list:
+                with zip_file.open('scorm_wrapper.js') as f:
+                    wrapper_content = f.read().decode('utf-8')
+                    if 'SCORM.terminate()' in wrapper_content or 'terminate: function' in wrapper_content:
+                        print("      ✅ scorm_wrapper.js: Terminate function confirmed")
+                    else:
+                        print("      ❌ scorm_wrapper.js: Terminate function NOT found")
+                        raise ValueError("scorm_wrapper.js missing terminate function")
+            else:
+                raise ValueError("scorm_wrapper.js missing from package")
+
+            # 3. Check index.html for finishCourse calling terminate
+            if 'index.html' in file_list:
+                with zip_file.open('index.html') as f:
+                    html_content = f.read().decode('utf-8')
+                    if 'SCORM.terminate()' in html_content:
+                        print("      ✅ index.html: SCORM.terminate() call confirmed")
+                    else:
+                        print("      ❌ index.html: SCORM.terminate() call NOT found")
+                        raise ValueError("index.html missing SCORM.terminate() call")
+            else:
+                raise ValueError("index.html missing from package")
+
         
         return True
         

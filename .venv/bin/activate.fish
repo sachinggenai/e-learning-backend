@@ -29,7 +29,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/Users/aiwork/e-learning-editor-new/backend/.venv"
+set -gx VIRTUAL_ENV "/Users/aiwork/iOSStudy/backend/.venv"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

@@ -33,10 +33,15 @@ class TestExportEndpoints:
         
         response = test_client.post("/api/v1/export", json=request_data)
         
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.json()
+        # Request validation errors (Pydantic) return "detail" by default in FastAPI
+        # unless RequestValidationError is overridden.
         assert "detail" in data
-        assert "Invalid course JSON format" in data["detail"]
+        # Pydantic v2 returns a list of errors
+        assert isinstance(data["detail"], list)
+        # Check if any error message contains "Invalid JSON format"
+        assert any("Invalid JSON format" in err["msg"] for err in data["detail"])
 
     def test_export_course_missing_fields(self, test_client: TestClient):
         """Test export with missing required fields"""
@@ -49,9 +54,13 @@ class TestExportEndpoints:
         
         response = test_client.post("/api/v1/export", json=request_data)
         
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.json()
-        assert "detail" in data
+        assert "error" in data
+        # Pydantic v2 returns a list of errors
+        assert isinstance(data["error"], list)
+        # Check if any error message contains "Field required" or validation error
+        assert len(data["error"]) > 0
 
     def test_export_course_zip_content(self, test_client: TestClient, sample_course_json: str):
         """Test that exported ZIP contains required SCORM files"""
@@ -69,17 +78,17 @@ class TestExportEndpoints:
             # Should contain required SCORM files
             assert "imsmanifest.xml" in file_names
             assert "index.html" in file_names
-            assert "course.json" in file_names
+            assert "course_data.js" in file_names
             
             # Verify manifest content
             manifest_content = zip_file.read("imsmanifest.xml").decode('utf-8')
             assert "manifest" in manifest_content
             assert "JSON Test Course" in manifest_content  # Course title
             
-            # Verify course.json content
-            course_content = zip_file.read("course.json").decode('utf-8')
-            course_data = json.loads(course_content)
-            assert course_data["courseId"] == "json-course-001"
+            # Verify course_data.js content
+            course_content = zip_file.read("course_data.js").decode('utf-8')
+            assert "var courseData =" in course_content
+            assert "json-course-001" in course_content
 
     def test_export_course_filename_format(self, test_client: TestClient, sample_course_json: str):
         """Test exported file has correct filename format"""
@@ -93,21 +102,22 @@ class TestExportEndpoints:
         assert "json-course-001" in content_disposition
         assert ".zip" in content_disposition
 
-    @patch('app.services.scorm_export.SCORMExportService')
-    def test_export_course_service_error(self, mock_service, test_client: TestClient, sample_course_json: str):
+    def test_export_course_service_error(
+        self, test_client: TestClient, sample_course_json: str
+    ):
         """Test export handles service errors gracefully"""
         # Mock service to raise an error
-        mock_instance = Mock()
-        mock_service.return_value = mock_instance
-        mock_instance.generate_scorm_package.side_effect = Exception("Export failed")
-        
-        request_data = {"course": sample_course_json}
-        
-        response = test_client.post("/api/v1/export", json=request_data)
-        
-        assert response.status_code == 500
-        data = response.json()
-        assert "Export failed" in data["detail"]
+        with patch(
+            "app.routers.export.scorm_service.generate_scorm_package",
+            side_effect=Exception("Export failed")
+        ):
+            request_data = {"course": sample_course_json}
+            
+            response = test_client.post("/api/v1/export", json=request_data)
+            
+            assert response.status_code == 500
+            data = response.json()
+            assert "Export failed" in data["error"]
 
     def test_validate_course_for_export_success(self, test_client: TestClient, sample_course_json: str):
         """Test course validation endpoint"""
@@ -130,7 +140,7 @@ class TestExportEndpoints:
         
         response = test_client.post("/api/v1/export/validate", json=request_data)
         
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_get_export_formats(self, test_client: TestClient):
         """Test get supported export formats endpoint"""

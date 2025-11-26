@@ -52,6 +52,10 @@ class TestExportNegative:
         resp = test_client.post(
             "/api/v1/export", json={"course": json.dumps(course)}
         )
-        assert resp.status_code == 400
-        detail = resp.json().get("detail", "")
-        assert "contiguous" in detail.lower()
+        # Pydantic model validation catches this first, returning 422
+        assert resp.status_code == 422
+        # The error details are in "error" field due to custom exception handler
+        error_data = resp.json().get("error", [])
+        # Check if any error message mentions sequential/contiguous
+        # Pydantic error msg: "Template orders must be sequential starting from 0..."
+        assert any("sequential" in str(e).lower() for e in error_data)

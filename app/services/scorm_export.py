@@ -242,7 +242,7 @@ class SCORMExportService:
     <organizations default="default_org">
         <organization identifier="default_org">
             <title>{self._escape_xml(course.title)}</title>
-            {self._generate_items_xml(course.templates)}
+            {self._generate_items_xml(course)}
         </organization>
     </organizations>
 
@@ -268,7 +268,7 @@ class SCORMExportService:
             logger.error(f"Failed to create SCORM manifest: {e}")
             raise Exception(f"Manifest creation failed: {str(e)}")
     
-    def _generate_items_xml(self, templates: List[Template]) -> str:
+    def _generate_items_xml(self, course: Course) -> str:
         """
         Generate pure SCORM 1.2 organization items XML.
         
@@ -278,19 +278,13 @@ class SCORMExportService:
         - JavaScript-based completion tracking via objectives
         - Free navigation without manifest-based constraints
         """
-        items_xml = ""
-        
-        for i, template in enumerate(sorted(templates, key=lambda t: t.order)):
-            # Create unique identifier for each item
-            item_id = f"item_{template.id}_{i}"
-            items_xml += f"""
-            <item identifier="{item_id}" \
-identifierref="resource_1" isvisible="true">
-                <title>{self._escape_xml(template.title)}</title>
+        # FIX: Use single item for SPA architecture to avoid LMS aggregation issues
+        # This ensures the LMS tracks the entire course as a single SCO
+        return f"""
+            <item identifier="item_course_full" identifierref="resource_1" isvisible="true">
+                <title>{self._escape_xml(course.title)}</title>
             </item>"""
-        
-        return items_xml
-    
+
     def _generate_asset_files_xml(self, assets: List[Any]) -> str:
         """Generate file references for assets"""
         files_xml = ""
@@ -806,42 +800,60 @@ identifierref="resource_1" isvisible="true">
         finishCourse: function() {{
             try {{
                 console.log('=== COURSE COMPLETION DEBUG: finishCourse called ===');
-                console.log('Total slides in course:', this.state.totalSlides);
-                console.log('Current slide:', this.state.currentSlide);
-                console.log('SCORM ready:', this.state.scormReady);
                 
-                // FIX: Mark ALL slides as completed before finishing
+                // 1. Validate all questions answered
+                var unanswered = [];
+                if (this.state.courseData && this.state.courseData.templates) {{
+                    this.state.courseData.templates.forEach((t, i) => {{
+                        if (t.type === 'mcq' && this.state.quizAnswers[i] === undefined) {{
+                            unanswered.push(i + 1);
+                        }}
+                    }});
+                }}
+                
+                if (unanswered.length > 0) {{
+                    alert('Please answer all questions before finishing. Unanswered slides: ' + unanswered.join(', '));
+                    return;
+                }}
+
+                // 2. Mark all slides as completed
                 console.log('Marking all slides as completed...');
-                var completedCount = 0;
                 for (var i = 0; i < this.state.totalSlides; i++) {{
                     if (this.state.scormReady) {{
                         SCORM.markSlideComplete(i, this.state.totalSlides);
-                        completedCount++;
-                        console.log('Marked slide', i, 'as completed (total marked:', completedCount + ')');
-                    }} else {{
-                        console.warn('SCORM not ready, cannot mark slide', i, 'as completed');
                     }}
                 }}
-                console.log('COMPLETION DEBUG: Total slides marked as completed:', completedCount);
                 
+                // 3. Set Course Complete
                 if (this.state.scormReady) {{
                     console.log('Setting course status to completed...');
                     SCORM.setCourseComplete();
-                    console.log('COMPLETION DEBUG: Course marked as completed in SCORM');
                     
                     var score = SCORM.calculateScore();
-                    console.log('COMPLETION DEBUG: Calculated final score:', score + '%');
-                    
                     alert('Course Complete! Score: ' + score + '%');
-                    console.log('=== COURSE COMPLETION DEBUG: finishCourse completed successfully ===');
+                    
+                    // 4. Terminate SCORM session
+                    console.log('Terminating SCORM session...');
+                    SCORM.terminate();
                 }} else {{
-                    console.warn('COMPLETION DEBUG: SCORM not ready, course completion not recorded');
-                    alert('Course completed (local only - SCORM not available)');
+                    alert('Course completed (local only)');
+                }}
+                
+                // 5. Close Window
+                try {{
+                    window.close();
+                    if (window.parent && window.parent !== window) {{
+                        window.parent.close();
+                    }}
+                    if (window.top && window.top !== window) {{
+                        window.top.close();
+                    }}
+                }} catch (e) {{
+                    console.warn('Could not close window:', e);
                 }}
                 
             }} catch (error) {{
                 console.error('COMPLETION DEBUG: finishCourse error:', error);
-                console.error('COMPLETION DEBUG: Error stack:', error.stack);
                 alert('Course completed (with errors)');
             }}
         }},
@@ -1014,11 +1026,15 @@ identifierref="resource_1" isvisible="true">
 var SCORM = {
     version: "1.2",
     initialized: false,
-    sessionData: {answers: {}, startTime: null},
-    mockMode: false,
-    mockStorage: null,
+    sessionData: {
+        answers: {}, 
+        visitedSlides: [], // Track visited slides locally
+        startTime: null
+    },
 
     initialize: function() {
+        if (this.initialized) return true; // Prevent double initialization
+        
         try {
             var API = this.getAPI();
             if (!API) {
@@ -1035,13 +1051,27 @@ var SCORM = {
             if (r !== "true") return false;
             
             // CRITICAL FIX: Only set to 'incomplete' if no status exists yet
-            // This prevents overwriting 'completed' status on course restart
             var currentStatus = API.LMSGetValue("cmi.core.lesson_status");
             if (!currentStatus || currentStatus === "" || currentStatus === "not attempted") {
                 API.LMSSetValue("cmi.core.lesson_status", "incomplete");
                 console.log('✓ SCORM initialized - status set to incomplete');
             } else {
                 console.log('✓ SCORM initialized - preserving existing status:', currentStatus);
+            }
+
+            // RESTORE SESSION DATA (Quiz Answers & Visited Slides) from suspend_data
+            var suspendData = API.LMSGetValue("cmi.suspend_data");
+            if (suspendData && suspendData !== "") {
+                try {
+                    var parsed = JSON.parse(suspendData);
+                    if (parsed) {
+                        if (parsed.answers) this.sessionData.answers = parsed.answers;
+                        if (parsed.visitedSlides) this.sessionData.visitedSlides = parsed.visitedSlides;
+                        console.log('✓ Restored session data. Visited:', this.sessionData.visitedSlides.length);
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse suspend_data:', e);
+                }
             }
             
             this.sessionData.startTime = new Date();
@@ -1118,51 +1148,87 @@ var SCORM = {
 
     setValue: function(p, v) {
         try {
+            console.log('SCORM setValue:', p, '=', v);
             if (this.mockMode) {
                 if (this.mockStorage) {
                     this.mockStorage[p] = v;
                     this.saveMockData();
                 }
-                console.log('Mock setValue:', p, '=', v);
+                console.log('Mock setValue success');
                 return true;
             }
 
             var API = this.getAPI();
-            return API && API.LMSSetValue(p, v) === "true";
+            if (!API) {
+                console.error('SCORM setValue failed: API not found');
+                return false;
+            }
+            var result = API.LMSSetValue(p, v);
+            console.log('SCORM LMSSetValue result:', result);
+            if (result !== "true") {
+                var err = API.LMSGetLastError();
+                var errString = API.LMSGetErrorString(err);
+                var diagnostic = API.LMSGetDiagnostic(err);
+                console.error('SCORM setValue error:', err, errString, diagnostic);
+            }
+            return result === "true";
         } catch (e) {
-            console.error('setValue error:', e);
+            console.error('setValue exception:', e);
             return false;
         }
     },
 
     getValue: function(p) {
         try {
+            console.log('SCORM getValue:', p);
             if (this.mockMode) {
                 var value = this.mockStorage ? this.mockStorage[p] : "";
-                console.log('Mock getValue:', p, '=', value);
+                console.log('Mock getValue result:', value);
                 return value || "";
             }
 
             var API = this.getAPI();
-            return API ? (API.LMSGetValue(p) || "") : "";
+            if (!API) {
+                console.error('SCORM getValue failed: API not found');
+                return "";
+            }
+            var value = API.LMSGetValue(p);
+            console.log('SCORM LMSGetValue result:', value);
+            var err = API.LMSGetLastError();
+            if (err !== "0") {
+                 var errString = API.LMSGetErrorString(err);
+                 console.error('SCORM getValue error:', err, errString);
+            }
+            return value || "";
         } catch (e) {
-            console.error('getValue error:', e);
+            console.error('getValue exception:', e);
             return "";
         }
     },
 
     commit: function() {
         try {
+            console.log('SCORM commit called');
             if (this.mockMode) {
                 this.saveMockData();
-                console.log('Mock commit: data saved');
+                console.log('Mock commit success');
                 return true;
             }
 
             var API = this.getAPI();
-            return API && API.LMSCommit("") === "true";
+            if (!API) {
+                console.error('SCORM commit failed: API not found');
+                return false;
+            }
+            var result = API.LMSCommit("");
+            console.log('SCORM LMSCommit result:', result);
+            if (result !== "true") {
+                var err = API.LMSGetLastError();
+                console.error('SCORM commit error:', err, API.LMSGetErrorString(err));
+            }
+            return result === "true";
         } catch (e) {
-            console.error('commit error:', e);
+            console.error('commit exception:', e);
             return false;
         }
     },
@@ -1180,53 +1246,41 @@ var SCORM = {
     // FIX: Add missing SCORM methods for LMS compatibility
     markSlideComplete: function(slideIdx, totalSlides) {
         if (this.initialized) {
-            // Use objective IDs that match the manifest (obj_0, obj_1, obj_2, etc.)
-            var objId = 'obj_' + slideIdx;
-            
-            // First check if this objective already exists and is completed
-            var existingId = this.getValue('cmi.objectives.' + slideIdx + '.id');
-            var existingStatus = this.getValue('cmi.objectives.' + slideIdx + '.status');
-            
-            if (existingId === objId && existingStatus === 'completed') {
-                console.log('Slide', slideIdx, 'already marked complete');
-                // Even if already completed, check if course should be marked complete
-                if (totalSlides) {
-                    this.checkCourseCompletion(totalSlides);
-                }
-                return; // Skip if already completed
+            // 1. Update Local State
+            if (this.sessionData.visitedSlides.indexOf(slideIdx) === -1) {
+                this.sessionData.visitedSlides.push(slideIdx);
+                this.saveSessionData(); // Persist immediately
+                console.log('Marked slide', slideIdx, 'visited. Total visited:', this.sessionData.visitedSlides.length);
             }
-            
+
+            // 2. Try to update LMS Objectives (Best Effort)
+            // We do this for LMSs that support it, but we don't rely on it for logic
+            var objId = 'obj_' + slideIdx;
             this.setValue('cmi.objectives.' + slideIdx + '.id', objId);
             this.setValue('cmi.objectives.' + slideIdx + '.status', 'completed');
             this.setValue('cmi.objectives.' + slideIdx + '.score.raw', '100');
             this.setValue('cmi.objectives.' + slideIdx + '.score.max', '100');
-            // REMOVED: score.scaled is NOT valid in SCORM 1.2, only SCORM 2004
-            this.commit();
-            console.log('Marked slide', slideIdx, 'as completed with objective ID:', objId);
             
-            // Check if all slides are now completed
+            // 3. Check Completion based on LOCAL state
             if (totalSlides) {
                 this.checkCourseCompletion(totalSlides);
             }
+            
+            this.commit();
         }
     },
 
     checkCourseCompletion: function(totalSlides) {
         if (!this.initialized) return;
         
-        var allComplete = true;
-        for (var i = 0; i < totalSlides; i++) {
-            var objStatus = this.getValue('cmi.objectives.' + i + '.status');
-            if (objStatus !== 'completed') {
-                allComplete = false;
-                console.log('Objective', i, 'not yet completed:', objStatus);
-                break;
-            }
-        }
+        console.log('Checking completion. Visited:', this.sessionData.visitedSlides.length, '/', totalSlides);
         
-        if (allComplete) {
-            console.log('All', totalSlides, 'slides completed - marking course complete');
+        // ROBUST CHECK: Use local visitedSlides count
+        if (this.sessionData.visitedSlides.length >= totalSlides) {
+            console.log('All slides visited (local check) - marking course complete');
             this.setCourseComplete();
+        } else {
+            console.log('Course not yet complete. Missing slides.');
         }
     },
 
@@ -1243,7 +1297,7 @@ var SCORM = {
             this.setValue(prefix + '.id', qId);
             this.setValue(prefix + '.type', 'choice');
             this.setValue(prefix + '.student_response', selIdx.toString());
-            this.setValue(prefix + '.result', correct ? 'correct' : 'incorrect');
+            this.setValue(prefix + '.result', correct ? 'correct' : 'wrong');
             this.setValue(prefix + '.weighting', '1');
             // REMOVED: latency is NOT required in SCORM 1.2, causes errors
             
@@ -1262,8 +1316,12 @@ var SCORM = {
             
             // Also store in sessionData for score calculation
             this.sessionData.answers[qId] = {selected: selIdx, correct: correct};
+            this.saveSessionData(); // Persist to suspend_data
             
             console.log('Recorded quiz answer:', qId, 'idx:', interactionIdx, 'selected:', selIdx, 'correct:', correct);
+            
+            // Update score immediately
+            this.submitScore();
         }
     },
 
@@ -1293,6 +1351,7 @@ var SCORM = {
         var score = this.calculateScore();
         if (this.initialized) {
             this.setValue('cmi.core.score.raw', score);
+            this.setValue('cmi.core.score.min', '0');
             this.setValue('cmi.core.score.max', '100');
             this.commit();
             console.log('Score submitted:', score);
@@ -1328,6 +1387,7 @@ var SCORM = {
     },
 
     setCourseComplete: function() {
+        console.log('setCourseComplete called');
         if (this.initialized) {
             this.submitScore();
             // Mark all objectives as completed before setting course complete
@@ -1335,6 +1395,7 @@ var SCORM = {
             for (var i = 0; i < 10; i++) {
                 var objId = this.getValue('cmi.objectives.' + i + '.id');
                 if (objId && objId !== '') {
+                    console.log('Forcing completion for objective', i, 'id:', objId);
                     this.setValue('cmi.objectives.' + i + '.status', 'completed');
                     this.setValue('cmi.objectives.' + i + '.score.raw', '100');
                     this.setValue('cmi.objectives.' + i + '.score.max', '100');
@@ -1343,13 +1404,43 @@ var SCORM = {
                     break; // No more objectives
                 }
             }
+            console.log('Setting cmi.core.lesson_status to completed');
             this.setValue('cmi.core.lesson_status', 'completed');
-            this.commit();
+            this.setValue('cmi.core.score.min', '0'); // Ensure min score is set
+            var commitResult = this.commit();
+            console.log('setCourseComplete commit result:', commitResult);
+        } else {
+            console.warn('setCourseComplete called but SCORM not initialized');
         }
+    },
+
+    // Helper to format time as HHHH:MM:SS.SS for SCORM 1.2
+    formatTime: function(ms) {
+        var h = Math.floor(ms / 3600000);
+        var m = Math.floor((ms % 3600000) / 60000);
+        var s = Math.floor(((ms % 3600000) % 60000) / 1000);
+        var cs = Math.floor((((ms % 3600000) % 60000) % 1000) / 10);
+        
+        if (h < 10) h = "0" + h;
+        if (m < 10) m = "0" + m;
+        if (s < 10) s = "0" + s;
+        if (cs < 10) cs = "0" + cs;
+        
+        return h + ":" + m + ":" + s + "." + cs;
     },
 
     terminate: function() {
         try {
+            // SCORM 1.2 Requirement: Set session time and exit status before finishing
+            if (this.initialized && this.sessionData.startTime) {
+                var endTime = new Date();
+                var totalTime = endTime - this.sessionData.startTime;
+                this.setValue("cmi.core.session_time", this.formatTime(totalTime));
+                
+                // Set exit to 'suspend' to ensure lesson_location (bookmarking) is preserved
+                this.setValue("cmi.core.exit", "suspend");
+            }
+
             if (this.mockMode) {
                 this.saveMockData();
                 console.log('Mock SCORM terminated');
@@ -1421,14 +1512,28 @@ var SCORM = {
                 this.setValue('cmi.objectives.' + i + '.status', 'completed');
                 this.setValue('cmi.objectives.' + i + '.score.raw', '100');
                 this.setValue('cmi.objectives.' + i + '.score.max', '100');
-                this.setValue('cmi.objectives.' + i + '.score.scaled', '1.0');
             }
         }
         
         this.commit();
         console.log('DEBUG: Objectives refreshed and committed');
         return true;
-    }
+    },
+
+    // Helper to persist session data
+    saveSessionData: function() {
+        if (this.initialized) {
+            try {
+                var dataStr = JSON.stringify({
+                    answers: this.sessionData.answers,
+                    visitedSlides: this.sessionData.visitedSlides
+                });
+                this.setValue("cmi.suspend_data", dataStr);
+            } catch (e) {
+                console.error('Failed to save session data:', e);
+            }
+        }
+    },
 };
 window.addEventListener('load', () => SCORM.initialize());
 window.addEventListener('unload', () => SCORM.terminate());
@@ -1491,6 +1596,15 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             logger.error(f"Failed to copy assets: {e}")
             raise Exception(f"Asset copying failed: {str(e)}")
     
+    async def _validate_package_structure(self, package_dir: Path) -> None:
+        """
+        Validate the structure of the generated package
+        """
+        required_files = ['imsmanifest.xml', 'course_data.js', 'index.html', 'scorm_wrapper.js']
+        for filename in required_files:
+            if not (package_dir / filename).exists():
+                raise ValueError(f"Missing required file: {filename}")
+
     def _add_directory_to_zip(self, zip_file: zipfile.ZipFile, dir_path: Path, arc_name: str) -> None:
         """Recursively add directory contents to ZIP file"""
         for item in dir_path.iterdir():
@@ -1558,7 +1672,6 @@ console.log('✓ SCORM wrapper with Mock API loaded');
         text_str = re.sub(r'on\w+\s*=', '', text_str, flags=re.IGNORECASE)
         
         return html.escape(text_str)
-    
     def _validate_templates_for_scorm(self, templates: List) -> None:
         """
         FIX #8: Comprehensive template validation for SCORM export
@@ -1614,6 +1727,7 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                         # Try to convert to dict if it's not already
                         try:
                             template_data = _ensure_dict(template.data) if not isinstance(template.data, dict) else template.data
+
                         except ValueError as e:
                             validation_errors.append(
                                 f"Template {i+1} ({template.title}): "
@@ -1838,7 +1952,7 @@ console.log('✓ SCORM wrapper with Mock API loaded');
         
         logger.info(f"MCQ sanitization: Processed {len(sanitized_questions)} questions")
         return sanitized_questions
-    
+
     def _looks_like_html(self, text: str) -> bool:
         """
         Check if text content appears to be HTML
@@ -1975,763 +2089,44 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             }
             
         except Exception as e:
-            return {
-                "error": f"Failed to estimate package size: {str(e)}",
-                "total_estimated_bytes": 100000,  # Default fallback
-                "total_estimated_mb": 0.1
-            }
-    
+            logger.error(f"Size estimation failed: {e}")
+            return {"error": str(e), "total_estimated_mb": 0}
+
     def validate_for_export(self, course: Course) -> Dict[str, Any]:
         """
-        Validate course data specifically for SCORM export requirements
+        Validate course data before export
         
         Args:
             course: Course data to validate
             
         Returns:
-            Dict containing validation results
+            Dict with validation results
         """
-        validation_results = {
-            "valid": True,
-            "warnings": [],
-            "errors": [],
-            "checks_performed": []
-        }
-        
         try:
-            # Check required fields
-            if not course.courseId or not course.courseId.strip():
-                validation_results["errors"].append("Course ID is required")
-                validation_results["valid"] = False
+            # Basic validation
+            if not course:
+                return {"valid": False, "errors": ["No course data provided"]}
             
-            if not course.title or not course.title.strip():
-                validation_results["errors"].append("Course title is required")
-                validation_results["valid"] = False
+            if not course.templates or len(course.templates) == 0:
+                return {"valid": False, "errors": ["Course has no templates"]}
             
-            validation_results["checks_performed"].append("Required fields check")
+            # Check for required fields
+            if not course.title:
+                return {"valid": False, "errors": ["Course title is missing"]}
             
-            # Check template structure
-            if not course.templates:
-                validation_results["errors"].append("Course must have at least one template")
-                validation_results["valid"] = False
-            else:
-                # Validate template ordering
-                orders = [t.order for t in course.templates]
-                if len(set(orders)) != len(orders):
-                    validation_results["errors"].append("Template orders must be unique")
-                    validation_results["valid"] = False
-                
-                sequential_expected = list(range(len(orders)))
-                if (min(orders) != 0 or
-                        max(orders) != len(orders) - 1 or
-                        sorted(orders) != sequential_expected):
-                    validation_results["errors"].append(
-                        "Template orders must be sequential starting from 0"
-                    )
-                    validation_results["valid"] = False
+            # Validate templates
+            self._validate_templates_for_scorm(course.templates)
             
-            validation_results["checks_performed"].append(
-                "Template structure check"
-            )
-            
-            # Check for SCORM-specific requirements
-            has_welcome = any(t.type == "welcome" for t in course.templates)
-            if not has_welcome:
-                validation_results["warnings"].append(
-                    "Course should have a welcome template for better SCORM "
-                    "experience"
-                )
-            
-            validation_results["checks_performed"].append(
-                "SCORM requirements check"
-            )
-            
-            # Check content completeness
-            empty_templates = []
-            for i, template in enumerate(course.templates):
-                if not template.data or not str(template.data).strip():
-                    empty_templates.append(
-                        f"Template {i + 1} ({template.title})"
-                    )
-            
-            if empty_templates:
-                validation_results["warnings"].append(
-                    "Templates with minimal content: "
-                    + ", ".join(empty_templates)
-                )
-            
-            validation_results["checks_performed"].append(
-                "Content completeness check"
-            )
-            
-            return validation_results
+            return {
+                "valid": True,
+                "errors": [],
+                "warnings": []
+            }
             
         except Exception as e:
+            logger.error(f"Validation failed: {e}")
             return {
                 "valid": False,
                 "errors": [f"Validation failed: {str(e)}"],
-                "warnings": [],
-                "checks_performed": ["Error during validation"]
+                "warnings": []
             }
-
-    async def map_media_resources(self, course: Course) -> Dict[str, Any]:
-        """
-        Advanced media resource mapping for SCORM packages.
-        
-        Scans course content and creates comprehensive resource mapping with:
-        - Media asset discovery and validation
-        - Dependency tracking between pages and media
-        - Path optimization for SCORM compliance
-        - Size analysis and optimization recommendations
-        
-        Args:
-            course: Course object to analyze
-            
-        Returns:
-            Dict containing:
-            - resources: List of media resources with metadata
-            - total_size: Total size of all media assets
-            - dependencies: Page-to-media dependency mapping
-            - optimization_report: Size and performance analysis
-        """
-        try:
-            logger.info(
-                f"Starting media resource mapping for course "
-                f"{course.courseId}"
-            )
-            
-            resources = []
-            total_size = 0
-            dependencies = {}
-            optimization_report = {
-                "total_files": 0,
-                "large_files": [],
-                "missing_files": [],
-                "duplicate_files": [],
-                "optimization_savings": 0
-            }
-            
-            # Media patterns to search for in content
-            media_patterns = {
-                'image': re.compile(
-                    r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE
-                ),
-                'video': re.compile(
-                    r'<video[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE
-                ),
-                'audio': re.compile(
-                    r'<audio[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE
-                ),
-                'url_refs': re.compile(
-                    r'(?:url|href|src)=["\']([^"\']*media[^"\']*)["\']',
-                    re.IGNORECASE
-                )
-            }
-            
-            # Track all discovered media files
-            discovered_media = set()
-            
-            # Scan each template for media references
-            for page_idx, page in enumerate(course.templates):
-                page_id = f"page_{page_idx + 1}"
-                page_dependencies = []
-                
-                # Convert page content to string for analysis
-                content_str = self._extract_content_string(page)
-                
-                # Search for media references
-                for media_type, pattern in media_patterns.items():
-                    matches = pattern.findall(content_str)
-                    for match in matches:
-                        # Clean and normalize the media path
-                        media_path = self._normalize_media_path(match)
-                        if media_path:
-                            discovered_media.add(media_path)
-                            page_dependencies.append(media_path)
-                
-                if page_dependencies:
-                    dependencies[page_id] = page_dependencies
-            
-            # Analyze discovered media files
-            resource_id_counter = 1
-            file_size_cache = {}
-            
-            for media_path in discovered_media:
-                try:
-                    # Generate resource metadata
-                    resource_info = await self._analyze_media_file(
-                        media_path, f"media_{resource_id_counter:03d}"
-                    )
-                    
-                    if resource_info:
-                        resources.append(resource_info)
-                        total_size += resource_info.get('file_size', 0)
-                        
-                        # Check for optimization opportunities
-                        file_size = resource_info.get('file_size', 0)
-                        if file_size > 5 * 1024 * 1024:  # > 5MB
-                            optimization_report["large_files"].append({
-                                "path": media_path,
-                                "size": file_size,
-                                "recommendation": (
-                                    "Consider compression or format "
-                                    "optimization"
-                                )
-                            })
-                        
-                        # Track for duplicate detection
-                        file_hash = resource_info.get(
-                            'content_hash', media_path
-                        )
-                        if file_hash in file_size_cache:
-                            optimization_report["duplicate_files"].append({
-                                "original": file_size_cache[file_hash],
-                                "duplicate": media_path,
-                                "size": file_size
-                            })
-                        else:
-                            file_size_cache[file_hash] = media_path
-                        
-                        resource_id_counter += 1
-                    
-                except Exception as e:
-                    logger.warning(
-                        "Failed to analyze media file %s: %s", media_path, e
-                    )
-                    optimization_report["missing_files"].append({
-                        "path": media_path,
-                        "error": str(e)
-                    })
-            
-            optimization_report["total_files"] = len(resources)
-            
-            # Calculate potential optimization savings
-            duplicate_size = sum(
-                item['size'] for item in optimization_report["duplicate_files"]
-            )
-            # 30% compression estimate for large files
-            large_file_potential = sum(
-                item['size'] * 0.3
-                for item in optimization_report["large_files"]
-            )
-            optimization_report["optimization_savings"] = (
-                duplicate_size + large_file_potential
-            )
-            
-            # Store results for manifest generation
-            self.media_resources = {r['identifier']: r for r in resources}
-            self.resource_dependencies = dependencies
-            
-            result = {
-                "success": True,
-                "resources": resources,
-                "total_size": total_size,
-                "total_size_mb": round(total_size / (1024 * 1024), 2),
-                "dependencies": dependencies,
-                "optimization_report": optimization_report,
-                "resource_count": len(resources),
-                "page_count": len(dependencies)
-            }
-            
-            logger.info(
-                "Media mapping complete: %s resources, %sMB total",
-                len(resources),
-                result['total_size_mb']
-            )
-            return result
-            
-        except Exception as e:
-            logger.error(f"Media resource mapping failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "resources": [],
-                "total_size": 0,
-                "dependencies": {},
-                "optimization_report": {"error": str(e)}
-            }
-
-    def _extract_content_string(self, page: Any) -> str:
-        """Extract searchable content string from page data."""
-        try:
-            if hasattr(page, 'content') and page.content:
-                if isinstance(page.content, dict):
-                    return json.dumps(page.content)
-                return str(page.content)
-            elif hasattr(page, 'data') and page.data:
-                if isinstance(page.data, dict):
-                    return json.dumps(page.data)
-                return str(page.data)
-            return ""
-        except Exception:
-            return ""
-
-    def _normalize_media_path(self, raw_path: str) -> Optional[str]:
-        """Clean and normalize media file path."""
-        if not raw_path or not isinstance(raw_path, str):
-            return None
-        
-        # Remove query parameters and fragments
-        path = raw_path.split('?')[0].split('#')[0]
-        
-        # Skip external URLs
-        if path.startswith(('http://', 'https://', '//')):
-            return None
-        
-        # Skip data URLs
-        if path.startswith('data:'):
-            return None
-        
-        # Clean path separators
-        path = path.replace('\\', '/')
-        
-        # Ensure it looks like a media file
-        media_extensions = {
-            '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
-            '.mp4', '.webm', '.ogg', '.mov', '.avi',
-            '.mp3', '.wav', '.aac', '.m4a'
-        }
-        
-        if any(path.lower().endswith(ext) for ext in media_extensions):
-            return path
-        
-        return None
-
-    async def _analyze_media_file(
-        self, media_path: str, resource_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """Analyze individual media file and return resource metadata."""
-        try:
-            # In a real implementation, this would check the actual file system
-            # For now, we'll create metadata based on the path
-            
-            file_extension = Path(media_path).suffix.lower()
-            mime_type, _ = mimetypes.guess_type(media_path)
-            
-            # Determine resource type based on MIME type
-            if mime_type:
-                if mime_type.startswith('image/'):
-                    resource_type = 'image'
-                elif mime_type.startswith('video/'):
-                    resource_type = 'video'
-                elif mime_type.startswith('audio/'):
-                    resource_type = 'audio'
-                else:
-                    resource_type = 'webcontent'
-            else:
-                resource_type = 'webcontent'
-            
-            # Generate SCORM-compliant path
-            scorm_path = f"media/{resource_type}s/{Path(media_path).name}"
-            
-            resource_info = {
-                "identifier": resource_id,
-                "type": "webcontent",
-                "resource_type": resource_type,
-                "href": scorm_path,
-                "original_path": media_path,
-                "mime_type": mime_type or "application/octet-stream",
-                "file_extension": file_extension,
-                # file_size would reflect real size in a full implementation
-                "file_size": 0,
-                # Simple hash placeholder for duplicate detection
-                "content_hash": hash(media_path),
-                "scorm_compliant": True,
-                "optimization_applied": False,
-                "metadata": {
-                    "title": Path(media_path).stem,
-                    "description": f"Media resource: {Path(media_path).name}",
-                    "language": "en"
-                }
-            }
-            
-            return resource_info
-            
-        except Exception as e:
-            logger.warning(f"Failed to analyze media file {media_path}: {e}")
-            return None
-
-    async def optimize_media_assets(
-        self, media_list: List[Dict]
-    ) -> List[Dict]:
-        """
-        Optimize media assets for SCORM delivery.
-        
-        Args:
-            media_list: List of media resource dictionaries
-            
-        Returns:
-            List of optimized media resources with optimization metadata
-        """
-        try:
-            optimized_resources = []
-            
-            for media_resource in media_list:
-                try:
-                    optimized_resource = media_resource.copy()
-                    
-                    # Apply optimization based on resource type
-                    resource_type = media_resource.get(
-                        'resource_type', 'unknown'
-                    )
-                    original_size = media_resource.get('file_size', 0)
-                    
-                    optimization_applied = False
-                    size_reduction = 0
-                    
-                    if resource_type == 'image':
-                        # Image optimization recommendations
-                        if original_size > 1024 * 1024:  # > 1MB
-                            # Simulated compression placeholder (40% reduction)
-                            size_reduction = original_size * 0.4
-                            optimization_applied = True
-                            optimized_resource['optimization_notes'] = [
-                                "Image compressed with quality optimization",
-                                "Progressive JPEG encoding applied",
-                                "Metadata stripped for size reduction"
-                            ]
-                    
-                    elif resource_type == 'video':
-                        # Video optimization recommendations
-                        if original_size > 10 * 1024 * 1024:  # > 10MB
-                            size_reduction = original_size * 0.3
-                            optimization_applied = True
-                            optimized_resource['optimization_notes'] = [
-                                "Video re-encoded with optimized bitrate",
-                                "H.264 codec with web-optimized settings",
-                                "Audio quality balanced for size/quality"
-                            ]
-                    
-                    elif resource_type == 'audio':
-                        # Audio optimization recommendations
-                        if original_size > 5 * 1024 * 1024:  # > 5MB
-                            size_reduction = original_size * 0.25
-                            optimization_applied = True
-                            optimized_resource['optimization_notes'] = [
-                                "Audio compressed with optimized bitrate",
-                                "Stereo to mono conversion where appropriate",
-                                "Silence trimming applied"
-                            ]
-                    
-                    # Update resource with optimization results
-                    if optimization_applied:
-                        optimized_resource['file_size'] = max(
-                            0, original_size - size_reduction
-                        )
-                        optimized_resource['optimization_applied'] = True
-                        optimized_resource['size_reduction'] = size_reduction
-                        optimized_resource['size_reduction_percent'] = round(
-                            (size_reduction / original_size) * 100, 1
-                        )
-                    
-                    optimized_resources.append(optimized_resource)
-                    
-                except Exception as e:
-                    logger.warning(
-                        "Failed to optimize resource %s: %s",
-                        media_resource.get('identifier', 'unknown'),
-                        e
-                    )
-                    # Keep original if optimization fails
-                    optimized_resources.append(media_resource)
-            
-            return optimized_resources
-            
-        except Exception as e:
-            logger.error(f"Media optimization failed: {e}")
-            return media_list  # Return original list if optimization fails
-
-    async def validate_media_dependencies(
-        self, course: Course
-    ) -> Dict[str, Any]:
-        """
-        Validate all media references and report missing files.
-        
-        Args:
-            course: Course object to validate
-            
-        Returns:
-            Validation report with missing files, broken references, etc.
-        """
-        try:
-            # First, map all media resources
-            mapping_result = await self.map_media_resources(course)
-            
-            if not mapping_result.get("success"):
-                return {
-                    "valid": False,
-                    "error": "Failed to map media resources",
-                    "details": mapping_result
-                }
-            
-            validation_report = {
-                "valid": True,
-                "total_resources": len(mapping_result["resources"]),
-                "missing_files": mapping_result["optimization_report"][
-                    "missing_files"
-                ],
-                "broken_references": [],
-                "large_files": mapping_result["optimization_report"][
-                    "large_files"
-                ],
-                "duplicate_files": mapping_result["optimization_report"][
-                    "duplicate_files"
-                ],
-                "recommendations": []
-            }
-            
-            # Add recommendations based on findings
-            if validation_report["missing_files"]:
-                validation_report["valid"] = False
-                validation_report["recommendations"].append(
-                    "Fix "
-                    f"{len(validation_report['missing_files'])} missing media "
-                    "file references"
-                )
-            
-            if validation_report["large_files"]:
-                validation_report["recommendations"].append(
-                    "Consider optimizing "
-                    f"{len(validation_report['large_files'])} large media "
-                    "files"
-                )
-            
-            if validation_report["duplicate_files"]:
-                total_duplicate_size = sum(
-                    item['size']
-                    for item in validation_report["duplicate_files"]
-                )
-                validation_report["recommendations"].append(
-                    "Remove "
-                    f"{len(validation_report['duplicate_files'])} duplicate "
-                    "files to save "
-                    f"{total_duplicate_size / (1024*1024):.1f}MB"
-                )
-            
-            # Overall validation status
-            if validation_report["missing_files"]:
-                validation_report["status"] = "FAILED - Missing files detected"
-            elif (
-                validation_report["large_files"]
-                or validation_report["duplicate_files"]
-            ):
-                validation_report["status"] = (
-                    "WARNING - Optimization recommended"
-                )
-            else:
-                validation_report["status"] = "PASSED - All media files valid"
-            
-            return validation_report
-            
-        except Exception as e:
-            logger.error(f"Media validation failed: {e}")
-            return {
-                "valid": False,
-                "error": str(e),
-                "status": "ERROR - Validation failed"
-            }
-
-    async def generate_enhanced_manifest(
-        self, course: Course, resources: Dict
-    ) -> str:
-        """
-        Generate SCORM manifest with detailed resource mapping.
-        
-        Args:
-            course: Course object
-            resources: Resource mapping from map_media_resources()
-            
-        Returns:
-            Enhanced imsmanifest.xml content with detailed resource entries
-        """
-        try:
-            # Ensure we have resource mapping
-            if not self.media_resources:
-                await self.map_media_resources(course)
-            
-            # Generate enhanced manifest with media resources
-            manifest_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<manifest identifier="{self.package_identifier}" version="1"
-          xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
-          xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"  
-          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://www.imsproject.org/xsd/imscp_rootv1p1p2 imscp_rootv1p1p2.xsd
-                              http://www.imsglobal.org/xsd/imsmd_rootv1p2p1 imsmd_rootv1p2p1.xsd
-                              http://www.adlnet.org/xsd/adlcp_rootv1p2 adlcp_rootv1p2.xsd">
-
-    <metadata>
-        <schema>ADL SCORM</schema>
-        <schemaversion>{self.scorm_version}</schemaversion>
-        <lom xmlns="http://www.imsglobal.org/xsd/imsmd_rootv1p2p1">
-            <general>
-                <identifier>
-                    <catalog>URI</catalog>
-                    <entry>{course.courseId}</entry>
-                </identifier>
-                <title>
-                    <langstring xml:lang="en">{self._escape_xml(course.title)}</langstring>
-                </title>
-                <description>
-                    <langstring xml:lang="en">{self._escape_xml(course.description)}</langstring>
-                </description>
-                <language>en</language>
-            </general>
-            <lifeCycle>
-                <version>
-                    <langstring xml:lang="en">{course.version}</langstring>
-                </version>
-                <contribute>
-                    <role>
-                        <source>LOMv1.0</source>
-                        <value>author</value>
-                    </role>
-                    <entity>eLearning Authoring Tool</entity>
-                    <date>
-                        <dateTime>{datetime.now().isoformat()}</dateTime>
-                    </date>
-                </contribute>
-            </lifeCycle>
-        </lom>
-    </metadata>
-
-    <organizations default="default_org">
-        <organization identifier="default_org">
-            <title>{self._escape_xml(course.title)}</title>
-            <item identifier="item_1" identifierref="resource_1">
-                <title>{self._escape_xml(course.title)}</title>
-            </item>
-        </organization>
-    </organizations>
-
-    <resources>"""
-
-            # Add main content resource
-            manifest_content += f"""
-        <resource identifier="resource_1" type="webcontent" 
-                  adlcp:scormtype="sco" href="content.html">
-            <file href="content.html"/>"""
-
-            # Add media resource dependencies to main resource
-            for media_id, media_info in self.media_resources.items():
-                manifest_content += f"""
-            <dependency identifierref="{media_id}"/>"""
-
-            manifest_content += """
-        </resource>"""
-
-            # Add individual media resources
-            for media_id, media_info in self.media_resources.items():
-                resource_type = media_info.get('resource_type', 'webcontent')
-                href = media_info.get('href', '')
-                mime_type = media_info.get('mime_type', 'application/octet-stream')
-                
-                manifest_content += f"""
-        <resource identifier="{media_id}" type="{resource_type}" href="{href}">
-            <file href="{href}"/>
-            <metadata>
-                <lom xmlns="http://www.imsglobal.org/xsd/imsmd_rootv1p2p1">
-                    <general>
-                        <identifier>
-                            <catalog>URI</catalog>
-                            <entry>{media_id}</entry>
-                        </identifier>
-                        <title>
-                            <langstring xml:lang="en">{self._escape_xml(media_info.get('metadata', {}).get('title', media_id))}</langstring>
-                        </title>
-                        <description>
-                            <langstring xml:lang="en">{self._escape_xml(media_info.get('metadata', {}).get('description', f'{resource_type} resource'))}</langstring>
-                        </description>
-                    </general>
-                    <technical>
-                        <format>{mime_type}</format>
-                        <size>{media_info.get('file_size', 0)}</size>
-                    </technical>
-                </lom>
-            </metadata>
-        </resource>"""
-
-            manifest_content += """
-    </resources>
-</manifest>"""
-
-            return manifest_content
-            
-        except Exception as e:
-            logger.error(f"Enhanced manifest generation failed: {e}")
-            # Fall back to basic manifest
-            return await self._create_basic_manifest(course)
-
-    async def _validate_package_structure(self, package_dir: Path) -> None:
-        """
-        Production hardening: Validate the final package structure
-        
-        Ensures all required SCORM files are present and valid.
-        
-        Args:
-            package_dir: Path to the package directory
-            
-        Raises:
-            ValueError: If package structure is invalid
-        """
-        required_files = [
-            "imsmanifest.xml",
-            "index.html",
-            "course_data.js",
-            "scorm_wrapper.js",
-            "styles.css"
-        ]
-        
-        missing_files = []
-        for filename in required_files:
-            file_path = package_dir / filename
-            if not file_path.exists():
-                missing_files.append(filename)
-        
-        if missing_files:
-            raise ValueError(
-                f"Package validation failed: Missing required files: "
-                f"{', '.join(missing_files)}"
-            )
-        
-        # Validate manifest XML structure
-        manifest_path = package_dir / "imsmanifest.xml"
-        try:
-            with open(manifest_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Basic XML validation
-            if not content.strip().startswith('<?xml'):
-                raise ValueError("Invalid XML declaration in manifest")
-            
-            if '<manifest' not in content:
-                raise ValueError("Missing manifest element")
-            
-            if ('imsmanifest.xml' not in content and
-                    'index.html' not in content):
-                raise ValueError("Missing resource references in manifest")
-                
-        except Exception as e:
-            raise ValueError(f"Manifest validation failed: {str(e)}")
-        
-        # Validate JavaScript files are not empty
-        js_files = ["course_data.js", "scorm_wrapper.js"]
-        for js_file in js_files:
-            js_path = package_dir / js_file
-            try:
-                with open(js_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                
-                if len(content.strip()) < 100:  # Basic size check
-                    raise ValueError(f"JavaScript file {js_file} appears "
-                                     "incomplete")
-                    
-            except Exception as e:
-                raise ValueError(f"JavaScript validation failed for "
-                                 f"{js_file}: {str(e)}")
-        
-        logger.info("✓ Package structure validation passed")
-
-
-# Export service instance
-# Export service instance
-scorm_service = SCORMExportService()

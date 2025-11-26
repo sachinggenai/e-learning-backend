@@ -17,6 +17,10 @@ import logging
 from datetime import datetime
 
 import io
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from ..db.config import get_session
+from ..repositories.course_repo import CourseRepository, CourseNotFoundError
 
 # Initialize router and logger
 router = APIRouter()
@@ -265,3 +269,161 @@ async def get_export_status(export_id: str):
         "message": "Export operations are synchronous in Phase 1",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+class ScormExportRequest(BaseModel):
+    format: str = "scorm1.2"
+    include_media: bool = True
+
+@router.post("/export/scorm/{course_id}", summary="Export Persisted Course as SCORM Package")
+async def export_persisted_course(
+    course_id: int,
+    request: ScormExportRequest,
+    session: AsyncSession = Depends(get_session)
+) -> StreamingResponse:
+    """
+    Export a persisted course (by ID) as a SCORM package.
+    """
+    repo = CourseRepository(session)
+    try:
+        # Fetch course record
+        course_record = await repo.get(course_id)
+        
+        # Convert to Pydantic model
+        # Merge metadata with json_data
+        course_data = course_record.json_data.copy()
+        course_data['courseId'] = course_record.course_id
+        course_data['title'] = course_record.title
+        if course_record.description:
+            course_data['description'] = course_record.description
+            
+        # Ensure templates exist in data
+        if 'templates' not in course_data:
+            # If templates are stored in a separate table, we might need to fetch them
+            # But for now assuming they are in json_data or we need to fetch them
+            # The seed script puts them in TemplateRecord, NOT in CourseRecord.json_data['templates']
+            # Wait, the seed script does:
+            # json_data={"pages": [], "templates": []} for course
+            # and creates TemplateRecords.
+            
+            # If the application uses TemplateRecords, we need to fetch them and put them into the Course object.
+            pass
+
+        # Fetch templates if they are not in json_data
+        # We need to check if we should fetch from TemplateRepo
+        from ..repositories.template_repo import TemplateRepository
+        template_repo = TemplateRepository(session)
+        templates = await template_repo.list(course_record.id)
+        
+        # Add default author if missing
+        if 'author' not in course_data:
+            course_data['author'] = "Unknown Author"
+
+        if templates:
+            # Convert TemplateRecords to dicts and add to course_data
+            course_data['templates'] = []
+            for t in templates:
+                t_data = t.json_data.copy()
+                
+                # Map types
+                t_type = t.template_type
+                if t_type == 'video':
+                    t_type = 'content-video'
+                elif t_type == 'quiz':
+                    t_type = 'mcq'
+                elif t_type in ['content-image', 'interactive']:
+                    # Map unsupported types to content-text for now
+                    t_type = 'content-text'
+                
+                # Map data structure to TemplateData
+                mapped_data = {}
+                
+                # Extract content string
+                raw_content = t_data.get('content', {})
+                if isinstance(raw_content, dict):
+                    if 'text' in raw_content:
+                        mapped_data['content'] = raw_content['text']
+                    elif 'welcomeMessage' in raw_content:
+                        mapped_data['content'] = raw_content['welcomeMessage']
+                    elif 'description' in raw_content:
+                        mapped_data['content'] = raw_content['description']
+                    else:
+                        mapped_data['content'] = "Content"
+                else:
+                    mapped_data['content'] = str(raw_content) if raw_content else "Content"
+                
+                if 'subtitle' in t_data:
+                    mapped_data['subtitle'] = t_data['subtitle']
+                
+                if t_type == 'content-video':
+                    if isinstance(raw_content, dict):
+                        mapped_data['videoUrl'] = raw_content.get('videoUrl')
+                        if not mapped_data['videoUrl']:
+                             mapped_data['videoUrl'] = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' # Default valid URL
+                    else:
+                        mapped_data['videoUrl'] = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+
+                if t_type == 'mcq':
+                    # Extract questions and map 'correct' to 'isCorrect'
+                    questions = []
+                    if isinstance(raw_content, dict) and 'questions' in raw_content:
+                        for q in raw_content['questions']:
+                            mapped_q = {
+                                "id": q.get("id", "q1"),
+                                "question": q.get("question", "Question"),
+                                "options": []
+                            }
+                            for opt in q.get("options", []):
+                                mapped_opt = {
+                                    "id": opt.get("id", "opt1"),
+                                    "text": opt.get("text", "Option"),
+                                    "isCorrect": opt.get("correct", False)
+                                }
+                                mapped_q["options"].append(mapped_opt)
+                            questions.append(mapped_q)
+                    
+                    if not questions:
+                         questions = [{
+                            "id": "q1",
+                            "question": "Placeholder Question",
+                            "options": [
+                                {"id": "opt1", "text": "Option 1", "isCorrect": True},
+                                {"id": "opt2", "text": "Option 2", "isCorrect": False}
+                            ]
+                        }]
+                    mapped_data['questions'] = questions
+
+                template_obj = {
+                    "id": t.template_uid,
+                    "type": t_type,
+                    "title": t.title,
+                    "order": t.order_index,
+                    "data": mapped_data
+                }
+                course_data['templates'].append(template_obj)
+        
+        # Validate/Convert to Course model
+        validated_course = Course(**course_data)
+        
+        # Generate SCORM
+        zip_buffer = await scorm_service.generate_scorm_package(validated_course)
+        filename = f"{validated_course.courseId}_scorm_package.zip"
+        
+        zip_buffer.seek(0)
+        
+        headers = {
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Type": "application/zip",
+            "Content-Length": str(len(zip_buffer.getvalue()))
+        }
+        
+        return StreamingResponse(
+            io.BytesIO(zip_buffer.getvalue()),
+            media_type="application/zip",
+            headers=headers,
+        )
+
+    except CourseNotFoundError:
+        raise HTTPException(status_code=404, detail="Course not found")
+    except Exception as e:
+        logger.error("SCORM export failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
