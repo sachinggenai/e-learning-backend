@@ -16,8 +16,35 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Override DB URL from environment if provided
-DATABASE_URL = os.getenv("DATABASE_URL")
+
+def get_database_url() -> str:
+    """Get database URL from environment (matches app/db/config.py logic).
+    
+    Converts asyncpg URLs to psycopg2 for synchronous Alembic migrations.
+    """
+    if "DATABASE_URL" in os.environ:
+        url = os.environ["DATABASE_URL"]
+        # Convert asyncpg to psycopg2 for synchronous migrations
+        if "asyncpg" in url:
+            url = url.replace("postgresql+asyncpg://", "postgresql://")
+        return url
+    
+    # Construct PostgreSQL URL from components
+    pg_user = os.getenv("POSTGRES_USER", "postgres")
+    pg_password = os.getenv("POSTGRES_PASSWORD", "postgres")
+    pg_host = os.getenv("POSTGRES_HOST", "localhost")
+    pg_port = os.getenv("POSTGRES_PORT", "5432")
+    pg_db = os.getenv("POSTGRES_DB", "elearning")
+    
+    # Use synchronous psycopg2 for migrations (not asyncpg)
+    return (
+        f"postgresql://{pg_user}:{pg_password}"
+        f"@{pg_host}:{pg_port}/{pg_db}"
+    )
+
+
+# Override DB URL from environment
+DATABASE_URL = get_database_url()
 if DATABASE_URL:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
 

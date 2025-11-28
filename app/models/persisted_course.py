@@ -7,7 +7,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, declarative_base
-from sqlalchemy import String, DateTime, JSON, Text, ForeignKey
+from sqlalchemy import (
+    String,
+    DateTime,
+    JSON,
+    Text,
+    ForeignKey,
+)
 
 Base = declarative_base()
 

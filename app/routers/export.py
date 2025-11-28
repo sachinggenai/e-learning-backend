@@ -183,7 +183,7 @@ async def validate_course_for_export(
         estimated_size = scorm_service.estimate_package_size(validated_course)
 
         # Perform additional validation checks
-        validation_results = scorm_service.validate_for_export(
+        validation_results = await scorm_service.validate_for_export(
             validated_course
         )
 

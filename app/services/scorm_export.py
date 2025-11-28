@@ -1,6 +1,7 @@
 """
 SCORM Export Service
-Implements SCORM package generation as specified in Phase 1 requirements
+Implements SCORM package generation with Dynamic Template Runtime System.
+Uses data-driven sanitization and validation - NO HARDCODED TEMPLATE LOGIC.
 """
 
 import json
@@ -10,6 +11,7 @@ import os
 import re
 import mimetypes
 import html
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -25,6 +27,8 @@ except ImportError:
     print("Warning: BeautifulSoup not available. HTML sanitization will be limited.")
 
 from ..models.course import Course, Template
+from .scorm.sanitizers import DynamicSanitizer
+from .scorm.registries import registry
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +110,7 @@ class SCORMExportService:
         logger.info(f"Generating SCORM package for course: {course.courseId}")
         
         # Production hardening: Validate course before processing
-        validation_result = self.validate_for_export(course)
+        validation_result = await self.validate_for_export(course)
         if not validation_result.get("valid", False):
             error_msg = "; ".join(validation_result.get("errors", []))
             raise ValueError(f"Course validation failed: {error_msg}")
@@ -315,20 +319,28 @@ class SCORMExportService:
             if not course or not hasattr(course, 'templates'):
                 raise ValueError("Invalid course object or missing templates")
 
-            # Transform templates to safe format
+            # Transform templates to safe format using dynamic sanitization
             templates_data = []
             for template in course.templates:
                 try:
+                    # Use dynamic sanitization based on template type
+                    sanitized_data = await self._sanitize_data_dynamic(
+                        template.type,
+                        template.data
+                    )
+                    
                     safe_template = {
                         'id': template.id,
                         'type': template.type,
                         'order': template.order,
                         'title': self._sanitize_text(template.title),
-                        'data': self._sanitize_data(template.data)
+                        'data': sanitized_data
                     }
                     templates_data.append(safe_template)
                 except Exception as e:
-                    logger.warning(f"Failed to process template {template.id}: {e}")
+                    logger.warning(
+                        f"Failed to process template {template.id}: {e}"
+                    )
                     # Continue with other templates
 
             # Create complete course object (not just array)
@@ -395,7 +407,7 @@ class SCORMExportService:
                 raise ValueError("Course must have at least one template")
 
             # FIX #8: Comprehensive template validation before rendering
-            self._validate_templates_for_scorm(course.templates)
+            await self._validate_templates_for_scorm(course.templates)
 
             course_title_safe = self._escape_html(course.title)
 
@@ -1672,12 +1684,13 @@ console.log('✓ SCORM wrapper with Mock API loaded');
         text_str = re.sub(r'on\w+\s*=', '', text_str, flags=re.IGNORECASE)
         
         return html.escape(text_str)
-    def _validate_templates_for_scorm(self, templates: List) -> None:
+    async def _validate_templates_for_scorm(self, templates: List) -> None:
         """
-        FIX #8: Comprehensive template validation for SCORM export
+        Dynamic template validation using template definitions.
+        NO HARDCODED TEMPLATE LOGIC - Uses template registry.
         
-        Validates that all templates have required fields and valid structure
-        before attempting to render them in the SCORM player.
+        Validates that all templates have required fields based on their
+        registered definition before attempting to render them in SCORM player.
         
         Args:
             templates: List of template objects to validate
@@ -1705,254 +1718,108 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                     )
                     continue
                 
-                # Validate template type
-                valid_types = ['welcome', 'content-video', 'mcq', 'content-text', 'summary']
-                if template.type not in valid_types:
+                # Check if template type is registered
+                if not await registry.exists(template.type):
                     validation_errors.append(
                         f"Template {i+1} ({template.title}): "
-                        f"Invalid type '{template.type}'. "
-                        f"Valid types: {', '.join(valid_types)}"
+                        f"Type '{template.type}' not registered"
                     )
                     continue
                 
-                # Type-specific validation
-                if template.type in ['content-text', 'content']:
-                    # Content templates need data with content field
-                    if not hasattr(template, 'data') or not template.data:
-                        validation_errors.append(
-                            f"Template {i+1} ({template.title}): "
-                            "Missing or empty data for content template"
-                        )
-                    else:
-                        # Try to convert to dict if it's not already
-                        try:
-                            template_data = _ensure_dict(template.data) if not isinstance(template.data, dict) else template.data
-
-                        except ValueError as e:
-                            validation_errors.append(
-                                f"Template {i+1} ({template.title}): "
-                                f"Data conversion failed: {str(e)}"
-                            )
-                            continue
-                        
-                        if ('content' not in template_data or
-                                not template_data['content']):
-                            validation_errors.append(
-                                f"Template {i+1} ({template.title}): "
-                                "Missing content field in data"
-                            )
+                # Get template definition
+                definition = await registry.get(template.type)
                 
-                elif template.type == 'mcq':
-                    # MCQ templates need data with questions array
-                    if not hasattr(template, 'data') or not template.data:
+                # Validate data exists
+                if not hasattr(template, 'data') or not template.data:
+                    validation_errors.append(
+                        f"Template {i+1} ({template.title}): "
+                        "Missing or empty data"
+                    )
+                    continue
+                
+                # Convert to dict
+                try:
+                    template_data = (
+                        _ensure_dict(template.data)
+                        if not isinstance(template.data, dict)
+                        else template.data
+                    )
+                except ValueError as e:
+                    validation_errors.append(
+                        f"Template {i+1} ({template.title}): "
+                        f"Data conversion failed: {str(e)}"
+                    )
+                    continue
+                
+                # Validate required fields from definition
+                for field in definition.field_schema:
+                    if field.required and field.name not in template_data:
                         validation_errors.append(
                             f"Template {i+1} ({template.title}): "
-                            "Missing or empty data for MCQ template"
+                            f"Missing required field '{field.name}'"
                         )
-                    else:
-                        # Try to convert to dict if it's not already
-                        try:
-                            template_data = _ensure_dict(template.data) if not isinstance(template.data, dict) else template.data
-                        except ValueError as e:
-                            validation_errors.append(
-                                f"Template {i+1} ({template.title}): "
-                                f"Data conversion failed: {str(e)}"
-                            )
-                            continue
-                        
-                        if 'questions' not in template_data or not template_data['questions']:
-                            validation_errors.append(
-                                f"Template {i+1} ({template.title}): "
-                                "Missing questions array in data"
-                            )
-                        elif not isinstance(template_data['questions'], list) or len(template_data['questions']) == 0:
-                            validation_errors.append(
-                                f"Template {i+1} ({template.title}): "
-                                "Questions must be a non-empty array"
-                            )
-                        else:
-                            # Validate each question
-                            for q_idx, question in enumerate(template_data['questions']):
-                                if not isinstance(question, dict):
-                                    validation_errors.append(
-                                        f"Template {i+1} ({template.title}): "
-                                        f"Question {q_idx+1} must be a dictionary"
-                                    )
-                                    continue
-                                
-                                if 'question' not in question or not question['question']:
-                                    validation_errors.append(
-                                        f"Template {i+1} ({template.title}): "
-                                        f"Question {q_idx+1} missing question text"
-                                    )
-                                
-                                if 'options' not in question or not question['options']:
-                                    validation_errors.append(
-                                        f"Template {i+1} ({template.title}): "
-                                        f"Question {q_idx+1} missing options"
-                                    )
-                                elif not isinstance(question['options'], list) or len(question['options']) < 2:
-                                    validation_errors.append(
-                                        f"Template {i+1} ({template.title}): "
-                                        f"Question {q_idx+1} must have at least 2 options"
-                                    )
-                                else:
-                                    # Validate each option has text and isCorrect field
-                                    for opt_idx, option in enumerate(question['options']):
-                                        if not isinstance(option, dict):
-                                            validation_errors.append(
-                                                f"Template {i+1} ({template.title}): "
-                                                f"Question {q_idx+1}, Option {opt_idx+1} "
-                                                "must be a dictionary"
-                                            )
-                                            continue
-                                        
-                                        if 'text' not in option or not option['text']:
-                                            validation_errors.append(
-                                                f"Template {i+1} ({template.title}): "
-                                                f"Question {q_idx+1}, Option {opt_idx+1} "
-                                                "missing text"
-                                            )
-                                        
-                                        # isCorrect field should exist (can be boolean or string)
-                                        if 'isCorrect' not in option:
-                                            validation_errors.append(
-                                            f"Template {i+1} ({template.title}): "
-                                            f"Question {q_idx+1}, Option {opt_idx+1} "
-                                            "missing isCorrect field"
-                                        )
                         
             except Exception as e:
-                validation_errors.append(f"Template {i+1}: Validation error - {str(e)}")
+                validation_errors.append(
+                    f"Template {i+1}: Validation error - {str(e)}"
+                )
         
         if validation_errors:
-            error_msg = f"Template validation failed with {len(validation_errors)} errors:\n" + "\n".join(validation_errors)
+            error_msg = (
+                f"Template validation failed with "
+                f"{len(validation_errors)} errors:\n"
+                + "\n".join(validation_errors)
+            )
             logger.error(error_msg)
             raise ValueError(error_msg)
         
-        logger.info(f"✓ Template validation passed for {len(templates)} templates")
+        logger.info(
+            f"✓ Template validation passed for {len(templates)} templates"
+        )
     
-    def _sanitize_data(self, data: Any) -> Dict:
+    async def _sanitize_data_dynamic(self, template_type: str, data: Any) -> Dict:
         """
-        FIX #7: Enhanced data sanitization with Pydantic model support
-        Handles nested dictionaries, lists, and Pydantic models with HTML-aware sanitization
-        Includes special handling for MCQ questions to preserve isCorrect boolean fields
+        Dynamic data sanitization using template-specific rules from registry.
+        
+        This method replaces all hardcoded template type checks with dynamic
+        sanitization based on template definitions stored in the database.
+        
+        Args:
+            template_type: Type key of the template (e.g., 'mcq', 'content-text')
+            data: The template data to sanitize (dict, Pydantic model, or other)
+            
+        Returns:
+            Sanitized dictionary safe for SCORM package inclusion
         """
         if data is None:
             return {}
         
-        # Try to convert non-dict objects to dict using _ensure_dict helper
-        if not isinstance(data, dict):
-            try:
-                data = _ensure_dict(data)
-            except ValueError:
-                # If conversion fails, handle based on type
-                if isinstance(data, (list, tuple)):
-                    return {'items': [self._sanitize_data(item) if isinstance(item, dict) else str(item) for item in data]}
-                else:
-                    return {'value': str(data)}
+        # Get template definition from registry
+        definition = await registry.get(template_type)
+        if not definition:
+            logger.warning(
+                f"No template definition found for type '{template_type}', "
+                f"using basic sanitization"
+            )
+            # Fallback: convert to dict and sanitize text fields only
+            data_dict = _ensure_dict(data) if not isinstance(data, dict) else data
+            return {
+                k: self._sanitize_text(str(v)) if isinstance(v, str) else v
+                for k, v in data_dict.items()
+            }
         
-        sanitized = {}
-        for key, value in data.items():
-            try:
-                # Special handling for MCQ questions to preserve isCorrect boolean fields
-                if key == 'questions' and isinstance(value, (list, tuple)):
-                    sanitized[key] = self._sanitize_mcq_questions(value)
-                elif isinstance(value, str):
-                    # Check if content looks like HTML
-                    if self._looks_like_html(value):
-                        sanitized[key] = self._sanitize_html_content(value)
-                    else:
-                        sanitized[key] = self._sanitize_text(value)
-                elif isinstance(value, dict):
-                    sanitized[key] = self._sanitize_data(value)
-                elif isinstance(value, (list, tuple)):
-                    sanitized[key] = [
-                        (self._sanitize_data(item)
-                         if isinstance(item, dict)
-                         else (self._sanitize_html_content(item) if isinstance(item, str) and self._looks_like_html(item) else self._sanitize_text(item)))
-                        for item in value
-                    ]
-                elif hasattr(value, 'model_dump'):
-                    # Handle nested Pydantic models
-                    try:
-                        sanitized[key] = self._sanitize_data(value.model_dump())
-                    except Exception as e:
-                        logger.warning(f"Failed to sanitize nested Pydantic model {key}: {e}")
-                        sanitized[key] = {'error': f'Nested model conversion failed: {str(e)}'}
-                elif isinstance(value, bool):
-                    # Preserve boolean values for JSON serialization (critical for MCQ isCorrect)
-                    sanitized[key] = value
-                elif isinstance(value, (int, float)):
-                    # Preserve numeric values
-                    sanitized[key] = value
-            except Exception as e:
-                logger.warning(f"Failed to sanitize data field {key}: {e}")
-                sanitized[key] = {'error': f'Sanitization failed: {str(e)}'}
+        # Convert data to dict if needed
+        data_dict = _ensure_dict(data) if not isinstance(data, dict) else data
+        
+        # Use DynamicSanitizer with template definition
+        sanitizer = DynamicSanitizer()
+        sanitized = await sanitizer.sanitize_template_data(
+            type_key=template_type,
+            data=data_dict
+        )
         
         return sanitized
     
-    def _sanitize_mcq_questions(self, questions: List) -> List:
-        """
-        Special sanitization for MCQ questions to ensure isCorrect boolean fields are preserved.
-        
-        Args:
-            questions: List of question dictionaries
-            
-        Returns:
-            List of sanitized question dictionaries with preserved isCorrect booleans
-        """
-        if not questions or not isinstance(questions, (list, tuple)):
-            return []
-        
-        sanitized_questions = []
-        for question in questions:
-            try:
-                if not isinstance(question, dict):
-                    # If question is not a dict, sanitize as regular data
-                    sanitized_questions.append(self._sanitize_data(question))
-                    continue
-                
-                sanitized_question = {}
-                for q_key, q_value in question.items():
-                    if q_key == 'options' and isinstance(q_value, (list, tuple)):
-                        # Special handling for options to preserve isCorrect
-                        sanitized_options = []
-                        for option in q_value:
-                            if isinstance(option, dict):
-                                sanitized_option = {}
-                                for opt_key, opt_value in option.items():
-                                    if opt_key == 'isCorrect':
-                                        # Preserve isCorrect as boolean with explicit conversion
-                                        if isinstance(opt_value, bool):
-                                            sanitized_option[opt_key] = opt_value
-                                        elif isinstance(opt_value, str):
-                                            sanitized_option[opt_key] = opt_value.lower() in ('true', '1', 'yes')
-                                        else:
-                                            sanitized_option[opt_key] = bool(opt_value)
-                                        logger.debug(f"MCQ sanitization: Preserved isCorrect={sanitized_option[opt_key]} for option")
-                                    elif isinstance(opt_value, str):
-                                        sanitized_option[opt_key] = self._sanitize_text(opt_value)
-                                    else:
-                                        sanitized_option[opt_key] = opt_value
-                                sanitized_options.append(sanitized_option)
-                            else:
-                                sanitized_options.append(self._sanitize_data(option))
-                        sanitized_question[q_key] = sanitized_options
-                    else:
-                        # Regular sanitization for other question fields
-                        sanitized_question[q_key] = self._sanitize_data({q_key: q_value})[q_key]
-                
-                sanitized_questions.append(sanitized_question)
-                
-            except Exception as e:
-                logger.warning(f"Failed to sanitize MCQ question: {e}")
-                # Fall back to regular sanitization
-                sanitized_questions.append(self._sanitize_data(question))
-        
-        logger.info(f"MCQ sanitization: Processed {len(sanitized_questions)} questions")
-        return sanitized_questions
-
     def _looks_like_html(self, text: str) -> bool:
         """
         Check if text content appears to be HTML
@@ -2065,13 +1932,14 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             # Estimate content size based on templates
             content_size = 0
             for template in course.templates:
-                # Estimate based on template type and content length
-                if template.type == "content-video" and hasattr(template.data, 'videoUrl'):
-                    content_size += 500  # Video reference only
-                elif template.type == "mcq":
-                    content_size += len(str(template.data)) * 2  # MCQ content
-                else:
-                    content_size += len(str(template.data))  # Text content
+                # Generic estimation based on data size (no hardcoded types)
+                # Convert template data to string for size calculation
+                try:
+                    data_str = str(_ensure_dict(template.data))
+                    content_size += len(data_str)
+                except Exception:
+                    # Fallback to string conversion
+                    content_size += len(str(template.data))
             
             # Estimate asset sizes (placeholder values)
             asset_size = len(course.assets) * 50000  # ~50KB per asset estimate
@@ -2092,7 +1960,7 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             logger.error(f"Size estimation failed: {e}")
             return {"error": str(e), "total_estimated_mb": 0}
 
-    def validate_for_export(self, course: Course) -> Dict[str, Any]:
+    async def validate_for_export(self, course: Course) -> Dict[str, Any]:
         """
         Validate course data before export
         
@@ -2115,7 +1983,7 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                 return {"valid": False, "errors": ["Course title is missing"]}
             
             # Validate templates
-            self._validate_templates_for_scorm(course.templates)
+            await self._validate_templates_for_scorm(course.templates)
             
             return {
                 "valid": True,

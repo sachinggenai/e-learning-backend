@@ -143,7 +143,8 @@ async def startup_event():
     logger.info(f"Starting {APP_NAME} v{VERSION}")
     logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
     logger.info(f"CORS Origins: {cors_origins}")
-    # Optional automatic Alembic upgrade (env flag) replaces prior create_all
+    
+    # Optional automatic Alembic upgrade (env flag)
     if os.getenv("AUTO_MIGRATE", "false").lower() in {"1", "true", "yes"}:
         try:
             import subprocess
@@ -170,6 +171,18 @@ async def startup_event():
             )
         except Exception as exc:  # pragma: no cover
             logger.error(f"Alembic migration unexpected error: {exc}")
+    
+    # Initialize Template Registry (Dynamic Template System)
+    try:
+        from app.services.scorm.registries.template_registry import registry
+        
+        logger.info("Preloading template definitions into registry cache...")
+        await registry.preload_cache()
+        logger.info("Template registry initialized successfully")
+    except Exception as exc:
+        logger.error(
+            f"Failed to initialize template registry: {exc}", exc_info=True
+        )
 
 # Application shutdown event
  

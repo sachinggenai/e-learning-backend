@@ -1,35 +1,972 @@
-/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
-* 'orm_mode' has been renamed to 'from_attributes'
-  warnings.warn(message, UserWarning)
-/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
-* 'orm_mode' has been renamed to 'from_attributes'
-  warnings.warn(message, UserWarning)
-INFO:     Started server process [79468]
-INFO:     Waiting for application startup.
-2025-11-26 00:15:15,408 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
-2025-11-26 00:15:15,408 - app.main - INFO - Environment: development
-2025-11-26 00:15:15,408 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
-INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/Users/aiwork/iOSStudy/backend']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-2025-11-26 00:16:06,464 - app.services.scorm_export - INFO - Generating SCORM package for course: demo_course
-2025-11-26 00:16:06,465 - app.services.scorm_export - INFO - ✓ Template validation passed for 6 templates
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - Creating SCORM manifest
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - ✓ SCORM manifest created successfully
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - Creating course data
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - MCQ sanitization: Processed 1 questions
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - ✓ Course data JavaScript created successfully
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - Creating content HTML
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - ✓ Template validation passed for 6 templates
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - ✓ Content HTML and styles created successfully
-2025-11-26 00:16:06,467 - app.services.scorm_export - INFO - Creating SCORM wrapper
-2025-11-26 00:16:06,468 - app.services.scorm_export - INFO - ✓ SCORM wrapper created successfully
-2025-11-26 00:16:06,468 - app.services.scorm_export - INFO - Creating ZIP package
-2025-11-26 00:16:06,469 - app.services.scorm_export - INFO - SCORM package generated successfully
+INFO:     Started reloader process [59388] using WatchFiles
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [59425]
+INFO:     Waiting for application startup.
+2025-11-27 18:02:41,359 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:02:41,359 - app.main - INFO - Environment: development
+2025-11-27 18:02:41,359 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:02:41,373 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:02:41,417 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
 Warning: BeautifulSoup not available. HTML sanitization will be limited.
-INFO:     127.0.0.1:62559 - "POST /api/v1/export/scorm/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62204 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62262 - "GET /api/v1/courses/test-pg-course HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62325 - "POST /api/v1/courses HTTP/1.1" 201 Created
+INFO:     127.0.0.1:63032 - "GET / HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/models/template_definition.py'. Reloading...
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
-2025-11-26 00:16:38,874 - app.main - INFO - Shutting down eLearning Authoring App API
+2025-11-27 18:07:20,604 - app.main - INFO - Shutting down eLearning Authoring App API
 INFO:     Application shutdown complete.
-INFO:     Finished server process [79468]
-bash: line 1: 79468 Terminated: 15          uvicorn app.main:app --host 0.0.0.0 --port 8000
+INFO:     Finished server process [59425]
+WARNING:  WatchFiles detected changes in 'app/models/template_definition.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61422]
+INFO:     Waiting for application startup.
+2025-11-27 18:07:21,710 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:07:21,710 - app.main - INFO - Environment: development
+2025-11-27 18:07:21,710 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:07:21,726 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:07:21,785 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/models/template_schema.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:07:40,479 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61422]
+WARNING:  WatchFiles detected changes in 'app/models/template_schema.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61465]
+INFO:     Waiting for application startup.
+2025-11-27 18:07:41,219 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:07:41,219 - app.main - INFO - Environment: development
+2025-11-27 18:07:41,219 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:07:41,235 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:07:41,276 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61470]
+INFO:     Waiting for application startup.
+2025-11-27 18:07:41,835 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:07:41,835 - app.main - INFO - Environment: development
+2025-11-27 18:07:41,835 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:07:41,845 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:07:41,882 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/models/template_schema.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:07:50,892 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61470]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61502]
+INFO:     Waiting for application startup.
+2025-11-27 18:07:51,446 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:07:51,446 - app.main - INFO - Environment: development
+2025-11-27 18:07:51,446 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:07:51,455 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:07:51,492 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/models/template_schema.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:07:59,515 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61502]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61523]
+INFO:     Waiting for application startup.
+2025-11-27 18:08:00,223 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:08:00,223 - app.main - INFO - Environment: development
+2025-11-27 18:08:00,223 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:08:00,236 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:08:00,279 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/repositories/template_definition_repo.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:08:44,324 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61523]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61616]
+INFO:     Waiting for application startup.
+2025-11-27 18:08:45,014 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:08:45,014 - app.main - INFO - Environment: development
+2025-11-27 18:08:45,014 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:08:45,028 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:08:45,069 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/repositories/template_definition_repo.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:08:51,436 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61616]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61637]
+INFO:     Waiting for application startup.
+2025-11-27 18:08:52,056 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:08:52,056 - app.main - INFO - Environment: development
+2025-11-27 18:08:52,056 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:08:52,070 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:08:52,107 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm/registries/template_registry.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:09:27,470 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61637]
+WARNING:  WatchFiles detected changes in 'app/services/scorm/registries/template_registry.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61716]
+INFO:     Waiting for application startup.
+2025-11-27 18:09:28,171 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:09:28,171 - app.main - INFO - Environment: development
+2025-11-27 18:09:28,171 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:09:28,187 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:09:28,227 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61719]
+INFO:     Waiting for application startup.
+2025-11-27 18:09:28,863 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:09:28,863 - app.main - INFO - Environment: development
+2025-11-27 18:09:28,863 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:09:28,874 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:09:28,910 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm/registries/__init__.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:09:33,658 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61719]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+WARNING:  WatchFiles detected changes in 'app/services/scorm/registries/__init__.py'. Reloading...
+INFO:     Started server process [61738]
+INFO:     Waiting for application startup.
+2025-11-27 18:09:34,203 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:09:34,203 - app.main - INFO - Environment: development
+2025-11-27 18:09:34,203 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:09:34,216 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:09:34,263 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61740]
+INFO:     Waiting for application startup.
+2025-11-27 18:09:34,800 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:09:34,800 - app.main - INFO - Environment: development
+2025-11-27 18:09:34,800 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:09:34,811 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:09:34,848 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm/sanitizers/dynamic_sanitizer.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:10:09,297 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61740]
+WARNING:  WatchFiles detected changes in 'app/services/scorm/sanitizers/dynamic_sanitizer.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61811]
+INFO:     Waiting for application startup.
+2025-11-27 18:10:10,008 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:10:10,008 - app.main - INFO - Environment: development
+2025-11-27 18:10:10,008 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:10:10,025 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:10:10,076 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61813]
+INFO:     Waiting for application startup.
+2025-11-27 18:10:10,630 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:10:10,630 - app.main - INFO - Environment: development
+2025-11-27 18:10:10,630 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:10:10,640 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:10:10,673 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm/sanitizers/dynamic_sanitizer.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:10:19,064 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61813]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [61842]
+INFO:     Waiting for application startup.
+2025-11-27 18:10:19,588 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:10:19,588 - app.main - INFO - Environment: development
+2025-11-27 18:10:19,588 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:10:19,598 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:10:19,646 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm/sanitizers/dynamic_sanitizer.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:10:41,365 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [61842]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [62172]
+INFO:     Waiting for application startup.
+2025-11-27 18:10:42,089 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:10:42,089 - app.main - INFO - Environment: development
+2025-11-27 18:10:42,089 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:10:42,103 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:10:42,209 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm/sanitizers/__init__.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:10:47,158 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [62172]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [62193]
+INFO:     Waiting for application startup.
+2025-11-27 18:10:47,762 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:10:47,763 - app.main - INFO - Environment: development
+2025-11-27 18:10:47,763 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:10:47,777 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:10:47,816 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'alembic/versions/397a10e6a5cb_refactor_template_definitions_dynamic_.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:11:15,601 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [62193]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [62574]
+INFO:     Waiting for application startup.
+2025-11-27 18:11:16,240 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:11:16,240 - app.main - INFO - Environment: development
+2025-11-27 18:11:16,240 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:11:16,257 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:11:16,299 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'alembic/versions/397a10e6a5cb_refactor_template_definitions_dynamic_.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:11:30,648 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [62574]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [62608]
+INFO:     Waiting for application startup.
+2025-11-27 18:11:31,334 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:11:31,334 - app.main - INFO - Environment: development
+2025-11-27 18:11:31,334 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:11:31,349 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:11:31,392 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'alembic/seed_template_definitions.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:12:00,386 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [62608]
+WARNING:  WatchFiles detected changes in 'alembic/seed_template_definitions.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [62678]
+INFO:     Waiting for application startup.
+2025-11-27 18:12:01,239 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:12:01,239 - app.main - INFO - Environment: development
+2025-11-27 18:12:01,239 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:12:01,258 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:12:01,314 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [62684]
+INFO:     Waiting for application startup.
+2025-11-27 18:12:01,854 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:12:01,854 - app.main - INFO - Environment: development
+2025-11-27 18:12:01,854 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:12:01,864 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:12:01,902 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'alembic/seed_template_definitions.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:12:11,094 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [62684]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [63006]
+INFO:     Waiting for application startup.
+2025-11-27 18:12:11,757 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:12:11,757 - app.main - INFO - Environment: development
+2025-11-27 18:12:11,757 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:12:11,770 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:12:11,807 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'alembic/versions/397a10e6a5cb_refactor_template_definitions_dynamic_.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:12:29,493 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [63006]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [63085]
+INFO:     Waiting for application startup.
+2025-11-27 18:12:30,263 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:12:30,263 - app.main - INFO - Environment: development
+2025-11-27 18:12:30,263 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:12:30,276 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:12:30,323 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'alembic/versions/397a10e6a5cb_refactor_template_definitions_dynamic_.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:12:50,360 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [63085]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [63397]
+INFO:     Waiting for application startup.
+2025-11-27 18:12:51,138 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:12:51,138 - app.main - INFO - Environment: development
+2025-11-27 18:12:51,138 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:12:51,152 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:12:51,197 - app.main - INFO - Template registry initialized successfully
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'test_dynamic_templates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:13:41,337 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [63397]
+WARNING:  WatchFiles detected changes in 'test_dynamic_templates.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [63994]
+INFO:     Waiting for application startup.
+2025-11-27 18:13:42,092 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:13:42,093 - app.main - INFO - Environment: development
+2025-11-27 18:13:42,093 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:13:42,110 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:13:42,158 - app.main - ERROR - Failed to initialize template registry: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedColumnError'>: column template_definitions.type_id does not exist
+HINT:  Perhaps you meant to reference the column "template_definitions.type_key".
+[SQL: SELECT template_definitions.id, template_definitions.type_id, template_definitions.version, template_definitions.name, template_definitions.description, template_definitions.schema_definition, template_definitions.render_template, template_definitions.default_assets, template_definitions.is_active, template_definitions.created_at, template_definitions.updated_at 
+FROM template_definitions 
+WHERE template_definitions.is_active IS true]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [63997]
+INFO:     Waiting for application startup.
+2025-11-27 18:13:42,703 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:13:42,703 - app.main - INFO - Environment: development
+2025-11-27 18:13:42,703 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:13:42,713 - app.main - INFO - Loading template definitions into registry...
+2025-11-27 18:13:42,747 - app.main - ERROR - Failed to initialize template registry: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedColumnError'>: column template_definitions.type_id does not exist
+HINT:  Perhaps you meant to reference the column "template_definitions.type_key".
+[SQL: SELECT template_definitions.id, template_definitions.type_id, template_definitions.version, template_definitions.name, template_definitions.description, template_definitions.schema_definition, template_definitions.render_template, template_definitions.default_assets, template_definitions.is_active, template_definitions.created_at, template_definitions.updated_at 
+FROM template_definitions 
+WHERE template_definitions.is_active IS true]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/models/persisted_course.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:17:52,206 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [63997]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [64789]
+INFO:     Waiting for application startup.
+2025-11-27 18:17:52,884 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:17:52,884 - app.main - INFO - Environment: development
+2025-11-27 18:17:52,884 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:17:52,885 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/models/persisted_course.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:18:03,508 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [64789]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [64822]
+INFO:     Waiting for application startup.
+2025-11-27 18:18:04,199 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:18:04,199 - app.main - INFO - Environment: development
+2025-11-27 18:18:04,199 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:18:04,201 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:20:01,947 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [64822]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [65365]
+INFO:     Waiting for application startup.
+2025-11-27 18:20:02,781 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:20:02,781 - app.main - INFO - Environment: development
+2025-11-27 18:20:02,781 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:20:02,782 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:20:40,788 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [65365]
+Process SpawnProcess-31:
+Traceback (most recent call last):
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 67, in run
+    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/_compat.py", line 60, in asyncio_run
+    return loop.run_until_complete(main)
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 71, in serve
+    await self._serve(sockets)
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 78, in _serve
+    config.load()
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/config.py", line 439, in load
+    self.loaded_app = import_from_string(self.app)
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py", line 127, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1030, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1007, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 680, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 850, in exec_module
+  File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed
+  File "/Users/aiwork/iOSStudy/backend/app/main.py", line 14, in <module>
+    from app.routers import (
+  File "/Users/aiwork/iOSStudy/backend/app/routers/export.py", line 11, in <module>
+    from ..services.scorm_export import SCORMExportService
+  File "/Users/aiwork/iOSStudy/backend/app/services/scorm_export.py", line 1761
+    validation_errors.append(f"Template {i+1}: Validation error - {str(e)}")
+IndentationError: unexpected indent
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [65487]
+INFO:     Waiting for application startup.
+2025-11-27 18:20:58,133 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:20:58,133 - app.main - INFO - Environment: development
+2025-11-27 18:20:58,133 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:20:58,134 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:21:42,800 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [65487]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [65734]
+INFO:     Waiting for application startup.
+2025-11-27 18:21:43,616 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:21:43,616 - app.main - INFO - Environment: development
+2025-11-27 18:21:43,616 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:21:43,617 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:23:52,802 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [65734]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [66015]
+INFO:     Waiting for application startup.
+2025-11-27 18:23:53,482 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:23:53,482 - app.main - INFO - Environment: development
+2025-11-27 18:23:53,482 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:23:53,484 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:24:21,576 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [66015]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [66080]
+INFO:     Waiting for application startup.
+2025-11-27 18:24:22,315 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:24:22,315 - app.main - INFO - Environment: development
+2025-11-27 18:24:22,315 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:24:22,317 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:24:39,295 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [66080]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [66123]
+INFO:     Waiting for application startup.
+2025-11-27 18:24:40,035 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:24:40,035 - app.main - INFO - Environment: development
+2025-11-27 18:24:40,035 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:24:40,037 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'test_dynamic_scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:25:44,997 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [66123]
+WARNING:  WatchFiles detected changes in 'test_dynamic_scorm_export.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [68462]
+INFO:     Waiting for application startup.
+2025-11-27 18:25:45,917 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:25:45,917 - app.main - INFO - Environment: development
+2025-11-27 18:25:45,917 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:25:45,919 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [68473]
+INFO:     Waiting for application startup.
+2025-11-27 18:25:46,487 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:25:46,487 - app.main - INFO - Environment: development
+2025-11-27 18:25:46,487 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:25:46,488 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'test_dynamic_scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:26:04,982 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [68473]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [68587]
+INFO:     Waiting for application startup.
+2025-11-27 18:26:05,849 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:26:05,849 - app.main - INFO - Environment: development
+2025-11-27 18:26:05,849 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:26:05,851 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'test_dynamic_scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:26:29,684 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [68587]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [68727]
+INFO:     Waiting for application startup.
+2025-11-27 18:26:30,406 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:26:30,406 - app.main - INFO - Environment: development
+2025-11-27 18:26:30,406 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:26:30,408 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'test_dynamic_scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:26:42,426 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [68727]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [68835]
+INFO:     Waiting for application startup.
+2025-11-27 18:26:43,093 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:26:43,093 - app.main - INFO - Environment: development
+2025-11-27 18:26:43,093 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:26:43,095 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:27:09,667 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [68835]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [68971]
+INFO:     Waiting for application startup.
+2025-11-27 18:27:10,463 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:27:10,463 - app.main - INFO - Environment: development
+2025-11-27 18:27:10,463 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:27:10,464 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:27:35,624 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [68971]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [69114]
+INFO:     Waiting for application startup.
+2025-11-27 18:27:36,397 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:27:36,397 - app.main - INFO - Environment: development
+2025-11-27 18:27:36,397 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:27:36,398 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'test_dynamic_scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:27:52,529 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [69114]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [69241]
+INFO:     Waiting for application startup.
+2025-11-27 18:27:53,211 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:27:53,211 - app.main - INFO - Environment: development
+2025-11-27 18:27:53,211 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:27:53,213 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'test_dynamic_scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:28:19,478 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [69241]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [69817]
+INFO:     Waiting for application startup.
+2025-11-27 18:28:20,176 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:28:20,176 - app.main - INFO - Environment: development
+2025-11-27 18:28:20,176 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:28:20,178 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:33:45,598 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [69817]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [72509]
+INFO:     Waiting for application startup.
+2025-11-27 18:33:46,415 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:33:46,415 - app.main - INFO - Environment: development
+2025-11-27 18:33:46,415 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:33:46,417 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:33:57,047 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [72509]
+Process SpawnProcess-47:
+Traceback (most recent call last):
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 67, in run
+    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/_compat.py", line 60, in asyncio_run
+    return loop.run_until_complete(main)
+  File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 71, in serve
+    await self._serve(sockets)
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/server.py", line 78, in _serve
+    config.load()
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/config.py", line 439, in load
+    self.loaded_app = import_from_string(self.app)
+  File "/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py", line 127, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1030, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1007, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 680, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 850, in exec_module
+  File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed
+  File "/Users/aiwork/iOSStudy/backend/app/main.py", line 14, in <module>
+    from app.routers import (
+  File "/Users/aiwork/iOSStudy/backend/app/routers/export.py", line 11, in <module>
+    from ..services.scorm_export import SCORMExportService
+  File "/Users/aiwork/iOSStudy/backend/app/services/scorm_export.py", line 1986
+    await self._validate_templates_for_scorm(course.templates)
+    ^
+SyntaxError: 'await' outside async function
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [72594]
+INFO:     Waiting for application startup.
+2025-11-27 18:34:16,430 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:34:16,430 - app.main - INFO - Environment: development
+2025-11-27 18:34:16,430 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:34:16,431 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/services/scorm_export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:34:34,972 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [72594]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [72646]
+INFO:     Waiting for application startup.
+2025-11-27 18:34:35,703 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:34:35,703 - app.main - INFO - Environment: development
+2025-11-27 18:34:35,703 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:34:35,705 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/routers/export.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-27 18:34:47,246 - app.main - INFO - Shutting down eLearning Authoring App API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [72646]
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+/Users/aiwork/iOSStudy/backend/.venv/lib/python3.9/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+INFO:     Started server process [72672]
+INFO:     Waiting for application startup.
+2025-11-27 18:34:47,944 - app.main - INFO - Starting eLearning Authoring App API v1.0.0
+2025-11-27 18:34:47,944 - app.main - INFO - Environment: development
+2025-11-27 18:34:47,944 - app.main - INFO - CORS Origins: ['http://localhost:3000', 'http://localhost:3001']
+2025-11-27 18:34:47,946 - app.main - ERROR - Failed to initialize template registry: cannot import name 'TemplateDefinition' from 'app.models.persisted_course' (/Users/aiwork/iOSStudy/backend/app/models/persisted_course.py)
+INFO:     Application startup complete.
