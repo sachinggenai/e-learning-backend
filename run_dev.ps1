@@ -25,7 +25,7 @@
 #>
 param(
     [int]$Port = 8000,
-    [string]$Host = '0.0.0.0',
+    [string]$BindHost = '0.0.0.0',
     [switch]$Reinstall,
     [switch]$ForcePort,
     [switch]$DryRun
@@ -70,17 +70,15 @@ try {
         Run-Command "& '$PythonExe' -m pip install -r requirements.txt"
     } else {
         # Quick check for uvicorn
-        $checkCmd = "try: import uvicorn; print('OK')\\nexcept Exception: import sys; sys.exit(2)"
-        $tmpFile = [IO.Path]::GetTempFileName()
-        Set-Content -Path $tmpFile -Value $checkCmd -NoNewline -Encoding Ascii
-        $proc = & $PythonExe - <<<'PY'
+        $pythonCode = @"
 import sys
 try:
     import uvicorn
     sys.exit(0)
 except Exception:
     sys.exit(2)
-PY
+"@
+        & $PythonExe -c $pythonCode
         if ($LASTEXITCODE -ne 0) {
             Write-Host '[dev] uvicorn not found in venv; installing requirements...' 
             Run-Command "& '$PythonExe' -m pip install -r requirements.txt"
@@ -120,12 +118,12 @@ PY
     $env:PYTHONPATH = $Root
     Write-Host "[dev] PYTHONPATH set to $env:PYTHONPATH"
 
-    $uvicornCmd = "& '$PythonExe' -m uvicorn app.main:app --host $Host --port $Port --reload"
+    $uvicornCmd = "& '$PythonExe' -m uvicorn app.main:app --host $BindHost --port $Port --reload"
 
     if ($DryRun) {
         Write-Host "[DryRun] Would run: $uvicornCmd"
     } else {
-        Write-Host "[dev] Starting FastAPI on http://$Host:$Port (reload enabled)"
+        Write-Host "[dev] Starting FastAPI on http://$BindHost:$Port (reload enabled)"
         iex $uvicornCmd
     }
 

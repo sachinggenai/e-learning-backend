@@ -1,0 +1,390 @@
+<#
+.SYNOPSIS
+  Windows diagnostic and troubleshooting script for FastAPI backend
+
+.DESCRIPTION
+  Checks common issues and provides fixes for Windows setup problems:
+  - Python installation
+  - Virtual environment
+  - Dependencies
+  - Port availability
+  - Database configuration
+  - File permissions
+
+.PARAMETER Fix
+  Automatically attempt to fix issues found
+
+.EXAMPLE
+  .\troubleshoot_windows.ps1
+  .\troubleshoot_windows.ps1 -Fix
+#>
+
+[CmdletBinding()]
+param(
+    [switch]$Fix
+)
+
+Set-StrictMode -Version Latest
+
+# Colors
+function Write-Check { Write-Host "🔍 $args" -ForegroundColor Cyan }
+function Write-Pass { Write-Host "  ✓ $args" -ForegroundColor Green }
+function Write-Issue { Write-Host "  ✗ $args" -ForegroundColor Red }
+function Write-Warn { Write-Host "  ⚠ $args" -ForegroundColor Yellow }
+function Write-Fix { Write-Host "  🔧 $args" -ForegroundColor Magenta }
+function Write-Section { Write-Host "`n═══ $args ═══" -ForegroundColor Yellow }
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$IssuesFound = @()
+$FixesApplied = @()
+
+Write-Host "`n╔══════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  FastAPI Backend - Windows Diagnostics  ║" -ForegroundColor Cyan
+Write-Host "╚══════════════════════════════════════════╝`n" -ForegroundColor Cyan
+
+# ==========================================
+# CHECK 1: Python Installation
+# ==========================================
+Write-Section "Python Installation"
+
+$pythonCmd = $null
+$pythonVersion = $null
+
+try {
+    $output = & python --version 2>&1
+    if ($LASTEXITCODE -eq 0 -and $output -match "Python (\d+\.\d+\.\d+)") {
+        $pythonCmd = "python"
+        $pythonVersion = $matches[1]
+        Write-Pass "Python found: $pythonVersion"
+    }
+} catch {}
+
+if (-not $pythonCmd) {
+    try {
+        $output = & python3 --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $output -match "Python (\d+\.\d+\.\d+)") {
+            $pythonCmd = "python3"
+            $pythonVersion = $matches[1]
+            Write-Pass "Python3 found: $pythonVersion"
+        }
+    } catch {}
+}
+
+if (-not $pythonCmd) {
+    Write-Issue "Python is not installed or not in PATH"
+    $IssuesFound += "Python not found"
+    Write-Host "    Fix: Install Python from https://www.python.org/downloads/" -ForegroundColor White
+    Write-Host "    Make sure to check 'Add Python to PATH' during installation" -ForegroundColor White
+} else {
+    # Check version
+    if ($pythonVersion -match "^(\d+)\.(\d+)") {
+        $major = [int]$matches[1]
+        $minor = [int]$matches[2]
+        if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 10)) {
+            Write-Warn "Python $pythonVersion is older than recommended (3.10+)"
+            $IssuesFound += "Old Python version"
+        } else {
+            Write-Pass "Python version is compatible ($pythonVersion)"
+        }
+    }
+    
+    # Check pip
+    try {
+        $pipVersion = & $pythonCmd -m pip --version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Pass "pip is available"
+        }
+    } catch {
+        Write-Issue "pip is not available"
+        $IssuesFound += "pip not found"
+        if ($Fix) {
+            Write-Fix "Attempting to install pip..."
+            & $pythonCmd -m ensurepip --upgrade
+            $FixesApplied += "Installed pip"
+        }
+    }
+}
+
+# ==========================================
+# CHECK 2: PowerShell Execution Policy
+# ==========================================
+Write-Section "PowerShell Configuration"
+
+$policy = Get-ExecutionPolicy -Scope CurrentUser
+if ($policy -eq "Restricted" -or $policy -eq "AllSigned") {
+    Write-Issue "Execution policy is too restrictive: $policy"
+    Write-Host "    Scripts cannot run with this policy" -ForegroundColor White
+    $IssuesFound += "Execution policy restricted"
+    
+    if ($Fix) {
+        Write-Fix "Attempting to set execution policy..."
+        try {
+            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+            Write-Pass "Execution policy updated to RemoteSigned"
+            $FixesApplied += "Updated execution policy"
+        } catch {
+            Write-Issue "Could not update execution policy automatically"
+            Write-Host "    Run PowerShell as Administrator and execute:" -ForegroundColor White
+            Write-Host "    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Cyan
+        }
+    }
+} else {
+    Write-Pass "Execution policy is compatible: $policy"
+}
+
+# ==========================================
+# CHECK 3: Virtual Environment
+# ==========================================
+Write-Section "Virtual Environment"
+
+$venvDir = Join-Path $ScriptDir ".venv"
+
+if (Test-Path $venvDir) {
+    Write-Pass "Virtual environment exists at .venv"
+    
+    # Check venv Python
+    $venvPython = Join-Path $venvDir "Scripts\python.exe"
+    if (Test-Path $venvPython) {
+        Write-Pass "Virtual environment Python found"
+        
+        # Check if venv is healthy
+        try {
+            $venvVersion = & $venvPython --version 2>&1
+            Write-Pass "Virtual environment is functional: $venvVersion"
+        } catch {
+            Write-Issue "Virtual environment Python is not functional"
+            $IssuesFound += "Broken virtual environment"
+            
+            if ($Fix) {
+                Write-Fix "Recreating virtual environment..."
+                Remove-Item -Path $venvDir -Recurse -Force
+                & $pythonCmd -m venv $venvDir
+                $FixesApplied += "Recreated virtual environment"
+            }
+        }
+    } else {
+        Write-Issue "Virtual environment Python not found at Scripts\python.exe"
+        $IssuesFound += "Invalid virtual environment"
+        
+        if ($Fix) {
+            Write-Fix "Recreating virtual environment..."
+            Remove-Item -Path $venvDir -Recurse -Force
+            & $pythonCmd -m venv $venvDir
+            $FixesApplied += "Recreated virtual environment"
+        }
+    }
+} else {
+    Write-Warn "Virtual environment not found"
+    Write-Host "    This is okay for first-time setup" -ForegroundColor White
+    
+    if ($Fix -and $pythonCmd) {
+        Write-Fix "Creating virtual environment..."
+        & $pythonCmd -m venv $venvDir
+        $FixesApplied += "Created virtual environment"
+    }
+}
+
+# ==========================================
+# CHECK 4: Dependencies
+# ==========================================
+Write-Section "Dependencies"
+
+$reqFile = Join-Path $ScriptDir "requirements.txt"
+if (-not (Test-Path $reqFile)) {
+    Write-Issue "requirements.txt not found"
+    $IssuesFound += "Missing requirements.txt"
+} else {
+    Write-Pass "requirements.txt found"
+    
+    if (Test-Path $venvDir) {
+        $venvPython = Join-Path $venvDir "Scripts\python.exe"
+        if (Test-Path $venvPython) {
+            # Check key packages
+            $packages = @("fastapi", "uvicorn", "sqlalchemy", "pydantic")
+            $missingPackages = @()
+            
+            foreach ($pkg in $packages) {
+                $check = & $venvPython -c "import importlib,sys; sys.exit(0 if importlib.util.find_spec('$pkg') else 1)" 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Pass "$pkg is installed"
+                } else {
+                    Write-Issue "$pkg is NOT installed"
+                    $missingPackages += $pkg
+                }
+            }
+            
+            if ($missingPackages.Count -gt 0) {
+                $IssuesFound += "Missing packages: $($missingPackages -join ', ')"
+                
+                if ($Fix) {
+                    Write-Fix "Installing missing dependencies..."
+                    & $venvPython -m pip install --upgrade pip
+                    & $venvPython -m pip install -r $reqFile
+                    $FixesApplied += "Installed dependencies"
+                }
+            }
+        }
+    }
+}
+
+# ==========================================
+# CHECK 5: Port Availability
+# ==========================================
+Write-Section "Port Availability"
+
+$ports = @(8000, 8080, 8100)
+foreach ($port in $ports) {
+    try {
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, $port)
+        $listener.Start()
+        $listener.Stop()
+        Write-Pass "Port $port is available"
+    } catch {
+        Write-Warn "Port $port is in use"
+        
+        # Try to find process
+        $netstat = netstat -ano | Select-String ":$port\s"
+        if ($netstat) {
+            $line = $netstat[0].ToString()
+            if ($line -match "\s+(\d+)\s*$") {
+                $pid = $matches[1]
+                try {
+                    $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+                    if ($process) {
+                        Write-Host "    Process: $($process.ProcessName) (PID: $pid)" -ForegroundColor White
+                        
+                        if ($Fix) {
+                            $response = Read-Host "    Kill process $($process.ProcessName) on port ${port}? (y/n)"
+                            if ($response -eq 'y') {
+                                Stop-Process -Id $pid -Force
+                                Write-Fix "Killed process $pid"
+                                $FixesApplied += "Killed process on port $port"
+                            }
+                        }
+                    }
+                } catch {}
+            }
+        }
+    }
+}
+
+# ==========================================
+# CHECK 6: Database Configuration
+# ==========================================
+Write-Section "Database Configuration"
+
+$envFile = Join-Path $ScriptDir ".env"
+$dataDir = Join-Path $ScriptDir "data"
+
+if (Test-Path $envFile) {
+    Write-Pass ".env file exists"
+    
+    # Check for DATABASE_URL
+    $envContent = Get-Content $envFile -Raw
+    if ($envContent -match "DATABASE_URL") {
+        Write-Pass "DATABASE_URL is configured"
+        
+        # Check if using SQLite
+        if ($envContent -match "sqlite") {
+            Write-Pass "Using SQLite database"
+            
+            if (-not (Test-Path $dataDir)) {
+                Write-Warn "Data directory doesn't exist (will be created automatically)"
+            } else {
+                Write-Pass "Data directory exists"
+            }
+        } elseif ($envContent -match "postgresql") {
+            Write-Pass "Using PostgreSQL database"
+            # Could add PostgreSQL connection test here
+        }
+    } else {
+        Write-Warn "DATABASE_URL not explicitly set (will use default)"
+    }
+} else {
+    Write-Warn ".env file not found (will use defaults)"
+    
+    if ($Fix) {
+        $envExample = Join-Path $ScriptDir ".env.example"
+        if (Test-Path $envExample) {
+            Write-Fix "Creating .env from .env.example..."
+            Copy-Item $envExample $envFile
+            $FixesApplied += "Created .env file"
+        } else {
+            Write-Fix "Creating minimal .env file..."
+            $minimalEnv = @"
+ENVIRONMENT=development
+HOST=0.0.0.0
+PORT=8000
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+AUTO_MIGRATE=true
+"@
+            Set-Content -Path $envFile -Value $minimalEnv
+            $FixesApplied += "Created minimal .env"
+        }
+    }
+}
+
+# ==========================================
+# CHECK 7: File Permissions
+# ==========================================
+Write-Section "File Permissions"
+
+try {
+    $testFile = Join-Path $ScriptDir "test_write_permission.tmp"
+    "test" | Out-File $testFile
+    Remove-Item $testFile
+    Write-Pass "Write permissions are okay"
+} catch {
+    Write-Issue "Cannot write to project directory"
+    $IssuesFound += "Write permission denied"
+    Write-Host "    Check folder permissions" -ForegroundColor White
+}
+
+# ==========================================
+# CHECK 8: Network & Firewall
+# ==========================================
+Write-Section "Network Configuration"
+
+try {
+    $localhost = Test-NetConnection -ComputerName localhost -Port 8000 -InformationLevel Quiet -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+    Write-Pass "Localhost networking is functional"
+} catch {
+    Write-Warn "Could not test localhost connectivity"
+}
+
+# ==========================================
+# SUMMARY
+# ==========================================
+Write-Host "`n╔══════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║             SUMMARY                      ║" -ForegroundColor Cyan
+Write-Host "╚══════════════════════════════════════════╝`n" -ForegroundColor Cyan
+
+if ($IssuesFound.Count -eq 0) {
+    Write-Host "✓ No critical issues found!" -ForegroundColor Green
+    Write-Host "`nYour environment appears to be set up correctly." -ForegroundColor White
+    Write-Host "Run .\run_dev.ps1 to start the server." -ForegroundColor Cyan
+} else {
+    Write-Host "Found $($IssuesFound.Count) issue(s):" -ForegroundColor Yellow
+    foreach ($issue in $IssuesFound) {
+        Write-Host "  • $issue" -ForegroundColor Red
+    }
+}
+
+if ($FixesApplied.Count -gt 0) {
+    Write-Host "`n✓ Applied $($FixesApplied.Count) fix(es):" -ForegroundColor Green
+    foreach ($fix in $FixesApplied) {
+        Write-Host "  • $fix" -ForegroundColor Green
+    }
+}
+
+if ($IssuesFound.Count -gt 0 -and -not $Fix) {
+    Write-Host "`n💡 Tip: Run with -Fix flag to automatically attempt fixes:" -ForegroundColor Yellow
+    Write-Host "   .\troubleshoot_windows.ps1 -Fix" -ForegroundColor Cyan
+}
+
+Write-Host "`n📖 For more help, see WINDOWS_SETUP_GUIDE.md`n" -ForegroundColor White
+
+# Exit with error code if issues found
+if ($IssuesFound.Count -gt 0 -and $FixesApplied.Count -eq 0) {
+    exit 1
+}

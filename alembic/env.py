@@ -4,6 +4,10 @@ import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import models metadata
 from app.models.persisted_course import Base as PersistedBase
