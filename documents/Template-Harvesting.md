@@ -1,16 +1,16 @@
-As the **Technical Lead / Architect**, I have updated the BRD to **Version 1.8**.
+As the **Technical Lead / Architect**, I have updated the BRD to **Version 1.9**.
 
-This version bridges the gap between business intent and engineering execution. It includes:
-1.  **Mermaid.js Architecture Diagrams** to visualize the new "Heuristic Import Pipeline".
-2.  **Database Schema Definitions** for the new PostgreSQL tables.
-3.  **Technical Implementation Guides** attached to every User Story, specifying exactly which libraries (`slimit`, `BeautifulSoup`) and design patterns (Repository, Factory) to use.
-
-This document is now ready to be handed to the engineering team.
+This version resolves the blocking questions raised by the Development Team:
+1.  **Tech Stack:** Mandates **`pyjsparser`** for ES6 support.
+2.  **Infrastructure:** Confirms **FastAPI `BackgroundTasks`** (no Redis) and defines the failure mode.
+3.  **Auth:** Explicitly sets **Single Tenant Mode** (No Auth) for Phase 2.
+4.  **Refactor:** Approves the **Hybrid Enum/DB Strategy** to preserve Pydantic stability.
+5.  **Maintenance:** Adds the **Temp File Cleanup** requirement.
 
 ```markdown
 # Business Requirements Document (BRD)
 ## Project: eLearning Authoring Platform - Phase 2 (Backend Core)
-**Version:** 1.8
+**Version:** 1.9
 **Status:** APPROVED FOR DEVELOPMENT
 **Focus:** Legacy Migration, Template Harvesting, SCORM Import (R3)
 
@@ -22,7 +22,8 @@ This document defines the backend requirements to transform the platform into a 
 ## 2. System Architecture & Data Flow
 
 ### 2.1 High-Level Architecture (Import Pipeline)
-The following diagram illustrates the **Staged Import Workflow** designed to handle large, messy legacy files without blocking the main thread or corrupting the database.
+The following diagram illustrates the **Staged Import Workflow**.
+**Note:** Async processing uses FastAPI `BackgroundTasks`. If the server restarts during processing, the job remains in `PENDING` state indefinitely (acceptable limitation for Phase 2).
 
 ```mermaid
 graph TD
@@ -49,7 +50,7 @@ graph TD
 
     Client -- 1. Upload ZIP --> API
     API -- 2. Stream to Disk --> Temp
-    API -- 3. Analyze (Async) --> Service
+    API -- 3. Trigger BackgroundTask --> Service
     Service -- 4. Extract & Scan --> Parser
     Parser -- 5. Find JSON Payload --> Inferrer
     Inferrer -- 6. Check Signature --> DefDB
@@ -67,7 +68,7 @@ graph TD
 ```
 
 ### 2.2 Database Schema Extensions
-To support the dynamic nature of this phase, the following schema changes are required in persisted_course.py.
+To support the dynamic nature of this phase, the following schema changes are required in `persisted_course.py`.
 
 ```mermaid
 erDiagram
@@ -100,6 +101,14 @@ erDiagram
     template_definitions ||--|{ global_templates : defines
 ```
 
+### 2.3 Architectural Pre-requisites (CRITICAL)
+Before implementing the Import Service, the following architectural refactoring must be completed:
+1.  **Hybrid Schema Strategy:** Keep the `TemplateType` Enum in course.py for core types (`welcome`, `mcq`) to maintain stability. Use the `template_definitions` DB table for *extended* (inferred) types. Pydantic validation logic must check the Enum first, then query the DB if the type is unknown.
+2.  **Single Tenant Mode:** Phase 2 operates without user authentication. All API operations are assumed to be authorized (Admin). No User model or JWT implementation is required yet.
+3.  **Global Library:** Create `global_templates` table to support the "Harvesting" requirement.
+4.  **Job Queue:** Create `import_jobs` table to support the Preview API.
+5.  **Storage Adapter:** Implement `app/services/storage/` interface.
+
 ---
 
 ## 3. Functional Requirements
@@ -109,7 +118,7 @@ erDiagram
 | ID | Requirement | Priority | Description |
 | :--- | :--- | :--- | :--- |
 | **BE-IMP-01** | **Legacy Package Ingestion** | Critical | Accept `.zip` uploads (max 200MB). Support manually created packages lacking `imsmanifest.xml`. |
-| **BE-IMP-02** | **Heuristic Data Discovery** | Critical | Scan launch files (e.g., `index.html`) and referenced scripts. **Must support minified code.** Use AST parsing or robust tokenization to locate JSON payloads assigned to variables (e.g., `window.config`, `var courseData`). |
+| **BE-IMP-02** | **Heuristic Data Discovery** | Critical | Scan launch files (e.g., `index.html`) and referenced scripts. **Must support minified code.** Use AST parsing (`pyjsparser`) to locate JSON payloads assigned to variables. |
 | **BE-IMP-03** | **Multi-Template Extraction** | Critical | Extract ordered array of template objects. Support $1..N$ templates. |
 | **BE-IMP-04** | **Smart Matching & Inference** | Critical | 1. Match against known types.<br>2. If unknown, **Infer Schema** and create a **DRAFT** Template Definition.<br>3. **De-duplicate:** If inferred signature matches an existing definition, use the existing one. |
 | **BE-IMP-05** | **Strict Asset Scavenging** | High | Recursively scan ZIP for assets. Normalize relative paths (`../../img/logo.png`) to absolute API URLs. **Strict Collision Rule:** If duplicate filenames exist (e.g., two `bg.png` files in different folders), fail the match for that specific asset rather than guessing. |
@@ -154,6 +163,7 @@ erDiagram
     *   **Endpoint:** `POST /api/v1/import/analyze` (Async).
     *   **Library:** Use `python-multipart` for upload, `zipfile` for validation.
     *   **Security:** Use `tempfile.TemporaryDirectory` to extract files safely. Ensure `zipfile.extractall` does not allow path traversal (Zip Slip vulnerability).
+    *   **Maintenance:** Implement a startup task (`@app.on_event("startup")`) to clean up files in `/tmp/uploads` older than 24 hours.
 
 #### Story 1.2: Heuristic Payload Discovery (Minification Support)
 **As a** Developer,
@@ -164,7 +174,7 @@ erDiagram
     *   `Given` a legacy course where data is defined as `var config={...}` in a 10,000-character single-line file, `When` processed, `Then` the system correctly extracts the JSON object.
     *   `Given` a file with `eval()` or malicious code, `When` processed, `Then` the system **does not execute** the code but statically parses it.
 *   **Technical Implementation:**
-    *   **Library:** Use `slimit` (lexer) or `esprima-python` to build an Abstract Syntax Tree (AST).
+    *   **Library:** Use **`pyjsparser`** (supports ES6) to build an Abstract Syntax Tree (AST).
     *   **Logic:** Walk the AST looking for `AssignmentExpression` where the right side is an `ObjectExpression` or `ArrayExpression`.
     *   **Fallback:** If AST fails, use `re` (Regex) to find `var \w+\s*=\s*(\[.*\]|\{.*\})`.
 
@@ -227,14 +237,14 @@ erDiagram
 *   **Technical Implementation:**
     *   **Model:** `ImportJob` (SQLAlchemy).
     *   **Columns:** `staged_data` (JSONB), `warnings` (JSONB), `status` (Enum: PENDING, ANALYZED, COMMITTED).
-    *   **Flow:** `analyze` writes to `staged_data`. `commit` reads `staged_data` and writes to `CourseRecord`.
+    *   **Flow:** Use FastAPI `BackgroundTasks` to trigger the analysis. If server restarts, job remains in `PENDING` state (acceptable limitation for Phase 2).
 
 ---
 
 ## 5. Non-Functional Requirements (NFR)
 
 1.  **Security:** **NO EVAL.** The parser must never execute the JavaScript found in the ZIP.
-2.  **Tech Stack:** JavaScript parsing must be performed using a **pure-Python library** (e.g., `slimit`, `pyjsparser`, or `esprima-python`) to avoid requiring Node.js in the backend container. Regex fallbacks are permitted only for simple variable extraction.
+2.  **Tech Stack:** JavaScript parsing must be performed using **`pyjsparser`** (supports ES6) to avoid requiring Node.js in the backend container. Regex fallbacks are permitted only for simple variable extraction.
 3.  **Performance:** Parsing 200MB / 500 assets < 30 seconds.
 4.  **Reliability:** If Heuristics fail (no data found), return a specific error code `ERR_NO_PAYLOAD_FOUND`.
 5.  **Storage Abstraction:** Asset storage must use an **Abstract Base Class** (`StorageService`), allowing switching between `LocalStorage` (dev) and `S3/BlobStorage` (prod) via environment variables.
