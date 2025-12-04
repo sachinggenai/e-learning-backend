@@ -4,9 +4,12 @@ Implements server-side validation logic as specified in Phase 1 requirements
 """
 
 from typing import List, Dict, Any, Optional
-from ..models.course import Course, Template, MCQData, CourseExportRequest
+from ..models.course import Course, Template, MCQData, CourseExportRequest, BUILTIN_TEMPLATE_TYPES
 from pydantic import ValidationError as PydanticValidationError
 from jsonschema import validate, ValidationError as JsonSchemaError
+from fastapi import Depends
+from ..db.config import get_session
+from sqlalchemy.ext.asyncio import AsyncSession
 import json
 import os
 import logging
@@ -55,15 +58,17 @@ class ValidationError:
 class CourseValidator:
     """Course validation service"""
     
-    def __init__(self):
+    def __init__(self, db_session=None):
         self.schema = load_course_schema()
+        self.db_session = db_session
     
-    async def validate_course(self, course: Course) -> List[ValidationError]:
+    async def validate_course(self, course: Course, db_session=None) -> List[ValidationError]:
         """
         Comprehensive course validation
         
         Args:
             course: Course object to validate
+            db_session: Optional database session for dynamic template validation
             
         Returns:
             List of validation errors
@@ -81,7 +86,7 @@ class CourseValidator:
             # errors.extend(schema_errors)
             
             # Business rule validations
-            business_errors = await self._validate_business_rules(course)
+            business_errors = await self._validate_business_rules(course, db_session)
             errors.extend(business_errors)
             
         except Exception as e:
@@ -103,7 +108,7 @@ class CourseValidator:
         
         return errors
     
-    async def _validate_business_rules(self, course: Course) -> List[ValidationError]:
+    async def _validate_business_rules(self, course: Course, db_session=None) -> List[ValidationError]:
         """Validate business-specific rules"""
         errors = []
         
@@ -111,7 +116,7 @@ class CourseValidator:
         errors.extend(self._validate_course_metadata(course))
         
         # Validate templates
-        errors.extend(self._validate_templates(course.templates))
+        errors.extend(await self._validate_templates(course.templates, db_session))
         
         # Validate navigation settings
         errors.extend(self._validate_navigation(course.navigation))
@@ -146,7 +151,7 @@ class CourseValidator:
         
         return errors
     
-    def _validate_templates(self, templates: List[Template]) -> List[ValidationError]:
+    async def _validate_templates(self, templates: List[Template], db_session=None) -> List[ValidationError]:
         """Validate template array and individual templates"""
         errors = []
         
@@ -171,12 +176,12 @@ class CourseValidator:
         
         # Validate individual templates
         for i, template in enumerate(templates):
-            template_errors = self._validate_template(template, i)
+            template_errors = await self._validate_template(template, i, db_session)
             errors.extend(template_errors)
         
         return errors
     
-    def _validate_template(self, template: Template, index: int) -> List[ValidationError]:
+    async def _validate_template(self, template: Template, index: int, db_session=None) -> List[ValidationError]:
         """Validate individual template"""
         errors = []
         field_prefix = f"templates[{index}]"
@@ -191,10 +196,10 @@ class CourseValidator:
         elif len(template.title) > 100:
             errors.append(ValidationError(f"{field_prefix}.title", "Template title cannot exceed 100 characters"))
         
-        # Template type validation
-        valid_types = ["welcome", "content-text", "content-video", "mcq", "summary"]
-        if template.type not in valid_types:
-            errors.append(ValidationError(f"{field_prefix}.type", f"Invalid template type. Must be one of: {', '.join(valid_types)}"))
+        # Template type validation - hybrid enum/DB approach
+        is_valid_type = await self._validate_template_type(template.type, db_session)
+        if not is_valid_type:
+            errors.append(ValidationError(f"{field_prefix}.type", f"Invalid template type: {template.type}. Must be a built-in type or defined in the database."))
         
         # Template data validation based on type
         if template.type == "mcq":
@@ -209,8 +214,35 @@ class CourseValidator:
         elif template.type == "summary":
             summary_errors = self._validate_summary_template(template, field_prefix)
             errors.extend(summary_errors)
+        # For dynamic template types, we skip specific validation for now
+        # In Phase 3, we'll add schema-based validation
         
         return errors
+    
+    async def _validate_template_type(self, template_type: str, db_session=None) -> bool:
+        """Validate template type using hybrid enum/DB approach.
+        
+        First checks built-in types, then queries database for dynamic types.
+        """
+        # Check built-in types first
+        if template_type in BUILTIN_TEMPLATE_TYPES:
+            return True
+        
+        # If no database session provided, reject unknown types
+        if db_session is None:
+            return False
+        
+        # Query database for dynamic template types
+        try:
+            from ..repositories.template_definition_repository import TemplateDefinitionRepository
+            repo = TemplateDefinitionRepository(db_session)
+            definition = await repo.get_by_type_key(template_type)
+            return definition is not None
+        except Exception as e:
+            # Log error but don't fail validation - be permissive
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error checking dynamic template type {template_type}: {e}")
+            return False
     
     def _validate_mcq_template(self, template: Template, field_prefix: str) -> List[ValidationError]:
         """Validate MCQ template data"""
@@ -352,7 +384,10 @@ course_validator = CourseValidator()
 
 
 # FastAPI dependency function
-async def validate_course_json(request: CourseExportRequest) -> Course:
+async def validate_course_json(
+    request: CourseExportRequest,
+    session: AsyncSession = Depends(get_session)
+) -> Course:
     """
     FastAPI dependency to validate course JSON from export request
     
@@ -434,7 +469,7 @@ async def validate_course_json(request: CourseExportRequest) -> Course:
             raise HTTPException(status_code=422, detail=detail_entries)
 
         # --- Stage 2: Business rule validation (non-structural) ---
-        validation_errors = await course_validator.validate_course(course)
+        validation_errors = await course_validator.validate_course(course, session)
         if validation_errors:
             detail_entries = [
                 {

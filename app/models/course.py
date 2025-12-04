@@ -16,8 +16,11 @@ except ImportError:  # Fallback to Pydantic v1
     PYDANTIC_V2 = False
 from datetime import datetime
 
-# Template type definitions matching JSON schema
-TemplateType = Literal["welcome", "content-video", "mcq", "content-text", "summary"]
+# Template type definitions - hybrid enum/DB approach for Phase 2
+# Built-in types (always available)
+BUILTIN_TEMPLATE_TYPES = ["welcome", "content-video", "mcq", "content-text", "summary"]
+# Allow any string for dynamic types loaded from DB
+TemplateType = str  # Changed from Literal for hybrid enum/DB support
 AssetType = Literal["video", "image", "audio", "document", "other"]
 ThemeType = Literal["default", "dark", "light", "corporate"]
 LanguageType = Literal["en", "es", "fr", "de", "it", "pt", "nl", "pl", "ru", "ja", "ko", "zh"]
