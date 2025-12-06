@@ -123,7 +123,7 @@ except Exception:
     if ($DryRun) {
         Write-Host "[DryRun] Would run: $uvicornCmd"
     } else {
-        Write-Host "[dev] Starting FastAPI on http://$BindHost:$Port (reload enabled)"
+        Write-Host "[dev] Starting FastAPI on http://$($BindHost):$($Port) (reload enabled)"
         iex $uvicornCmd
     }
 

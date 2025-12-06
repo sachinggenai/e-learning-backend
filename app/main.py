@@ -12,7 +12,7 @@ from datetime import datetime
 
 # Import routers
 from app.routers import (
-    health, export, courses, templates, media, enhanced_templates
+    health, export, courses, templates, media, enhanced_templates, imports
 )
 # (engine import removed; direct DB access not needed here post-migration)
 
@@ -117,6 +117,7 @@ app.include_router(courses.router, prefix="/api/v1", tags=["Courses"])
 app.include_router(templates.router, prefix="/api/v1", tags=["Templates"])
 app.include_router(enhanced_templates.router, prefix="/api/v1")
 app.include_router(media.router, prefix="/api/v1", tags=["Media"])
+app.include_router(imports.router, prefix="/api/v1", tags=["Imports"])
 
 # Root endpoint
  

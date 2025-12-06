@@ -128,7 +128,7 @@ class TemplateDefinitionRepository:
     async def list_all(self) -> List[TemplateDefinition]:
         """Get all template definitions."""
         stmt = select(TemplateDefinitionRecord).order_by(
-            TemplateDefinitionRecord.type_key
+            TemplateDefinitionRecord.template_type
         )
         result = await self.session.execute(stmt)
         records = result.scalars().all()
