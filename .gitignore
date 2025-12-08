@@ -51,6 +51,8 @@ data/*.db
 *.log
 logs/
 server.log
+nohup.out
+server_output.txt
 
 # Testing
 .pytest_cache/
