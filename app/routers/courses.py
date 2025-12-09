@@ -15,6 +15,10 @@ from app.repositories.course_repo import (
     CourseConflictError,
     CourseNotFoundError,
 )
+from app.repositories.template_type_repo import (
+    TemplateTypeRepository,
+    TemplateTypeNotFoundError,
+)
 
 router = APIRouter(prefix="/courses", tags=["Courses"])
 
@@ -197,71 +201,6 @@ async def delete_course(
 # In-memory storage for course pages (replace with database later)
 COURSE_PAGES: dict = {}
 
-# Mock template data for page creation  
-TEMPLATES_FOR_PAGES = [
-    {
-        "id": "template_intro_001",
-        "name": "Course Introduction", 
-        "description": "Welcome page with course overview and objectives",
-        "category": "introduction",
-        "thumbnail": "/thumbnails/intro.png",
-        "estimated_duration": 5,
-        "rating": 4.7,
-        "usage_count": 156,
-        "can_be_page": True,
-        "fields": [
-            {
-                "id": "course_title",
-                "name": "courseTitle",
-                "type": "text", 
-                "label": "Course Title",
-                "required": True,
-                "placeholder": "Enter course title"
-            }
-        ]
-    },
-    {
-        "id": "template_lab_001",
-        "name": "Virtual Lab Setup",
-        "description": "Interactive lab setup with equipment selection", 
-        "category": "lab",
-        "thumbnail": "/thumbnails/lab_setup.png",
-        "estimated_duration": 15,
-        "rating": 4.5,
-        "usage_count": 89,
-        "can_be_page": True,
-        "fields": [
-            {
-                "id": "lab_name",
-                "name": "labName",
-                "type": "text",
-                "label": "Lab Name", 
-                "required": True
-            }
-        ]
-    },
-    {
-        "id": "template_assessment_001",
-        "name": "Quiz Assessment",
-        "description": "Multiple choice quiz with automatic grading",
-        "category": "assessment", 
-        "thumbnail": "/thumbnails/quiz.png",
-        "estimated_duration": 20,
-        "rating": 4.3,
-        "usage_count": 234,
-        "can_be_page": True,
-        "fields": [
-            {
-                "id": "quiz_title",
-                "name": "quizTitle",
-                "type": "text",
-                "label": "Quiz Title",
-                "required": True
-            }
-        ]
-    }
-]
-
 
 @router.get("/{course_id}/pages", response_model=List[CoursePage])
 async def get_course_pages(course_id: str) -> List[CoursePage]:
@@ -276,68 +215,79 @@ async def get_course_pages(course_id: str) -> List[CoursePage]:
 @router.post("/{course_id}/pages/from-template")
 async def create_page_from_template(
     course_id: str,
-    request: CreatePageFromTemplate
+    request: CreatePageFromTemplate,
+    repo: TemplateTypeRepository = Depends(
+        lambda session=Depends(get_session): TemplateTypeRepository(session)
+    ),
 ) -> dict:
     """Create a new page from a template."""
-    
-    # Find the template
-    template = None
-    for t in TEMPLATES_FOR_PAGES:
-        if t["id"] == request.template_id:
-            template = t
-            break
-    
-    if not template:
-        raise HTTPException(status_code=404, detail=f"Template '{request.template_id}' not found")
-    
-    # Generate page content
     from datetime import datetime
+
+    # Find the template from database
+    try:
+        template_record = await repo.get_by_template_id(
+            request.template_id
+        )
+        template = {
+            "id": template_record.template_id,
+            "name": template_record.name,
+            "category": template_record.category,
+        }
+    except TemplateTypeNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Template '{request.template_id}' not found",
+        )
+
+    # Generate page content
     page_content = {
         "template_id": template["id"],
-        "template_name": template["name"], 
+        "template_name": template["name"],
         "fields": request.customizations,
-        "generated_at": datetime.utcnow().isoformat()
+        "generated_at": datetime.utcnow().isoformat(),
     }
-    
+
     # Map template category to page type for editor compatibility
     template_category_to_type = {
         "introduction": "content-text",
         "lab": "content-text",
-        "assessment": "mcq"
+        "assessment": "mcq",
     }
-    
+
     page_type = template_category_to_type.get(
         template["category"], "content-text"
     )
-    
+
     # Determine page order
     existing_pages = COURSE_PAGES.get(course_id, [])
-    page_order = request.page_order if request.page_order else len(
-        existing_pages
-    ) + 1
-    
+    page_order = (
+        request.page_order
+        if request.page_order
+        else len(existing_pages) + 1
+    )
+
     # Create new page
     page_id = f"page_{course_id}_{len(existing_pages) + 1}"
-    
+
     new_page = {
         "id": page_id,
         "course_id": course_id,
         "title": request.page_title,
-        "type": page_type,  # Add type field for PageEditor compatibility
+        "type": page_type,
         "content": page_content,
         "template_id": request.template_id,
         "page_order": page_order,
         "is_published": True,
         "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat()
+        "updated_at": datetime.utcnow().isoformat(),
     }
-    
+
     # Add page to course
     if course_id not in COURSE_PAGES:
         COURSE_PAGES[course_id] = []
-    
+
     COURSE_PAGES[course_id].append(new_page)
-    
+
     return {
         "page": new_page,
         "message": "Page added successfully from template"
@@ -348,49 +298,58 @@ async def create_page_from_template(
 async def get_templates_for_pages(
     category: Optional[str] = None,
     search: Optional[str] = None,
-    sort_by: str = "rating"
+    sort_by: str = "rating",
+    repo: TemplateTypeRepository = Depends(
+        lambda session=Depends(get_session): TemplateTypeRepository(session)
+    ),
 ) -> dict:
     """Get available templates for creating course pages."""
-    
-    templates = TEMPLATES_FOR_PAGES.copy()
-    
-    # Filter by category
-    if category and category != "all":
-        templates = [t for t in templates if t["category"] == category]
-    
+    # Get templates from database (active only)
+    templates = await repo.list(
+        category=category if category and category != "all" else None,
+        active_only=True,
+    )
+
     # Search filter
     if search:
         search_lower = search.lower()
         templates = [
-            t for t in templates
-            if search_lower in t["name"].lower() or
-            search_lower in t["description"].lower()
+            t
+            for t in templates
+            if search_lower in t.name.lower()
+            or search_lower in t.description.lower()
         ]
-    
+
     # Sort templates
     if sort_by == "rating":
-        templates.sort(key=lambda x: x["rating"], reverse=True)
+        templates = sorted(
+            templates, key=lambda x: x.rating, reverse=True
+        )
     elif sort_by == "usage":
-        templates.sort(key=lambda x: x["usage_count"], reverse=True)
-    
+        templates = sorted(
+            templates, key=lambda x: x.usage_count, reverse=True
+        )
+
     # Get categories
-    categories = list(set(t["category"] for t in TEMPLATES_FOR_PAGES))
-    
+    categories = await repo.get_categories(active_only=True)
+
     # Convert to frontend format
     frontend_templates = []
     for i, template in enumerate(templates):
-        frontend_templates.append({
-            "id": i + 1,
-            "templateId": template["id"],
-            "type": template["category"],
-            "title": template["name"],
-            "order": i,
-            "data": {
-                "content": template.get("fields", {}),
-                "description": template["description"]
+        frontend_templates.append(
+            {
+                "id": template.id,
+                "templateId": template.template_id,
+                "type": template.category,
+                "title": template.name,
+                "order": i,
+                "data": {
+                    "content": template.fields,
+                    "description": template.description,
+                },
             }
-        })
-    
+        )
+
     return {
         "templates": frontend_templates,
         "categories": categories,

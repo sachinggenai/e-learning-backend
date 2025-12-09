@@ -1,0 +1,32 @@
+# Anti-Hallucination & Production Integrity Rules
+
+## Zero-Trust Grounding
+- If you cannot grep it, it does not exist. Always cite tool output.
+- Lock versions first: read `requirements.txt`/`pyproject.toml` before analysis.
+- Re-check after edits/merges; assume drift.
+
+## Workflow (run in order)
+1) `list_dir`/`file_search` to confirm paths.
+2) Read manifests (`requirements.txt`, etc.) to anchor versions (Pydantic v1 vs v2, Python).
+3) Read target code in 50+ line windows.
+4) `grep_search` to find strings; scope with include patterns.
+5) `list_code_usages` for symbol mapping; don’t assume unused.
+6) Pylance tools for imports/env if needed.
+
+## Negative-Space Checks
+- Verify missing pieces: error handling (`try/except`, None checks), input validation before logic.
+- Ask “what is absent?” (e.g., no commit? no validation? missing schema?).
+
+## Security Context
+- Track data flow for sanitization/escaping: HTML/JS/SQL/file paths.
+- Note unsanitized inputs, unsafe decoding, or deserialization without validation.
+
+## Reporting Standard
+- Cite file + lines and quote relevant code.
+- Separate fact vs inference; state unknowns explicitly.
+- No temporary fixes; favor durable, production-safe changes.
+
+## Domain Guardrails
+- SCORM: verify load order, template shapes, manifest handling, and size/asset limits.
+- DB: check commit location (repo vs service) before assuming Unit of Work.
+- Framework overrides: confirm middleware/settings instead of assuming defaults.
