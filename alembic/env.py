@@ -9,8 +9,18 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Import models metadata
-from app.models.persisted_course import Base as PersistedBase
+# Import the unified Base and ALL models so their tables register
+# in Base.metadata for autogenerate to detect.
+from app.models.base import Base
+import app.models.persisted_course  # noqa: F401 — CourseRecord, TemplateRecord, etc.
+import app.models.template_type    # noqa: F401 — TemplateType
+import app.models.component_type   # noqa: F401 — ComponentType
+import app.models.page_component   # noqa: F401 — PageRecord, ComponentRecord
+import app.models.theme            # noqa: F401 — ThemeRecord
+import app.models.scoring          # noqa: F401 — CourseScoringRecord
+import app.models.branching        # noqa: F401 — BranchRule, BranchEvent
+import app.models.social           # noqa: F401 — Discussion, PeerReview, Poll, Team
+import app.models.interaction_event  # noqa: F401 — InteractionEventRecord
 
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -52,7 +62,7 @@ DATABASE_URL = get_database_url()
 if DATABASE_URL:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
-target_metadata = [PersistedBase.metadata]
+target_metadata = Base.metadata
 
  
 def run_migrations_offline():

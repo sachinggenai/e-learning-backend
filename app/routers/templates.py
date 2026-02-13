@@ -41,12 +41,11 @@ class TemplateOut(BaseModel):
     order: int
     data: dict
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class ReorderRequest(BaseModel):
-    orderedIds: List[int] = Field(..., min_items=1)
+    orderedIds: List[int] = Field(..., min_length=1)
 
 
 async def _get_repo(

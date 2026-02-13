@@ -7,10 +7,10 @@ not individual course templates.
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
-from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String, DateTime, JSON, Text, Float, Integer, Boolean
 
-Base = declarative_base()
+from app.models.base import Base
 
 
 class TemplateType(Base):

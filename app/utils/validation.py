@@ -222,7 +222,7 @@ class CourseValidator:
     async def _validate_template_type(self, template_type: str, db_session=None) -> bool:
         """Validate template type using hybrid enum/DB approach.
         
-        First checks built-in types, then queries database for dynamic types.
+        Checks built-in types, then template_definitions, then component_types.
         """
         # Check built-in types first
         if template_type in BUILTIN_TEMPLATE_TYPES:
@@ -232,17 +232,29 @@ class CourseValidator:
         if db_session is None:
             return False
         
-        # Query database for dynamic template types
+        # Query template_definitions table for dynamic template types
         try:
             from ..repositories.template_definition_repository import TemplateDefinitionRepository
             repo = TemplateDefinitionRepository(db_session)
             definition = await repo.get_by_type_key(template_type)
-            return definition is not None
+            if definition is not None:
+                return True
         except Exception as e:
-            # Log error but don't fail validation - be permissive
             logger = logging.getLogger(__name__)
             logger.warning(f"Error checking dynamic template type {template_type}: {e}")
-            return False
+
+        # Query component_types table (v2 registry)
+        try:
+            from ..repositories.component_type_repo import ComponentTypeRepository
+            ct_repo = ComponentTypeRepository(db_session)
+            comp = await ct_repo.get_by_type_id(template_type)
+            if comp is not None:
+                return True
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error checking component type {template_type}: {e}")
+
+        return False
     
     def _validate_mcq_template(self, template: Template, field_prefix: str) -> List[ValidationError]:
         """Validate MCQ template data"""

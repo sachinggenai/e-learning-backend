@@ -6,7 +6,7 @@ for import/export. This layer manages persistence concerns only.
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
-from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import (
     String,
     DateTime,
@@ -18,7 +18,7 @@ from sqlalchemy import (
     Float,
 )
 
-Base = declarative_base()
+from app.models.base import Base
 
 
 class CourseRecord(Base):

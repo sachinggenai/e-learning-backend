@@ -111,8 +111,7 @@ class CourseOut(BaseModel):
     updatedAt: str
     data: dict
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 # Helpers ------------------------------------------------------------------
 
@@ -151,26 +150,26 @@ async def list_courses(repo: CourseRepository = Depends(_get_repo)):
     return [c.to_dict() for c in courses]
 
  
-@router.get("/{course_id}", response_model=CourseOut)
+@router.get("/{courseId}", response_model=CourseOut)
 async def get_course(
-    course_id: str, repo: CourseRepository = Depends(_get_repo)
+    courseId: str, repo: CourseRepository = Depends(_get_repo)
 ):
     try:
-        course = await repo.get_by_course_id(course_id)
+        course = await repo.get_by_course_id(courseId)
     except CourseNotFoundError:
         raise HTTPException(status_code=404, detail="Course not found")
     return course.to_dict()
 
  
-@router.patch("/{course_id}", response_model=CourseOut)
+@router.patch("/{courseId}", response_model=CourseOut)
 async def update_course(
-    course_id: str,
+    courseId: str,
     payload: CourseUpdate,
     repo: CourseRepository = Depends(_get_repo),
 ):
     try:
         # First get the course to find its primary key
-        course_record = await repo.get_by_course_id(course_id)
+        course_record = await repo.get_by_course_id(courseId)
         course = await repo.update_record(
             pk=course_record.id,
             title=payload.title,
@@ -183,13 +182,13 @@ async def update_course(
     return course.to_dict()
 
  
-@router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{courseId}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_course(
-    course_id: str, repo: CourseRepository = Depends(_get_repo)
+    courseId: str, repo: CourseRepository = Depends(_get_repo)
 ):
     try:
         # First get the course to find its primary key
-        course_record = await repo.get_by_course_id(course_id)
+        course_record = await repo.get_by_course_id(courseId)
         await repo.delete_record(course_record.id)
     except CourseNotFoundError:
         raise HTTPException(status_code=404, detail="Course not found")
@@ -198,99 +197,67 @@ async def delete_course(
 
 # Add Page from Template Feature Endpoints
 
-# In-memory storage for course pages (replace with database later)
-COURSE_PAGES: dict = {}
+
+@router.get("/{courseId}/pages")
+async def get_course_pages(
+    courseId: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get all pages for a course (DB-backed via PageRepository)."""
+    from app.repositories.page_component_repo import PageRepository
+
+    repo = PageRepository(session)
+    pages = await repo.list_by_course(courseId)
+    return [p.to_dict() for p in pages]
 
 
-@router.get("/{course_id}/pages", response_model=List[CoursePage])
-async def get_course_pages(course_id: str) -> List[CoursePage]:
-    """Get all pages for a course."""
-    pages = COURSE_PAGES.get(course_id, [])
-    return [
-        CoursePage(**page)
-        for page in sorted(pages, key=lambda x: x["page_order"])
-    ]
-
-
-@router.post("/{course_id}/pages/from-template")
+@router.post("/{courseId}/pages/from-template")
 async def create_page_from_template(
-    course_id: str,
+    courseId: str,
     request: CreatePageFromTemplate,
-    repo: TemplateTypeRepository = Depends(
-        lambda session=Depends(get_session): TemplateTypeRepository(session)
-    ),
+    session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Create a new page from a template."""
+    """Create a new page from a template (DB-backed)."""
     from datetime import datetime
+    from app.repositories.page_component_repo import PageRepository
 
-    # Find the template from database
+    # Verify template exists
+    tmpl_repo = TemplateTypeRepository(session)
     try:
-        template_record = await repo.get_by_template_id(
-            request.template_id
-        )
-        template = {
-            "id": template_record.template_id,
-            "name": template_record.name,
-            "category": template_record.category,
-        }
+        template_record = await tmpl_repo.get_by_template_id(request.template_id)
     except TemplateTypeNotFoundError:
         raise HTTPException(
             status_code=404,
             detail=f"Template '{request.template_id}' not found",
         )
 
-    # Generate page content
-    page_content = {
-        "template_id": template["id"],
-        "template_name": template["name"],
-        "fields": request.customizations,
-        "generated_at": datetime.utcnow().isoformat(),
-    }
+    page_repo = PageRepository(session)
 
-    # Map template category to page type for editor compatibility
-    template_category_to_type = {
-        "introduction": "content-text",
-        "lab": "content-text",
-        "assessment": "mcq",
-    }
+    # Determine order
+    page_count = await page_repo.count_by_course(courseId)
+    order = request.page_order if request.page_order is not None else page_count
 
-    page_type = template_category_to_type.get(
-        template["category"], "content-text"
+    from app.models.page_component import PageRecord
+
+    new_page = PageRecord(
+        course_id=courseId,
+        title=request.page_title,
+        order_index=order,
+        layout={"template_id": request.template_id, "customizations": request.customizations},
     )
-
-    # Determine page order
-    existing_pages = COURSE_PAGES.get(course_id, [])
-    page_order = (
-        request.page_order
-        if request.page_order
-        else len(existing_pages) + 1
-    )
-
-    # Create new page
-    page_id = f"page_{course_id}_{len(existing_pages) + 1}"
-
-    new_page = {
-        "id": page_id,
-        "course_id": course_id,
-        "title": request.page_title,
-        "type": page_type,
-        "content": page_content,
-        "template_id": request.template_id,
-        "page_order": page_order,
-        "is_published": True,
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
-    }
-
-    # Add page to course
-    if course_id not in COURSE_PAGES:
-        COURSE_PAGES[course_id] = []
-
-    COURSE_PAGES[course_id].append(new_page)
+    created = await page_repo.create(new_page)
 
     return {
-        "page": new_page,
-        "message": "Page added successfully from template"
+        "page": {
+            "id": created.page_id,
+            "course_id": created.course_id,
+            "title": created.title,
+            "order_index": created.order_index,
+            "layout": created.layout,
+            "created_at": created.created_at.isoformat() if created.created_at else None,
+            "updated_at": created.updated_at.isoformat() if created.updated_at else None,
+        },
+        "message": "Page added successfully from template",
     }
 
 
@@ -572,30 +539,37 @@ async def validate_course(request: CourseValidationRequest) -> ValidationResult:
 
                     # Template validation
                     template_type = page.get("templateType") or page.get("type")
-                    if not template_type:
-                        errors.append(ValidationError(
-                            id=f"page-{i}-missing-template",
-                            field=f"pages[{i}].templateType",
-                            category="business",
-                            message=f"Page {i + 1} missing template type",
-                            level="error"
-                        ))
-                    elif template_type not in ["welcome", "content-text", "mcq", "summary"]:
-                        warnings.append(ValidationError(
-                            id=f"page-{i}-unknown-template",
-                            field=f"pages[{i}].templateType",
-                            category="business",
-                            message=f"Page {i + 1} has unknown template type: {template_type}",
-                            level="warning"
-                        ))
-                    else:
-                        # Template-specific validation
+                    if template_type:
+                        # Known legacy types get specific validation
                         if template_type == "mcq":
                             errors.extend(_validate_mcq_page(page, i))
                         elif template_type == "content-text":
                             warnings.extend(_validate_content_text_page(page, i))
                         elif template_type == "welcome":
                             errors.extend(_validate_welcome_page(page, i))
+                        # All other types are accepted (dynamic component types)
+
+                    # Component-based page validation (new format)
+                    components = page.get("components", [])
+                    if components:
+                        for ci, comp in enumerate(components):
+                            if not isinstance(comp, dict):
+                                errors.append(ValidationError(
+                                    id=f"page-{i}-comp-{ci}-invalid",
+                                    field=f"pages[{i}].components[{ci}]",
+                                    category="schema",
+                                    message=f"Component {ci + 1} on page {i + 1} must be an object",
+                                    level="error"
+                                ))
+                                continue
+                            if "component_type" not in comp and "componentType" not in comp:
+                                errors.append(ValidationError(
+                                    id=f"page-{i}-comp-{ci}-no-type",
+                                    field=f"pages[{i}].components[{ci}].componentType",
+                                    category="schema",
+                                    message=f"Component {ci + 1} on page {i + 1} missing componentType",
+                                    level="error"
+                                ))
 
         return ValidationResult(
             valid=len(errors) == 0,

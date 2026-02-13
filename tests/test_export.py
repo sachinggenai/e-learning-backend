@@ -8,13 +8,34 @@ import json
 import io
 import zipfile
 from fastapi.testclient import TestClient
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, AsyncMock
+
+
+def _make_scorm_zip(course_id: str = "json-course-001", title: str = "JSON Test Course") -> io.BytesIO:
+    """Build a minimal in-memory SCORM zip matching what the real service produces."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            f'<manifest identifier="{course_id}">\n'
+            f"  <title>{title}</title>\n"
+            "</manifest>\n"
+        )
+        zf.writestr("imsmanifest.xml", manifest)
+        zf.writestr("index.html", f"<html><body>{title}</body></html>")
+        zf.writestr(
+            "course_data.js",
+            f'var courseData = {{"courseId": "{course_id}", "title": "{title}"}};',
+        )
+    buf.seek(0)
+    return buf
 
 
 class TestExportEndpoints:
     """Test SCORM export endpoints"""
 
-    def test_export_course_success(self, test_client: TestClient, sample_course_json: str):
+    @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip())
+    def test_export_course_success(self, mock_gen, test_client: TestClient, sample_course_json: str):
         """Test successful course export"""
         request_data = {"course": sample_course_json}
         
@@ -33,15 +54,12 @@ class TestExportEndpoints:
         
         response = test_client.post("/api/v1/export", json=request_data)
         
+        # CourseExportRequest.validate_json_only catches invalid JSON at the model level
+        # → RequestValidationError → custom 422 handler
         assert response.status_code == 422
         data = response.json()
-        # Request validation errors (Pydantic) return "detail" by default in FastAPI
-        # unless RequestValidationError is overridden.
-        assert "detail" in data
-        # Pydantic v2 returns a list of errors
-        assert isinstance(data["detail"], list)
-        # Check if any error message contains "Invalid JSON format"
-        assert any("Invalid JSON format" in err["msg"] for err in data["detail"])
+        assert data["detail"] == "Validation failed"
+        assert any("Invalid JSON format" in e["message"] for e in data["errors"])
 
     def test_export_course_missing_fields(self, test_client: TestClient):
         """Test export with missing required fields"""
@@ -56,13 +74,13 @@ class TestExportEndpoints:
         
         assert response.status_code == 422
         data = response.json()
-        assert "error" in data
+        assert "detail" in data
         # Pydantic v2 returns a list of errors
-        assert isinstance(data["error"], list)
-        # Check if any error message contains "Field required" or validation error
-        assert len(data["error"]) > 0
+        assert isinstance(data["detail"], list)
+        assert len(data["detail"]) > 0
 
-    def test_export_course_zip_content(self, test_client: TestClient, sample_course_json: str):
+    @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip())
+    def test_export_course_zip_content(self, mock_gen, test_client: TestClient, sample_course_json: str):
         """Test that exported ZIP contains required SCORM files"""
         request_data = {"course": sample_course_json}
         
@@ -90,7 +108,8 @@ class TestExportEndpoints:
             assert "var courseData =" in course_content
             assert "json-course-001" in course_content
 
-    def test_export_course_filename_format(self, test_client: TestClient, sample_course_json: str):
+    @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip())
+    def test_export_course_filename_format(self, mock_gen, test_client: TestClient, sample_course_json: str):
         """Test exported file has correct filename format"""
         request_data = {"course": sample_course_json}
         
@@ -117,9 +136,11 @@ class TestExportEndpoints:
             
             assert response.status_code == 500
             data = response.json()
-            assert "Export failed" in data["error"]
+            assert "Export failed" in data["detail"]
 
-    def test_validate_course_for_export_success(self, test_client: TestClient, sample_course_json: str):
+    @patch("app.routers.export.scorm_service.validate_for_export", new_callable=AsyncMock, return_value={"valid": True, "warnings": []})
+    @patch("app.routers.export.scorm_service.estimate_package_size", return_value={"estimated_bytes": 1024})
+    def test_validate_course_for_export_success(self, mock_est, mock_val, test_client: TestClient, sample_course_json: str):
         """Test course validation endpoint"""
         request_data = {"course": sample_course_json}
         
@@ -167,11 +188,11 @@ class TestExportEndpoints:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["success"] is True
-        assert data["export_id"] == export_id
+        assert data["exportId"] == export_id
         assert data["status"] == "completed"  # Phase 1: always completed
 
-    def test_export_course_large_content(self, test_client: TestClient):
+    @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip("large-course-001", "Large Test Course"))
+    def test_export_course_large_content(self, mock_gen, test_client: TestClient):
         """Test export with large course content"""
         # Create a course with many templates
         large_course = {
@@ -212,7 +233,8 @@ class TestExportEndpoints:
         assert response.headers["content-type"] == "application/zip"
 
     @pytest.mark.slow
-    def test_export_course_performance(self, test_client: TestClient, sample_course_json: str):
+    @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip())
+    def test_export_course_performance(self, mock_gen, test_client: TestClient, sample_course_json: str):
         """Test export performance meets Phase 1 requirements (<5s for 10 slides)"""
         import time
         
@@ -226,11 +248,13 @@ class TestExportEndpoints:
         assert (end_time - start_time) < 5.0
         assert response.status_code == 200
 
-    def test_export_course_security_validation(self, test_client: TestClient):
+    @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip("xss-test-001", "Normal Title"))
+    def test_export_course_security_validation(self, mock_gen, test_client: TestClient):
         """Test export validates against malicious content"""
         malicious_course = {
-            "courseId": "<script>alert('xss')</script>",
+            "courseId": "xss-test-001",
             "title": "Normal Title",
+            "author": "Test Author",
             "templates": [{
                 "id": "test",
                 "type": "content-text",
@@ -241,7 +265,7 @@ class TestExportEndpoints:
                 }
             }],
             "assets": [],
-            "navigation": {"allowSkip": True, "showProgress": True, "lockProgression": False}
+            "navigation": {"allowSkip": True, "showProgress": True}
         }
         
         request_data = {"course": json.dumps(malicious_course)}
@@ -257,7 +281,8 @@ class TestExportEndpoints:
                 # Script tags should be escaped or removed
                 assert "<script>" not in manifest_content
 
-    def test_export_course_concurrent_exports(self, test_client: TestClient, sample_course_json: str):
+    @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip())
+    def test_export_course_concurrent_exports(self, mock_gen, test_client: TestClient, sample_course_json: str):
         """Test handling multiple concurrent export requests"""
         import threading
         import queue

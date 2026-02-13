@@ -54,8 +54,7 @@ class TestExportNegative:
         )
         # Pydantic model validation catches this first, returning 422
         assert resp.status_code == 422
-        # The error details are in "error" field due to custom exception handler
-        error_data = resp.json().get("error", [])
+        # validate_course_json raises HTTPException(422, detail=[...])
+        detail = resp.json().get("detail", [])
         # Check if any error message mentions sequential/contiguous
-        # Pydantic error msg: "Template orders must be sequential starting from 0..."
-        assert any("sequential" in str(e).lower() for e in error_data)
+        assert any("sequential" in str(e).lower() for e in detail)

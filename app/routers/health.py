@@ -56,8 +56,8 @@ async def detailed_health_check(validation_status: dict = Depends(get_validation
     
     # Overall health status
     is_healthy = (
-        validation_status["schema_loaded"] and 
-        validation_status["validation_working"] and
+        validation_status.get("schema_loaded", False) and
+        validation_status.get("validation_system") == "operational" and
         all(system_status.values())
     )
     

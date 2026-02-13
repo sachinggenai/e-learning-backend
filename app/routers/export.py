@@ -251,8 +251,8 @@ async def get_export_formats():
     }
 
  
-@router.get("/export/status/{export_id}", summary="Get Export Status")
-async def get_export_status(export_id: str):
+@router.get("/export/status/{exportId}", summary="Get Export Status")
+async def get_export_status(exportId: str):
     """
     Get status of an export operation
     
@@ -263,20 +263,20 @@ async def get_export_status(export_id: str):
     # For Phase 1, all exports are immediate/synchronous
     # This endpoint is prepared for future async implementation
     return {
-        "success": True,
-        "export_id": export_id,
+        "exportId": exportId,
         "status": "completed",  # Phase 1: always completed immediately
-        "message": "Export operations are synchronous in Phase 1",
-        "timestamp": datetime.utcnow().isoformat()
+        "progress": 100,
+        "downloadUrl": None,
+        "error": None,
     }
 
 class ScormExportRequest(BaseModel):
-    format: str = "scorm1.2"
-    include_media: bool = True
+    format: str = "scorm_1_2"
+    includeMedia: bool = True
 
-@router.post("/export/scorm/{course_id}", summary="Export Persisted Course as SCORM Package")
+@router.post("/export/scorm/{courseId}", summary="Export Persisted Course as SCORM Package")
 async def export_persisted_course(
-    course_id: int,
+    courseId: str,
     request: ScormExportRequest,
     session: AsyncSession = Depends(get_session)
 ) -> StreamingResponse:
@@ -286,7 +286,7 @@ async def export_persisted_course(
     repo = CourseRepository(session)
     try:
         # Fetch course record
-        course_record = await repo.get(course_id)
+        course_record = await repo.get(courseId)
         
         # Convert to Pydantic model
         # Merge metadata with json_data
@@ -324,15 +324,16 @@ async def export_persisted_course(
             for t in templates:
                 t_data = t.json_data.copy()
                 
-                # Map types
-                t_type = t.template_type
-                if t_type == 'video':
-                    t_type = 'content-video'
-                elif t_type == 'quiz':
-                    t_type = 'mcq'
-                elif t_type in ['content-image', 'interactive']:
-                    # Map unsupported types to content-text for now
-                    t_type = 'content-text'
+                # Normalise type — the Component Type Registry is the
+                # source of truth.  Legacy aliases are mapped here for
+                # backward compat.
+                _LEGACY_TYPE_MAP = {
+                    "video": "content-video",
+                    "quiz": "mcq",
+                    "content-image": "content-text",
+                    "interactive": "content-text",
+                }
+                t_type = _LEGACY_TYPE_MAP.get(t.template_type, t.template_type)
                 
                 # Map data structure to TemplateData
                 mapped_data = {}
@@ -340,14 +341,12 @@ async def export_persisted_course(
                 # Extract content string
                 raw_content = t_data.get('content', {})
                 if isinstance(raw_content, dict):
-                    if 'text' in raw_content:
-                        mapped_data['content'] = raw_content['text']
-                    elif 'welcomeMessage' in raw_content:
-                        mapped_data['content'] = raw_content['welcomeMessage']
-                    elif 'description' in raw_content:
-                        mapped_data['content'] = raw_content['description']
-                    else:
-                        mapped_data['content'] = "Content"
+                    mapped_data['content'] = (
+                        raw_content.get('text')
+                        or raw_content.get('welcomeMessage')
+                        or raw_content.get('description')
+                        or "Content"
+                    )
                 else:
                     mapped_data['content'] = str(raw_content) if raw_content else "Content"
                 
@@ -356,9 +355,7 @@ async def export_persisted_course(
                 
                 if t_type == 'content-video':
                     if isinstance(raw_content, dict):
-                        mapped_data['videoUrl'] = raw_content.get('videoUrl')
-                        if not mapped_data['videoUrl']:
-                             mapped_data['videoUrl'] = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' # Default valid URL
+                        mapped_data['videoUrl'] = raw_content.get('videoUrl') or 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
                     else:
                         mapped_data['videoUrl'] = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
 
@@ -370,19 +367,19 @@ async def export_persisted_course(
                             mapped_q = {
                                 "id": q.get("id", "q1"),
                                 "question": q.get("question", "Question"),
-                                "options": []
+                                "options": [
+                                    {
+                                        "id": opt.get("id", "opt1"),
+                                        "text": opt.get("text", "Option"),
+                                        "isCorrect": opt.get("correct", opt.get("isCorrect", False)),
+                                    }
+                                    for opt in q.get("options", [])
+                                ],
                             }
-                            for opt in q.get("options", []):
-                                mapped_opt = {
-                                    "id": opt.get("id", "opt1"),
-                                    "text": opt.get("text", "Option"),
-                                    "isCorrect": opt.get("correct", False)
-                                }
-                                mapped_q["options"].append(mapped_opt)
                             questions.append(mapped_q)
                     
                     if not questions:
-                         questions = [{
+                        questions = [{
                             "id": "q1",
                             "question": "Placeholder Question",
                             "options": [
@@ -400,6 +397,35 @@ async def export_persisted_course(
                     "data": mapped_data
                 }
                 course_data['templates'].append(template_obj)
+
+        # ── Component-based pages (new format) ───────────────────────
+        # If the course has pages with components, convert them to
+        # legacy template format for the existing SCORM export service.
+        from app.repositories.page_component_repo import (
+            PageRepository,
+            ComponentRepository,
+        )
+        page_repo = PageRepository(session)
+        comp_repo = ComponentRepository(session)
+        db_pages = await page_repo.list_by_course(course_record.course_id)
+
+        if db_pages and "templates" not in course_data:
+            course_data["templates"] = []
+
+        for idx, pg in enumerate(db_pages):
+            components = await comp_repo.list_by_page(pg.page_id)
+            for comp in components:
+                # Map each component to a legacy template entry so
+                # the SCORM export service can handle it unchanged.
+                course_data["templates"].append(
+                    {
+                        "id": comp.component_id,
+                        "type": comp.component_type,
+                        "title": pg.title,
+                        "order": len(course_data["templates"]),
+                        "data": comp.data or {},
+                    }
+                )
         
         # Validate/Convert to Course model
         validated_course = Course(**course_data)

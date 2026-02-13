@@ -1,0 +1,3953 @@
+openapi: 3.1.0
+info:
+  title: eLearning Template Engine API
+  description: |
+    Backend API for the composable component-based eLearning authoring platform.
+    Supports 89+ component types, per-interaction audio, page completion tracking,
+    weighted scoring, full theming (layout + color system), and SCORM 1.2/2004 export.
+  version: 2.0.0
+  contact:
+    name: eLearning Platform Team
+
+servers:
+  - url: /api/v1
+    description: API v1 namespace
+
+tags:
+  - name: Health
+    description: System health check
+  - name: Courses
+    description: Course CRUD and management
+  - name: Pages
+    description: Page CRUD within a course
+  - name: Components
+    description: Component CRUD within a page
+  - name: ComponentRegistry
+    description: Component type definitions and categories
+  - name: Themes
+    description: Theme CRUD and design system
+  - name: Scoring
+    description: Scoring configuration and calculation
+  - name: Completion
+    description: Completion tracking and status
+  - name: Audio
+    description: Audio asset management and narration
+  - name: Export
+    description: SCORM package export
+  - name: Media
+    description: General media upload and management
+  - name: Branching
+    description: Branching rules and adaptive navigation
+  - name: Social
+    description: Social and collaborative learning features
+  - name: Analytics
+    description: Course-level analytics and reporting
+
+# ─────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────
+paths:
+
+  # ── Health ──────────────────────────────────
+  /health:
+    get:
+      tags: [Health]
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthCheckResponse"
+
+  # ── Courses ─────────────────────────────────
+  /courses:
+    get:
+      tags: [Courses]
+      operationId: listCourses
+      summary: List all courses
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published, archived]
+      responses:
+        "200":
+          description: Paginated list of courses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseListResponse"
+    post:
+      tags: [Courses]
+      operationId: createCourse
+      summary: Create a course
+      description: |
+        Accepts both legacy `templates[]` format and new `pages[].components[]` format.
+        Legacy format is auto-converted to pages+components internally.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourseCreateRequest"
+      responses:
+        "201":
+          description: Course created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/validate:
+    post:
+      tags: [Courses]
+      operationId: validateCourse
+      summary: Validate course data
+      description: Schema-driven validation via Component Type Registry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourseValidationRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+
+  /courses/{courseId}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Courses]
+      operationId: getCourse
+      summary: Get a course by ID
+      responses:
+        "200":
+          description: Course with pages and components
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Courses]
+      operationId: updateCourse
+      summary: Update course metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourseUpdateRequest"
+      responses:
+        "200":
+          description: Updated course
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Courses]
+      operationId: deleteCourse
+      summary: Delete a course
+      responses:
+        "204":
+          description: Course deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Pages ───────────────────────────────────
+  /courses/{courseId}/pages:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Pages]
+      operationId: listPages
+      summary: List all pages in a course (ordered)
+      responses:
+        "200":
+          description: Ordered list of pages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PageResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Pages]
+      operationId: createPage
+      summary: Create a page (with optional components)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageCreateRequest"
+      responses:
+        "201":
+          description: Page created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/pages/reorder:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    post:
+      tags: [Pages]
+      operationId: reorderPages
+      summary: Reorder pages within a course
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderRequest"
+      responses:
+        "200":
+          description: Pages reordered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PageResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/pages/{pageId}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - $ref: "#/components/parameters/PageId"
+    get:
+      tags: [Pages]
+      operationId: getPage
+      summary: Get a page with its components
+      responses:
+        "200":
+          description: Page with components
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Pages]
+      operationId: updatePage
+      summary: Update page metadata, layout, or theme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageUpdateRequest"
+      responses:
+        "200":
+          description: Updated page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Pages]
+      operationId: deletePage
+      summary: Delete a page and its components
+      responses:
+        "204":
+          description: Page deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Page Components ─────────────────────────
+  /courses/{courseId}/pages/{pageId}/components:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - $ref: "#/components/parameters/PageId"
+    get:
+      tags: [Components]
+      operationId: listPageComponents
+      summary: List components on a page (ordered)
+      responses:
+        "200":
+          description: Ordered list of components
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ComponentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Components]
+      operationId: addComponent
+      summary: Add a component to a page
+      description: |
+        Component `data` is validated against the JSON Schema from the Component Type Registry
+        for the given `componentType`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComponentCreateRequest"
+      responses:
+        "201":
+          description: Component created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/pages/{pageId}/components/reorder:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - $ref: "#/components/parameters/PageId"
+    post:
+      tags: [Components]
+      operationId: reorderComponents
+      summary: Reorder components on a page
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderRequest"
+      responses:
+        "200":
+          description: Components reordered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ComponentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/pages/{pageId}/components/{componentId}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - $ref: "#/components/parameters/PageId"
+      - $ref: "#/components/parameters/ComponentId"
+    get:
+      tags: [Components]
+      operationId: getComponent
+      summary: Get a single component
+      responses:
+        "200":
+          description: Component detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Components]
+      operationId: updateComponent
+      summary: Update a component
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComponentUpdateRequest"
+      responses:
+        "200":
+          description: Updated component
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Components]
+      operationId: deleteComponent
+      summary: Remove a component from a page
+      responses:
+        "204":
+          description: Component deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Component Registry ──────────────────────
+  /components:
+    get:
+      tags: [ComponentRegistry]
+      operationId: listComponentTypes
+      summary: List all component types
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Filter by category ID
+        - name: scoringEnabled
+          in: query
+          schema:
+            type: boolean
+          description: Filter scorable types only
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Include inactive types
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Paginated component type list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentTypeListResponse"
+
+  /components/categories:
+    get:
+      tags: [ComponentRegistry]
+      operationId: listComponentCategories
+      summary: List all component categories with counts
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryListResponse"
+
+  /components/categories/{categoryId}:
+    parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [ComponentRegistry]
+      operationId: listCategoryComponents
+      summary: List component types in a category
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Component types in this category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentTypeListResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /components/search:
+    get:
+      tags: [ComponentRegistry]
+      operationId: searchComponentTypes
+      summary: Search component types by query/tags
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search query (matches displayName, description, tags)
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
+          description: Comma-separated tags
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentTypeListResponse"
+
+  /components/{typeId}:
+    parameters:
+      - name: typeId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [ComponentRegistry]
+      operationId: getComponentType
+      summary: Get a component type definition
+      description: Returns full definition including JSON Schema, default data, scoring rules
+      responses:
+        "200":
+          description: Component type definition
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Entity tag for conditional requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentTypeDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Themes ──────────────────────────────────
+  /themes:
+    get:
+      tags: [Themes]
+      operationId: listThemes
+      summary: List all themes (presets + custom)
+      parameters:
+        - name: isPreset
+          in: query
+          schema:
+            type: boolean
+          description: Filter by preset/custom
+      responses:
+        "200":
+          description: Theme list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ThemeResponse"
+    post:
+      tags: [Themes]
+      operationId: createTheme
+      summary: Create a custom theme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThemeCreateRequest"
+      responses:
+        "201":
+          description: Theme created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThemeResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /themes/presets:
+    get:
+      tags: [Themes]
+      operationId: listPresetThemes
+      summary: List built-in preset themes
+      responses:
+        "200":
+          description: Preset themes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ThemeResponse"
+
+  /themes/{themeId}:
+    parameters:
+      - $ref: "#/components/parameters/ThemeId"
+    get:
+      tags: [Themes]
+      operationId: getTheme
+      summary: Get theme details
+      responses:
+        "200":
+          description: Theme detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThemeResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Themes]
+      operationId: updateTheme
+      summary: Update a custom theme
+      description: Preset themes cannot be updated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThemeUpdateRequest"
+      responses:
+        "200":
+          description: Updated theme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThemeResponse"
+        "403":
+          description: Cannot modify preset themes
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Themes]
+      operationId: deleteTheme
+      summary: Delete a custom theme
+      description: Preset themes cannot be deleted
+      responses:
+        "204":
+          description: Theme deleted
+        "403":
+          description: Cannot delete preset themes
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/theme:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Themes]
+      operationId: getCourseTheme
+      summary: Get resolved course theme
+      responses:
+        "200":
+          description: Resolved theme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedThemeResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Themes]
+      operationId: setCourseTheme
+      summary: Set course theme or overrides
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourseThemeRequest"
+      responses:
+        "200":
+          description: Updated resolved theme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedThemeResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/pages/{pageId}/theme:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - $ref: "#/components/parameters/PageId"
+    get:
+      tags: [Themes]
+      operationId: getPageTheme
+      summary: Get resolved page theme (with course inheritance)
+      responses:
+        "200":
+          description: Resolved page theme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedThemeResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Themes]
+      operationId: setPageTheme
+      summary: Set page theme overrides
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThemeOverrides"
+      responses:
+        "200":
+          description: Updated resolved page theme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvedThemeResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Scoring ─────────────────────────────────
+  /courses/{courseId}/scoring:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Scoring]
+      operationId: getScoringConfig
+      summary: Get scoring configuration
+      responses:
+        "200":
+          description: Scoring configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoringConfigResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Scoring]
+      operationId: updateScoringConfig
+      summary: Update scoring configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScoringConfigUpdateRequest"
+      responses:
+        "200":
+          description: Updated scoring config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoringConfigResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/scoring/validate:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    post:
+      tags: [Scoring]
+      operationId: validateScoringConfig
+      summary: Validate scoring configuration
+      description: Checks weights sum to 1.0, components are scorable, etc.
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/scoring/calculate:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    post:
+      tags: [Scoring]
+      operationId: calculateScore
+      summary: Calculate score from submitted answers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScoreCalculateRequest"
+      responses:
+        "200":
+          description: Score calculation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreCalculateResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ── Completion ──────────────────────────────
+  /courses/{courseId}/completion:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Completion]
+      operationId: getCourseCompletion
+      summary: Get course completion status
+      responses:
+        "200":
+          description: Course completion breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseCompletionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/pages/{pageId}/completion:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - $ref: "#/components/parameters/PageId"
+    get:
+      tags: [Completion]
+      operationId: getPageCompletion
+      summary: Get page completion status
+      responses:
+        "200":
+          description: Page completion breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageCompletionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Completion]
+      operationId: recordPageCompletion
+      summary: Record page completion event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageCompletionEvent"
+      responses:
+        "200":
+          description: Recorded completion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageCompletionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/interactions:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Completion]
+      operationId: listInteractions
+      summary: List recorded interaction events
+      parameters:
+        - name: learnerId
+          in: query
+          schema:
+            type: string
+          description: Filter by learner ID
+        - name: interactionType
+          in: query
+          schema:
+            type: string
+          description: Filter by interaction type
+        - name: pageId
+          in: query
+          schema:
+            type: string
+          description: Filter by page ID
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of interaction events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InteractionEventResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Completion]
+      operationId: recordInteraction
+      summary: Record a component interaction event
+      description: |
+        Used in preview mode and non-SCORM deployments.
+        For SCORM exports, tracking happens client-side via cmi.interactions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InteractionEvent"
+      responses:
+        "201":
+          description: Interaction recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InteractionEventResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ── Branching & Adaptive Navigation ─────
+  /courses/{courseId}/branches:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Branching]
+      operationId: listBranchRules
+      summary: List branching rules for a course
+      responses:
+        "200":
+          description: List of branching rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BranchRule"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Branching]
+      operationId: createBranchRule
+      summary: Create a branching rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BranchRuleCreate"
+      responses:
+        "201":
+          description: Branch rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchRule"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/branches/{branchId}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: branchId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Branching]
+      operationId: getBranchRule
+      summary: Get a branching rule
+      responses:
+        "200":
+          description: Branch rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchRule"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Branching]
+      operationId: updateBranchRule
+      summary: Update a branching rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BranchRuleUpdate"
+      responses:
+        "200":
+          description: Updated branch rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchRule"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Branching]
+      operationId: deleteBranchRule
+      summary: Delete a branching rule
+      responses:
+        "204":
+          description: Branch rule deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/branches/{branchId}/events:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: branchId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Branching]
+      operationId: listBranchEvents
+      summary: List recorded branch events
+      parameters:
+        - name: learnerId
+          in: query
+          schema:
+            type: string
+          description: Filter by learner ID
+      responses:
+        "200":
+          description: List of branch events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BranchEvent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Branching]
+      operationId: recordBranchEvent
+      summary: Record a learner branch decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BranchEventCreate"
+      responses:
+        "201":
+          description: Branch event recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchEvent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ── Social & Collaborative ───────────────
+  /courses/{courseId}/discussions:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Social]
+      operationId: listDiscussions
+      summary: List discussion threads
+      responses:
+        "200":
+          description: List of discussion threads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiscussionThread"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Social]
+      operationId: createDiscussion
+      summary: Create a discussion thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscussionThreadCreate"
+      responses:
+        "201":
+          description: Thread created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscussionThread"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/discussions/{threadId}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: threadId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Social]
+      operationId: getDiscussion
+      summary: Get a discussion thread with replies
+      responses:
+        "200":
+          description: Thread with replies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscussionThreadWithReplies"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/discussions/{threadId}/replies:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: threadId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Social]
+      operationId: addDiscussionReply
+      summary: Add a reply to a discussion thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscussionReplyCreate"
+      responses:
+        "201":
+          description: Reply created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscussionReply"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/peer-reviews:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Social]
+      operationId: listPeerReviewSubmissions
+      summary: List peer review submissions
+      responses:
+        "200":
+          description: List of submissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PeerReviewSubmission"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Social]
+      operationId: createPeerReviewSubmission
+      summary: Create a peer review submission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PeerReviewSubmissionCreate"
+      responses:
+        "201":
+          description: Submission created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PeerReviewSubmission"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/peer-reviews/{submissionId}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: submissionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Social]
+      operationId: getPeerReviewSubmission
+      summary: Get a submission with reviews
+      responses:
+        "200":
+          description: Submission with reviews
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PeerReviewSubmissionWithReviews"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/peer-reviews/{submissionId}/reviews:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: submissionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Social]
+      operationId: addPeerReview
+      summary: Add a peer review to a submission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PeerReviewCreate"
+      responses:
+        "201":
+          description: Review created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PeerReview"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/polls:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Social]
+      operationId: listPolls
+      summary: List polls
+      responses:
+        "200":
+          description: List of polls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Poll"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Social]
+      operationId: createPoll
+      summary: Create a poll
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PollCreate"
+      responses:
+        "201":
+          description: Poll created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Poll"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/polls/{pollId}/votes:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: pollId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Social]
+      operationId: submitPollVote
+      summary: Submit a poll vote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PollVoteCreate"
+      responses:
+        "201":
+          description: Vote recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PollVote"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/polls/{pollId}/results:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: pollId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Social]
+      operationId: getPollResults
+      summary: Get poll results (tallied)
+      responses:
+        "200":
+          description: Poll results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PollResults"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/teams:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Social]
+      operationId: listTeams
+      summary: List teams
+      responses:
+        "200":
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Social]
+      operationId: createTeam
+      summary: Create a team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamCreate"
+      responses:
+        "201":
+          description: Team created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /courses/{courseId}/teams/{teamId}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Social]
+      operationId: getTeam
+      summary: Get team details
+      responses:
+        "200":
+          description: Team details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Social]
+      operationId: updateTeam
+      summary: Update team details
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamUpdate"
+      responses:
+        "200":
+          description: Team updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Social]
+      operationId: deleteTeam
+      summary: Delete a team
+      responses:
+        "204":
+          description: Team deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Analytics & Reporting ────────────────
+  /courses/{courseId}/analytics/summary:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Analytics]
+      operationId: getAnalyticsSummary
+      summary: Get course-level performance summary
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/analytics/skills:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Analytics]
+      operationId: getAnalyticsSkills
+      summary: Get skill mastery rollups
+      responses:
+        "200":
+          description: Skill mastery rollups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSkills"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/analytics/manager-view:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Analytics]
+      operationId: getAnalyticsManagerView
+      summary: Get manager-facing learner progress view
+      responses:
+        "200":
+          description: Manager view of learner progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsManagerView"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Audio ───────────────────────────────────
+  /assets/audio:
+    post:
+      tags: [Audio]
+      operationId: uploadAudio
+      summary: Upload an audio file
+      description: Extends existing media upload with audio metadata extraction
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Audio file (mp3, wav, ogg, aac, m4a)
+                courseId:
+                  type: string
+                  description: Associate with a course (optional)
+                label:
+                  type: string
+                  description: Display name for this audio
+      responses:
+        "201":
+          description: Audio uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudioAssetResponse"
+        "413":
+          description: File too large (max 50MB)
+        "415":
+          description: Unsupported audio format
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /assets/audio/{audioId}:
+    parameters:
+      - $ref: "#/components/parameters/AudioId"
+    get:
+      tags: [Audio]
+      operationId: getAudioMetadata
+      summary: Get audio file metadata
+      responses:
+        "200":
+          description: Audio metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudioAssetResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Audio]
+      operationId: updateAudioMetadata
+      summary: Update audio metadata (label, transcript)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AudioMetadataUpdateRequest"
+      responses:
+        "200":
+          description: Updated metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudioAssetResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Audio]
+      operationId: deleteAudio
+      summary: Delete an audio file
+      responses:
+        "204":
+          description: Audio deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{courseId}/narration:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [Audio]
+      operationId: getCourseNarration
+      summary: List all audio items across all pages and components
+      responses:
+        "200":
+          description: Course narration overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseNarrationResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Export ──────────────────────────────────
+  /export:
+    post:
+      tags: [Export]
+      operationId: exportCourseFromJson
+      summary: Export SCORM package from raw JSON
+      description: Accepts course JSON (legacy or new format), validates, and returns SCORM ZIP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportRequest"
+      responses:
+        "200":
+          description: SCORM package ZIP
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="course-slug_scorm.zip"
+            X-Export-Warnings:
+              schema:
+                type: string
+              description: Semicolon-separated export warnings
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /export/validate:
+    post:
+      tags: [Export]
+      operationId: validateForExport
+      summary: Validate course data for export
+      description: Validates component types, audio refs, scoring config without generating package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+
+  /export/formats:
+    get:
+      tags: [Export]
+      operationId: getExportFormats
+      summary: List available export formats
+      responses:
+        "200":
+          description: Supported export formats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportFormatsResponse"
+
+  /export/scorm/{courseId}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    post:
+      tags: [Export]
+      operationId: exportPersistedCourse
+      summary: Export SCORM package from a DB-persisted course
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScormExportOptions"
+      responses:
+        "200":
+          description: SCORM package ZIP
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /export/status/{exportId}:
+    parameters:
+      - name: exportId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Export]
+      operationId: getExportStatus
+      summary: Get export job status
+      responses:
+        "200":
+          description: Export status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportStatusResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Media ───────────────────────────────────
+  /media/upload:
+    post:
+      tags: [Media]
+      operationId: uploadMedia
+      summary: Upload a media file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                course_id:
+                  type: string
+      responses:
+        "201":
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaUploadResponse"
+        "413":
+          description: File too large (max 50MB)
+        "415":
+          description: Unsupported file type
+
+  /media/files/{filePath}:
+    parameters:
+      - name: filePath
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Media]
+      operationId: serveMediaFile
+      summary: Serve a media file
+      responses:
+        "200":
+          description: File content
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /media/:
+    get:
+      tags: [Media]
+      operationId: listMediaFiles
+      summary: List uploaded media files
+      parameters:
+        - name: course_id
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [image, video, audio, document]
+      responses:
+        "200":
+          description: Media file list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MediaFileInfo"
+
+# ─────────────────────────────────────────────
+# COMPONENTS (Schemas, Parameters, Responses)
+# ─────────────────────────────────────────────
+components:
+
+  # ── Parameters ──────────────────────────────
+  parameters:
+    CourseId:
+      name: courseId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]+$"
+      description: Course identifier
+    PageId:
+      name: pageId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Page UUID
+    ComponentId:
+      name: componentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Component UUID
+    ThemeId:
+      name: themeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Theme UUID
+    AudioId:
+      name: audioId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Audio asset UUID
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+
+  # ── Responses ───────────────────────────────
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Resource conflict (duplicate ID)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+
+  # ── Schemas ─────────────────────────────────
+  schemas:
+
+    # ── Common ──────────────────────────
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+    ValidationErrorResponse:
+      type: object
+      required: [detail, errors]
+      properties:
+        detail:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    ValidationResult:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+        warnings:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    ReorderRequest:
+      type: object
+      required: [orderedIds]
+      properties:
+        orderedIds:
+          type: array
+          items:
+            type: string
+          description: IDs in desired order
+
+    HealthCheckResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+        environment:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: number
+
+    # ── Audio ───────────────────────────
+    AudioItem:
+      type: object
+      required: [audioUrl, triggerOn]
+      properties:
+        audioId:
+          type: string
+          format: uuid
+          readOnly: true
+        audioUrl:
+          type: string
+          description: URL to audio file from media upload
+        triggerOn:
+          type: string
+          enum: [load, click, interaction]
+        targetInteractionId:
+          type: string
+          nullable: true
+          description: "Interaction point ID (e.g. 'tab-2', 'accordion-panel-1')"
+        autoplay:
+          type: boolean
+          default: false
+        requiredForCompletion:
+          type: boolean
+          default: false
+        duration:
+          type: number
+          description: Duration in seconds
+        label:
+          type: string
+          nullable: true
+          description: Display name for narration list
+        transcript:
+          type: string
+          nullable: true
+          description: Text transcript for accessibility
+
+    AudioConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+        audioItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/AudioItem"
+          default: []
+
+    AudioAssetResponse:
+      type: object
+      properties:
+        audioId:
+          type: string
+          format: uuid
+        audioUrl:
+          type: string
+        duration:
+          type: number
+          nullable: true
+        label:
+          type: string
+          nullable: true
+        transcript:
+          type: string
+          nullable: true
+        mimeType:
+          type: string
+        fileSize:
+          type: integer
+        courseId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AudioMetadataUpdateRequest:
+      type: object
+      properties:
+        label:
+          type: string
+        transcript:
+          type: string
+        duration:
+          type: number
+          description: Duration in seconds (if not auto-extracted)
+
+    # ── Completion Criteria ─────────────
+    CompletionCriteria:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [view, interact, audio, score, custom]
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: Score threshold (for type=score)
+        requiredInteractions:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Interaction IDs that must be performed
+        requiredAudioIds:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Audio IDs that must be listened to
+
+    # ── Component Styling ───────────────
+    ComponentStyling:
+      type: object
+      properties:
+        themeOverrides:
+          $ref: "#/components/schemas/ThemeOverrides"
+        layoutPosition:
+          type: string
+          nullable: true
+          description: Grid area name from page layout
+
+    # ── Component ───────────────────────
+    ComponentCreateRequest:
+      type: object
+      required: [componentType, data]
+      properties:
+        componentType:
+          type: string
+          description: Must match a typeId from the Component Type Registry
+        data:
+          type: object
+          description: Component-specific data validated against registry schema
+        audioConfig:
+          $ref: "#/components/schemas/AudioConfig"
+        completionCriteria:
+          $ref: "#/components/schemas/CompletionCriteria"
+        styling:
+          $ref: "#/components/schemas/ComponentStyling"
+
+    ComponentUpdateRequest:
+      type: object
+      properties:
+        data:
+          type: object
+        audioConfig:
+          $ref: "#/components/schemas/AudioConfig"
+        completionCriteria:
+          $ref: "#/components/schemas/CompletionCriteria"
+        styling:
+          $ref: "#/components/schemas/ComponentStyling"
+
+    ComponentResponse:
+      type: object
+      properties:
+        componentId:
+          type: string
+          format: uuid
+        componentType:
+          type: string
+        order:
+          type: integer
+        data:
+          type: object
+        audioConfig:
+          $ref: "#/components/schemas/AudioConfig"
+        completionCriteria:
+          $ref: "#/components/schemas/CompletionCriteria"
+        styling:
+          $ref: "#/components/schemas/ComponentStyling"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ── Page Completion ─────────────────
+    PageCompletionConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        strategy:
+          type: string
+          enum: [all, any, percentage, custom]
+          default: all
+        requiredComponents:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+          description: Component IDs required (for strategy=custom)
+        completionThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: Percentage threshold (for strategy=percentage)
+
+    # ── Page Layout ─────────────────────
+    ComponentPlacement:
+      type: object
+      properties:
+        componentId:
+          type: string
+        gridArea:
+          type: string
+          description: CSS grid area name
+        span:
+          type: integer
+          nullable: true
+          description: Column span for preset layouts
+
+    CustomGrid:
+      type: object
+      properties:
+        columns:
+          type: integer
+          minimum: 1
+          maximum: 4
+        rows:
+          type: string
+          description: "CSS grid-template-rows (e.g. 'auto 1fr auto')"
+        areas:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+          description: "CSS grid-template-areas"
+        gap:
+          type: string
+          description: "CSS gap (e.g. '16px')"
+
+    PageLayout:
+      type: object
+      properties:
+        preset:
+          type: string
+          enum:
+            - single-column
+            - two-column
+            - three-column
+            - sidebar-left
+            - sidebar-right
+            - grid-2x2
+            - hero-content
+            - full-width
+          nullable: true
+        customGrid:
+          $ref: "#/components/schemas/CustomGrid"
+        spacing:
+          type: string
+          enum: [compact, normal, spacious]
+          default: normal
+        componentPlacements:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentPlacement"
+
+    # ── Page Theme ──────────────────────
+    PageThemeConfig:
+      type: object
+      properties:
+        inheritCourse:
+          type: boolean
+          default: true
+        overrides:
+          $ref: "#/components/schemas/ThemeOverrides"
+
+    # ── Page ────────────────────────────
+    PageCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentCreateRequest"
+          description: Optional initial components
+        pageCompletion:
+          $ref: "#/components/schemas/PageCompletionConfig"
+        layout:
+          $ref: "#/components/schemas/PageLayout"
+        theme:
+          $ref: "#/components/schemas/PageThemeConfig"
+
+    PageUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        pageCompletion:
+          $ref: "#/components/schemas/PageCompletionConfig"
+        layout:
+          $ref: "#/components/schemas/PageLayout"
+        theme:
+          $ref: "#/components/schemas/PageThemeConfig"
+
+    PageResponse:
+      type: object
+      properties:
+        pageId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        order:
+          type: integer
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentResponse"
+        pageCompletion:
+          $ref: "#/components/schemas/PageCompletionConfig"
+        layout:
+          $ref: "#/components/schemas/PageLayout"
+        theme:
+          $ref: "#/components/schemas/PageThemeConfig"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ── Course ──────────────────────────
+    NavigationSettings:
+      type: object
+      properties:
+        allowSkip:
+          type: boolean
+          default: true
+        showProgress:
+          type: boolean
+          default: true
+        linearProgression:
+          type: boolean
+          default: false
+
+    CourseSettings:
+      type: object
+      properties:
+        themeId:
+          type: string
+          format: uuid
+          nullable: true
+        autoplay:
+          type: boolean
+          default: false
+        duration:
+          type: number
+          nullable: true
+          description: Estimated duration in minutes
+
+    CourseCreateRequest:
+      type: object
+      required: [courseId, title, author]
+      properties:
+        courseId:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]+$"
+          maxLength: 50
+        title:
+          type: string
+          maxLength: 200
+        author:
+          type: string
+          maxLength: 100
+        language:
+          type: string
+          default: en
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+        version:
+          type: string
+          default: "1.0.0"
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/PageCreateRequest"
+          description: New format — pages with components
+        templates:
+          type: array
+          items:
+            type: object
+          description: Legacy format — auto-converted to pages
+        navigation:
+          $ref: "#/components/schemas/NavigationSettings"
+        settings:
+          $ref: "#/components/schemas/CourseSettings"
+        scoring:
+          $ref: "#/components/schemas/ScoringConfig"
+
+    CourseUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        author:
+          type: string
+          maxLength: 100
+        language:
+          type: string
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+        version:
+          type: string
+        navigation:
+          $ref: "#/components/schemas/NavigationSettings"
+        settings:
+          $ref: "#/components/schemas/CourseSettings"
+        scoring:
+          $ref: "#/components/schemas/ScoringConfig"
+        status:
+          type: string
+          enum: [draft, published, archived]
+
+    CourseResponse:
+      type: object
+      properties:
+        courseId:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        language:
+          type: string
+        description:
+          type: string
+          nullable: true
+        version:
+          type: string
+        status:
+          type: string
+          enum: [draft, published, archived]
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/PageResponse"
+        navigation:
+          $ref: "#/components/schemas/NavigationSettings"
+        settings:
+          $ref: "#/components/schemas/CourseSettings"
+        scoring:
+          $ref: "#/components/schemas/ScoringConfig"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CourseListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              courseId:
+                type: string
+              title:
+                type: string
+              author:
+                type: string
+              status:
+                type: string
+              pageCount:
+                type: integer
+              createdAt:
+                type: string
+                format: date-time
+              updatedAt:
+                type: string
+                format: date-time
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    CourseValidationRequest:
+      type: object
+      required: [course]
+      properties:
+        course:
+          type: object
+          description: Full course data to validate
+
+    # ── Component Type Registry ─────────
+    AudioSupportConfig:
+      type: object
+      properties:
+        perComponent:
+          type: boolean
+          description: Can have component-level audio
+        perInteraction:
+          type: boolean
+          description: Can have audio per tab/panel/item
+        interactionPoints:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: "Names of interaction points (e.g. ['tab', 'panel'])"
+
+    ComponentTypeSummary:
+      type: object
+      properties:
+        typeId:
+          type: string
+        category:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        thumbnail:
+          type: string
+          nullable: true
+        completionCapabilities:
+          type: array
+          items:
+            type: string
+            enum: [view, interact, audio, score]
+        scoringEnabled:
+          type: boolean
+        audioSupport:
+          $ref: "#/components/schemas/AudioSupportConfig"
+        tags:
+          type: array
+          items:
+            type: string
+        estimatedDuration:
+          type: number
+          nullable: true
+
+    ComponentTypeDetail:
+      allOf:
+        - $ref: "#/components/schemas/ComponentTypeSummary"
+        - type: object
+          properties:
+            schemaVersion:
+              type: string
+              description: Schema version for cache invalidation
+            etag:
+              type: string
+              description: ETag for conditional requests
+            schema:
+              type: object
+              description: JSON Schema for validating component data
+            defaultData:
+              type: object
+              description: Default data when component is first added
+            defaultCompletionType:
+              type: string
+            maxScore:
+              type: number
+              nullable: true
+            scoringRules:
+              type: object
+              nullable: true
+              description: Per-quiz-type scoring configuration
+            sortOrder:
+              type: integer
+            isActive:
+              type: boolean
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    ComponentTypeListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentTypeSummary"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        schemaVersion:
+          type: string
+          description: Schema version for cache invalidation
+
+    CategorySummary:
+      type: object
+      properties:
+        categoryId:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        componentCount:
+          type: integer
+        sortOrder:
+          type: integer
+
+    CategoryListResponse:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategorySummary"
+
+    # ── Theme ───────────────────────────
+    ThemeColors:
+      type: object
+      properties:
+        primary:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        secondary:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        background:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        surface:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        text:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        textSecondary:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        accent:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        error:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        success:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        warning:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        info:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        border:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+
+    HeadingSizes:
+      type: object
+      properties:
+        h1:
+          type: number
+        h2:
+          type: number
+        h3:
+          type: number
+        h4:
+          type: number
+
+    FontWeights:
+      type: object
+      properties:
+        normal:
+          type: number
+        medium:
+          type: number
+        bold:
+          type: number
+
+    ThemeTypography:
+      type: object
+      properties:
+        fontFamily:
+          type: string
+        headingFont:
+          type: string
+          nullable: true
+        baseFontSize:
+          type: number
+        headingSizes:
+          $ref: "#/components/schemas/HeadingSizes"
+        lineHeight:
+          type: number
+        fontWeight:
+          $ref: "#/components/schemas/FontWeights"
+
+    ButtonStyle:
+      type: object
+      properties:
+        borderRadius:
+          type: number
+        padding:
+          type: string
+        fontWeight:
+          type: number
+        textTransform:
+          type: string
+          enum: [none, uppercase, capitalize]
+
+    CardStyle:
+      type: object
+      properties:
+        borderRadius:
+          type: number
+        shadow:
+          type: string
+        borderWidth:
+          type: number
+        padding:
+          type: string
+
+    TabsStyle:
+      type: object
+      properties:
+        style:
+          type: string
+          enum: [underline, pill, boxed]
+        activeColor:
+          type: string
+          nullable: true
+        borderRadius:
+          type: number
+          nullable: true
+
+    AccordionStyle:
+      type: object
+      properties:
+        style:
+          type: string
+          enum: [bordered, minimal, card]
+        iconPosition:
+          type: string
+          enum: [left, right]
+        spacing:
+          type: number
+
+    InputStyle:
+      type: object
+      properties:
+        borderRadius:
+          type: number
+        borderColor:
+          type: string
+        focusColor:
+          type: string
+
+    ProgressBarStyle:
+      type: object
+      properties:
+        height:
+          type: number
+        borderRadius:
+          type: number
+        fillColor:
+          type: string
+          nullable: true
+
+    ThemeComponentStyles:
+      type: object
+      properties:
+        button:
+          $ref: "#/components/schemas/ButtonStyle"
+        card:
+          $ref: "#/components/schemas/CardStyle"
+        tabs:
+          $ref: "#/components/schemas/TabsStyle"
+        accordion:
+          $ref: "#/components/schemas/AccordionStyle"
+        input:
+          $ref: "#/components/schemas/InputStyle"
+        progressBar:
+          $ref: "#/components/schemas/ProgressBarStyle"
+
+    ThemeOverrides:
+      type: object
+      description: Partial theme — any subset of properties can be overridden
+      properties:
+        colors:
+          type: object
+          additionalProperties:
+            type: string
+        typography:
+          type: object
+          additionalProperties: true
+        componentStyles:
+          type: object
+          additionalProperties: true
+
+    ThemeCreateRequest:
+      type: object
+      required: [name, colors, typography]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        colors:
+          $ref: "#/components/schemas/ThemeColors"
+        typography:
+          $ref: "#/components/schemas/ThemeTypography"
+        componentStyles:
+          $ref: "#/components/schemas/ThemeComponentStyles"
+
+    ThemeUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        colors:
+          $ref: "#/components/schemas/ThemeColors"
+        typography:
+          $ref: "#/components/schemas/ThemeTypography"
+        componentStyles:
+          $ref: "#/components/schemas/ThemeComponentStyles"
+
+    ThemeResponse:
+      type: object
+      properties:
+        themeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        isPreset:
+          type: boolean
+        colors:
+          $ref: "#/components/schemas/ThemeColors"
+        typography:
+          $ref: "#/components/schemas/ThemeTypography"
+        componentStyles:
+          $ref: "#/components/schemas/ThemeComponentStyles"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CourseThemeRequest:
+      type: object
+      properties:
+        themeId:
+          type: string
+          format: uuid
+          description: Set course theme by ID
+        overrides:
+          $ref: "#/components/schemas/ThemeOverrides"
+
+    ResolvedThemeResponse:
+      type: object
+      properties:
+        resolved:
+          type: object
+          description: Fully merged theme (course + overrides)
+          properties:
+            colors:
+              $ref: "#/components/schemas/ThemeColors"
+            typography:
+              $ref: "#/components/schemas/ThemeTypography"
+            componentStyles:
+              $ref: "#/components/schemas/ThemeComponentStyles"
+        inheritedFrom:
+          type: string
+          enum: [preset, course, page]
+        overrides:
+          $ref: "#/components/schemas/ThemeOverrides"
+        courseThemeId:
+          type: string
+          format: uuid
+          nullable: true
+        courseThemeName:
+          type: string
+          nullable: true
+
+    # ── Scoring ─────────────────────────
+    ScormObjective:
+      type: object
+      properties:
+        objectiveId:
+          type: string
+        componentIds:
+          type: array
+          items:
+            type: string
+          description: Components contributing to this objective
+        description:
+          type: string
+        passingScore:
+          type: number
+          minimum: 0
+          maximum: 100
+
+    ScormReportingConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        version:
+          type: string
+          enum: ["1.2", "2004"]
+          default: "1.2"
+        reportScore:
+          type: boolean
+          default: true
+        reportCompletion:
+          type: boolean
+          default: true
+        reportInteractions:
+          type: boolean
+          default: true
+        objectives:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScormObjective"
+
+    ComponentScoreConfig:
+      type: object
+      required: [componentId, maxPoints]
+      properties:
+        componentId:
+          type: string
+          format: uuid
+        componentType:
+          type: string
+          description: Must be a scoringEnabled type
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Weight (sum must = 1.0 when weightedScoring=true)
+        maxPoints:
+          type: number
+          minimum: 0
+
+    ScoringConfig:
+      type: object
+      nullable: true
+      properties:
+        config:
+          type: object
+          properties:
+            passingScore:
+              type: number
+              minimum: 0
+              maximum: 100
+              default: 70
+            maxAttempts:
+              type: integer
+              nullable: true
+              description: "null = unlimited"
+            attemptScoring:
+              type: string
+              enum: [best, last, average]
+              default: best
+            showCorrectAnswers:
+              type: boolean
+              default: true
+            showScoreAfterQuestion:
+              type: boolean
+              default: false
+            showScoreAfterPage:
+              type: boolean
+              default: false
+            weightedScoring:
+              type: boolean
+              default: false
+            allowPartialCredit:
+              type: boolean
+              default: true
+        componentScores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentScoreConfig"
+        scormReporting:
+          $ref: "#/components/schemas/ScormReportingConfig"
+
+    ScoringConfigResponse:
+      allOf:
+        - type: object
+          properties:
+            scoringId:
+              type: string
+              format: uuid
+            courseId:
+              type: string
+        - $ref: "#/components/schemas/ScoringConfig"
+
+    ScoringConfigUpdateRequest:
+      $ref: "#/components/schemas/ScoringConfig"
+
+    QuestionResponse:
+      type: object
+      properties:
+        questionId:
+          type: string
+        selectedOptionIds:
+          type: array
+          items:
+            type: string
+          description: Selected option ID(s)
+
+    ComponentAnswer:
+      type: object
+      required: [componentId, componentType, responses]
+      properties:
+        componentId:
+          type: string
+          format: uuid
+        componentType:
+          type: string
+        responses:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionResponse"
+
+    ScoreCalculateRequest:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentAnswer"
+        attemptNumber:
+          type: integer
+          default: 1
+
+    QuestionResult:
+      type: object
+      properties:
+        questionId:
+          type: string
+        correct:
+          type: boolean
+        score:
+          type: number
+        maxScore:
+          type: number
+        partialCredit:
+          type: boolean
+          default: false
+
+    ComponentResult:
+      type: object
+      properties:
+        componentId:
+          type: string
+        componentType:
+          type: string
+        score:
+          type: number
+        maxScore:
+          type: number
+        weight:
+          type: number
+        weightedScore:
+          type: number
+        questionResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionResult"
+
+    ScoreCalculateResponse:
+      type: object
+      properties:
+        totalScore:
+          type: number
+        maxScore:
+          type: number
+        percentage:
+          type: number
+        passed:
+          type: boolean
+        passingScore:
+          type: number
+        componentResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentResult"
+        attemptNumber:
+          type: integer
+        remainingAttempts:
+          type: integer
+          nullable: true
+
+    # ── Completion ──────────────────────
+    ComponentCompletionStatus:
+      type: object
+      properties:
+        componentId:
+          type: string
+        completed:
+          type: boolean
+        completionType:
+          type: string
+          enum: [view, interact, audio, score, custom]
+        threshold:
+          type: number
+          nullable: true
+        audioProgress:
+          type: object
+          nullable: true
+          properties:
+            listened:
+              type: integer
+            required:
+              type: integer
+
+    PageCompletionResponse:
+      type: object
+      properties:
+        pageId:
+          type: string
+        title:
+          type: string
+        completed:
+          type: boolean
+        strategy:
+          type: string
+          enum: [all, any, percentage, custom]
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentCompletionStatus"
+
+    CourseCompletionResponse:
+      type: object
+      properties:
+        courseId:
+          type: string
+        status:
+          type: string
+          enum: [not-started, in-progress, completed, passed, failed]
+        overallProgress:
+          type: number
+          description: Percentage 0-100
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/PageCompletionResponse"
+
+    PageCompletionEvent:
+      type: object
+      required: [componentStates]
+      properties:
+        componentStates:
+          type: array
+          description: Component completion states for this page
+          items:
+            type: object
+            required: [componentId, completed]
+            properties:
+              componentId:
+                type: string
+              completed:
+                type: boolean
+              interactionsCompleted:
+                type: array
+                items:
+                  type: string
+                description: Interaction IDs completed within the component
+              audiosCompleted:
+                type: array
+                items:
+                  type: string
+                description: Audio IDs completed within the component
+              score:
+                type: number
+                nullable: true
+
+    # ── Interaction Events ──────────────
+    InteractionData:
+      type: object
+      properties:
+        interactionId:
+          type: string
+          nullable: true
+          description: "E.g. 'tab-2'"
+        value:
+          description: Response value (selected option ID, text input, etc.)
+        score:
+          type: number
+          nullable: true
+        maxScore:
+          type: number
+          nullable: true
+        isCorrect:
+          type: boolean
+          nullable: true
+        duration:
+          type: number
+          nullable: true
+          description: Seconds spent
+
+    InteractionEvent:
+      type: object
+      required: [pageId, componentId, interactionType]
+      properties:
+        pageId:
+          type: string
+        componentId:
+          type: string
+        interactionType:
+          type: string
+          description: Open string (e.g. flip, reveal, drag-sort, text-input, rating, acknowledge, download)
+        data:
+          $ref: "#/components/schemas/InteractionData"
+        completed:
+          type: boolean
+          default: false
+
+    InteractionEventResponse:
+      type: object
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        courseId:
+          type: string
+        pageId:
+          type: string
+        componentId:
+          type: string
+        learnerId:
+          type: string
+        interactionType:
+          type: string
+        data:
+          $ref: "#/components/schemas/InteractionData"
+        score:
+          type: number
+          nullable: true
+        maxScore:
+          type: number
+          nullable: true
+        duration:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        completed:
+          type: boolean
+
+    # ── Branching & Adaptive Navigation ─────
+    BranchCondition:
+      type: object
+      required: [field, operator, value, targetPageId]
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          description: Comparison operator (==, !=, >=, <=, >, <, in, contains)
+        value:
+          description: Value to compare against
+        targetPageId:
+          type: string
+
+    BranchRule:
+      type: object
+      properties:
+        branchId:
+          type: string
+        courseId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        sourcePageId:
+          type: string
+          nullable: true
+        sourceComponentId:
+          type: string
+          nullable: true
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/BranchCondition"
+        defaultTargetPageId:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BranchRuleCreate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        sourcePageId:
+          type: string
+          nullable: true
+        sourceComponentId:
+          type: string
+          nullable: true
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/BranchCondition"
+        defaultTargetPageId:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+          default: 0
+        isActive:
+          type: boolean
+          default: true
+
+    BranchRuleUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        sourcePageId:
+          type: string
+          nullable: true
+        sourceComponentId:
+          type: string
+          nullable: true
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/BranchCondition"
+        defaultTargetPageId:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+        isActive:
+          type: boolean
+
+    BranchEvent:
+      type: object
+      properties:
+        eventId:
+          type: string
+        branchId:
+          type: string
+        courseId:
+          type: string
+        learnerId:
+          type: string
+        matchedConditionIndex:
+          type: integer
+        targetPageId:
+          type: string
+        contextSnapshot:
+          type: object
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    BranchEventCreate:
+      type: object
+      required: [targetPageId]
+      properties:
+        learnerId:
+          type: string
+        matchedConditionIndex:
+          type: integer
+          default: -1
+        targetPageId:
+          type: string
+        contextSnapshot:
+          type: object
+          nullable: true
+
+    # ── Social & Collaborative ───────────────
+    DiscussionThread:
+      type: object
+      properties:
+        threadId:
+          type: string
+        courseId:
+          type: string
+        pageId:
+          type: string
+          nullable: true
+        authorId:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        isPinned:
+          type: boolean
+        isClosed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DiscussionThreadCreate:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        authorId:
+          type: string
+        pageId:
+          type: string
+          nullable: true
+
+    DiscussionReply:
+      type: object
+      properties:
+        replyId:
+          type: string
+        threadId:
+          type: string
+        authorId:
+          type: string
+        body:
+          type: string
+        parentReplyId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DiscussionReplyCreate:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+        authorId:
+          type: string
+        parentReplyId:
+          type: string
+          nullable: true
+
+    DiscussionThreadWithReplies:
+      allOf:
+        - $ref: "#/components/schemas/DiscussionThread"
+        - type: object
+          properties:
+            replies:
+              type: array
+              items:
+                $ref: "#/components/schemas/DiscussionReply"
+
+    PeerReviewSubmission:
+      type: object
+      properties:
+        submissionId:
+          type: string
+        courseId:
+          type: string
+        pageId:
+          type: string
+          nullable: true
+        authorId:
+          type: string
+        content:
+          type: object
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PeerReviewSubmissionCreate:
+      type: object
+      properties:
+        content:
+          type: object
+        authorId:
+          type: string
+        pageId:
+          type: string
+          nullable: true
+
+    PeerReview:
+      type: object
+      properties:
+        reviewId:
+          type: string
+        submissionId:
+          type: string
+        reviewerId:
+          type: string
+        feedback:
+          type: string
+        rubricScores:
+          type: object
+          nullable: true
+        overallScore:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PeerReviewCreate:
+      type: object
+      properties:
+        reviewerId:
+          type: string
+        feedback:
+          type: string
+        rubricScores:
+          type: object
+          nullable: true
+        overallScore:
+          type: number
+          nullable: true
+
+    PeerReviewSubmissionWithReviews:
+      allOf:
+        - $ref: "#/components/schemas/PeerReviewSubmission"
+        - type: object
+          properties:
+            reviews:
+              type: array
+              items:
+                $ref: "#/components/schemas/PeerReview"
+
+    PollOption:
+      type: object
+      properties:
+        index:
+          type: integer
+        text:
+          type: string
+
+    Poll:
+      type: object
+      properties:
+        pollId:
+          type: string
+        courseId:
+          type: string
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/PollOption"
+        allowMultiple:
+          type: boolean
+        isAnonymous:
+          type: boolean
+        isClosed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PollCreate:
+      type: object
+      required: [question, options]
+      properties:
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        allowMultiple:
+          type: boolean
+          default: false
+        isAnonymous:
+          type: boolean
+          default: true
+
+    PollVote:
+      type: object
+      properties:
+        voteId:
+          type: string
+        pollId:
+          type: string
+        voterId:
+          type: string
+        selectedOptions:
+          type: array
+          items:
+            type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    PollVoteCreate:
+      type: object
+      required: [selectedOptions]
+      properties:
+        voterId:
+          type: string
+        selectedOptions:
+          type: array
+          items:
+            type: integer
+
+    PollResultOption:
+      type: object
+      properties:
+        index:
+          type: integer
+        text:
+          type: string
+        votes:
+          type: integer
+        percentage:
+          type: number
+
+    PollResults:
+      type: object
+      properties:
+        pollId:
+          type: string
+        question:
+          type: string
+        totalVotes:
+          type: integer
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/PollResultOption"
+        isClosed:
+          type: boolean
+
+    Team:
+      type: object
+      properties:
+        teamId:
+          type: string
+        courseId:
+          type: string
+        name:
+          type: string
+        members:
+          type: array
+          items:
+            type: string
+        score:
+          type: number
+        metadata:
+          type: object
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TeamCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        members:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          nullable: true
+
+    TeamUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        members:
+          type: array
+          items:
+            type: string
+        score:
+          type: number
+        metadata:
+          type: object
+          nullable: true
+
+    # ── Analytics & Reporting ───────────────
+    InteractionTypeCount:
+      type: object
+      properties:
+        interactionType:
+          type: string
+        count:
+          type: integer
+
+    AnalyticsSummary:
+      type: object
+      properties:
+        courseId:
+          type: string
+        title:
+          type: string
+        structure:
+          type: object
+          properties:
+            totalPages:
+              type: integer
+            totalComponents:
+              type: integer
+            scoringComponents:
+              type: integer
+        scoring:
+          type: object
+          properties:
+            passingScore:
+              type: number
+            weightedScoring:
+              type: boolean
+        interactions:
+          type: object
+          properties:
+            totalEvents:
+              type: integer
+            byType:
+              type: array
+              items:
+                $ref: "#/components/schemas/InteractionTypeCount"
+        generatedAt:
+          type: string
+          format: date-time
+
+    AnalyticsSkillComponent:
+      type: object
+      properties:
+        componentId:
+          type: string
+        componentType:
+          type: string
+        pageId:
+          type: string
+
+    AnalyticsSkill:
+      type: object
+      properties:
+        skill:
+          type: string
+        componentCount:
+          type: integer
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalyticsSkillComponent"
+
+    AnalyticsSkills:
+      type: object
+      properties:
+        courseId:
+          type: string
+        skills:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalyticsSkill"
+        totalSkills:
+          type: integer
+        generatedAt:
+          type: string
+          format: date-time
+
+    AnalyticsManagerPage:
+      type: object
+      properties:
+        pageId:
+          type: string
+        title:
+          type: string
+        order:
+          type: integer
+        componentCount:
+          type: integer
+        completionStrategy:
+          type: string
+
+    AnalyticsManagerView:
+      type: object
+      properties:
+        courseId:
+          type: string
+        courseTitle:
+          type: string
+        courseStatus:
+          type: string
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnalyticsManagerPage"
+        totalPages:
+          type: integer
+        scoring:
+          type: object
+          nullable: true
+        totalInteractionEvents:
+          type: integer
+        generatedAt:
+          type: string
+          format: date-time
+
+    # ── Audio Narration ─────────────────
+    PageNarrationInfo:
+      type: object
+      properties:
+        pageId:
+          type: string
+        pageTitle:
+          type: string
+        audioItems:
+          type: array
+          items:
+            type: object
+            properties:
+              audioId:
+                type: string
+              componentId:
+                type: string
+              componentType:
+                type: string
+              targetInteractionId:
+                type: string
+                nullable: true
+              label:
+                type: string
+                nullable: true
+              audioUrl:
+                type: string
+              duration:
+                type: number
+              requiredForCompletion:
+                type: boolean
+
+    CourseNarrationResponse:
+      type: object
+      properties:
+        courseId:
+          type: string
+        totalAudioItems:
+          type: integer
+        totalDuration:
+          type: number
+          description: Total audio duration in seconds
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/PageNarrationInfo"
+
+    # ── Export ──────────────────────────
+    ExportRequest:
+      type: object
+      required: [course]
+      properties:
+        course:
+          type: string
+          description: JSON string of course data
+
+    ScormExportOptions:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [scorm_1_2, scorm_2004]
+          default: scorm_1_2
+        includeMedia:
+          type: boolean
+          default: true
+
+    ExportFormatsResponse:
+      type: object
+      properties:
+        formats:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+
+    ExportStatusResponse:
+      type: object
+      properties:
+        exportId:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        progress:
+          type: number
+        downloadUrl:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+
+    # ── Media ──────────────────────────
+    MediaUploadResponse:
+      type: object
+      properties:
+        fileId:
+          type: string
+        filePath:
+          type: string
+        fileUrl:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        fileSize:
+          type: integer
+        category:
+          type: string
+          enum: [image, video, audio, document]
+
+    MediaFileInfo:
+      type: object
+      properties:
+        fileId:
+          type: string
+        fileName:
+          type: string
+        filePath:
+          type: string
+        mimeType:
+          type: string
+        fileSize:
+          type: integer
+        category:
+          type: string
+        createdAt:
+          type: string
+          format: date-time

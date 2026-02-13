@@ -271,7 +271,7 @@ class CreateCustomTemplateRequest(BaseModel):
     description: str = Field(..., min_length=1, max_length=1000)
     category: str = Field(..., description="Template category ID")
     type: str = Field(..., description="Template type")
-    fields: List[FieldDefinition] = Field(..., min_items=1)
+    fields: List[FieldDefinition] = Field(..., min_length=1)
     layout: LayoutDefinition = Field(default_factory=LayoutDefinition)
     styling: Optional[StylingDefinition] = None
     sampleContent: Optional[Dict[str, Any]] = None
@@ -658,7 +658,7 @@ async def get_builder_components() -> Dict[str, Any]:
 
 class BatchPageCreateRequest(BaseModel):
     """Request for creating multiple pages from templates"""
-    pages: List[BatchPageRequest] = Field(..., min_items=1, max_items=100)
+    pages: List[BatchPageRequest] = Field(..., min_length=1, max_length=100)
     commonSettings: Optional[Dict[str, Any]] = None
     insertPosition: str = "end"  # "start", "end", or position index
     dryRun: bool = False
