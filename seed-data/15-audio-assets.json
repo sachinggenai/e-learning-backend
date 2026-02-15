@@ -1,0 +1,46 @@
+[
+  {
+    "audioId": "audio-001",
+    "audioUrl": "/audio/hazards-overview.mp3",
+    "duration": 120,
+    "label": "Hazard Overview Narration",
+    "transcript": "In this section we cover the four main types of workplace hazards: physical, chemical, ergonomic, and biological...",
+    "mimeType": "audio/mpeg",
+    "fileSize": 1920000,
+    "courseId": "course-safety-101",
+    "createdAt": "2026-01-16T10:00:00Z"
+  },
+  {
+    "audioId": "audio-002",
+    "audioUrl": "/audio/ppe-intro.mp3",
+    "duration": 90,
+    "label": "PPE Introduction",
+    "transcript": "Personal Protective Equipment, or PPE, is your last line of defense against workplace hazards...",
+    "mimeType": "audio/mpeg",
+    "fileSize": 1440000,
+    "courseId": "course-safety-101",
+    "createdAt": "2026-01-16T10:30:00Z"
+  },
+  {
+    "audioId": "audio-003",
+    "audioUrl": "/audio/welcome-cs.mp3",
+    "duration": 60,
+    "label": "Customer Service Welcome",
+    "transcript": "Welcome to the Customer Service Excellence course. Great customer service builds loyalty...",
+    "mimeType": "audio/mpeg",
+    "fileSize": 960000,
+    "courseId": "course-cs-excellence",
+    "createdAt": "2026-01-21T09:00:00Z"
+  },
+  {
+    "audioId": "audio-004",
+    "audioUrl": "/audio/html-basics.mp3",
+    "duration": 180,
+    "label": "HTML Fundamentals Narration",
+    "transcript": "HTML, or HyperText Markup Language, is the standard language for creating web pages...",
+    "mimeType": "audio/mpeg",
+    "fileSize": 2880000,
+    "courseId": "course-webdev-intro",
+    "createdAt": "2026-02-02T08:00:00Z"
+  }
+]

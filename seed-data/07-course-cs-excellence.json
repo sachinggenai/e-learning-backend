@@ -1,0 +1,560 @@
+{
+  "courseId": "course-cs-excellence",
+  "title": "Customer Service Excellence",
+  "author": "Learning & Development",
+  "language": "en",
+  "description": "Master the HEART framework, handle difficult customers with empathy, and elevate your customer service skills.",
+  "version": "2.1.0",
+  "status": "published",
+  "pages": [
+    {
+      "pageId": "p2-01",
+      "title": "Welcome to Customer Service Excellence",
+      "order": 0,
+      "components": [
+        {
+          "componentId": "c2-01-01",
+          "componentType": "text-with-media",
+          "order": 0,
+          "data": {
+            "title": "Delivering 5-Star Customer Service",
+            "body": "<h2>Welcome!</h2><p>Great customer service builds loyalty and drives business growth. In this interactive course, you'll learn the HEART framework, handle difficult situations, and practice empathetic communication.</p>",
+            "mediaUrl": "https://images.unsplash.com/photo-1556745757-8d76bdb6984b?w=800",
+            "mediaType": "image"
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c2-01-02",
+          "componentType": "pre-assessment",
+          "order": 1,
+          "data": {
+            "title": "How much do you know?",
+            "instructions": "Take this quick pre-assessment so we can customize your learning path.",
+            "questions": [
+              {
+                "id": "pre-q1",
+                "question": "What does empathy mean in customer service?",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "Understanding the customer's feelings",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "b",
+                    "text": "Giving refunds immediately",
+                    "isCorrect": false
+                  }
+                ],
+                "maxScore": 10
+              },
+              {
+                "id": "pre-q2",
+                "question": "The HEART framework stands for...",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "Hear, Empathize, Apologize, Resolve, Thank",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "b",
+                    "text": "Help, Explain, Ask, Recite, Tell",
+                    "isCorrect": false
+                  }
+                ],
+                "maxScore": 10
+              }
+            ],
+            "skipIfPassed": true,
+            "passingScore": 80
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 0
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p2-02",
+      "title": "The HEART Framework",
+      "order": 1,
+      "components": [
+        {
+          "componentId": "c2-02-01",
+          "componentType": "step-by-step",
+          "order": 0,
+          "data": {
+            "title": "The HEART Framework",
+            "steps": [
+              {
+                "id": "h",
+                "title": "Hear",
+                "description": "Actively listen to the customer. Let them finish speaking without interruption. Use verbal affirmations like \"I understand.\"",
+                "icon": "ear"
+              },
+              {
+                "id": "e",
+                "title": "Empathize",
+                "description": "Show genuine empathy. Say things like \"I can see how frustrating that must be\" to validate their feelings.",
+                "icon": "heart"
+              },
+              {
+                "id": "a",
+                "title": "Apologize",
+                "description": "Offer a sincere apology even if it's not your fault. \"I'm sorry you're experiencing this\" goes a long way.",
+                "icon": "message-circle"
+              },
+              {
+                "id": "r",
+                "title": "Resolve",
+                "description": "Take ownership and find a solution. If you can't fix it immediately, give a clear timeline and follow up.",
+                "icon": "check-circle"
+              },
+              {
+                "id": "t",
+                "title": "Thank",
+                "description": "Thank the customer for their patience and for bringing the issue to your attention.",
+                "icon": "thumbs-up"
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c2-02-02",
+          "componentType": "flip-cards",
+          "order": 1,
+          "data": {
+            "title": "Practice Phrases",
+            "cards": [
+              {
+                "id": "fc-1",
+                "front": "🗣️ Hear",
+                "back": "\"Thank you for sharing that with me. Let me make sure I understand correctly...\""
+              },
+              {
+                "id": "fc-2",
+                "front": "❤️ Empathize",
+                "back": "\"I completely understand your frustration. That would bother me too.\""
+              },
+              {
+                "id": "fc-3",
+                "front": "🙏 Apologize",
+                "back": "\"I sincerely apologize for the inconvenience. This should not have happened.\""
+              },
+              {
+                "id": "fc-4",
+                "front": "✅ Resolve",
+                "back": "\"Here's what I'm going to do to fix this for you right away...\""
+              },
+              {
+                "id": "fc-5",
+                "front": "🌟 Thank",
+                "back": "\"Thank you for your patience. We really value your feedback.\""
+              }
+            ],
+            "columns": 3
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p2-03",
+      "title": "Handling Difficult Customers",
+      "order": 2,
+      "components": [
+        {
+          "componentId": "c2-03-01",
+          "componentType": "branching-scenario",
+          "order": 0,
+          "data": {
+            "title": "The Angry Customer",
+            "nodes": [
+              {
+                "id": "node-start",
+                "text": "A customer storms in, visibly upset, and says loudly: \"I've been waiting for 30 minutes! This is unacceptable!\"",
+                "options": [
+                  {
+                    "id": "opt-1a",
+                    "text": "Respond calmly: \"I'm so sorry for the wait. Let me help you right away.\"",
+                    "nextNodeId": "node-good1",
+                    "points": 10
+                  },
+                  {
+                    "id": "opt-1b",
+                    "text": "Say: \"Everyone has to wait. Please be patient.\"",
+                    "nextNodeId": "node-bad1",
+                    "points": 0
+                  },
+                  {
+                    "id": "opt-1c",
+                    "text": "Call your manager immediately.",
+                    "nextNodeId": "node-ok1",
+                    "points": 5
+                  }
+                ]
+              },
+              {
+                "id": "node-good1",
+                "text": "The customer calms down slightly. \"Well, at least someone is paying attention. My order was wrong last time too.\"",
+                "options": [
+                  {
+                    "id": "opt-2a",
+                    "text": "\"That must have been very frustrating. Let me look into your previous order and fix everything today.\"",
+                    "nextNodeId": "node-best",
+                    "points": 10
+                  },
+                  {
+                    "id": "opt-2b",
+                    "text": "\"I'll fix today's order. The previous one is done.\"",
+                    "nextNodeId": "node-ok2",
+                    "points": 5
+                  }
+                ]
+              },
+              {
+                "id": "node-bad1",
+                "text": "The customer becomes more upset and asks for a manager. You missed an opportunity to de-escalate. Score: 0/20",
+                "options": []
+              },
+              {
+                "id": "node-ok1",
+                "text": "Your manager resolves the issue. However, you could have handled this yourself using the HEART framework. Score: 5/20",
+                "options": []
+              },
+              {
+                "id": "node-ok2",
+                "text": "The customer is partially satisfied but feels their past issue was dismissed. Score: 15/20",
+                "options": []
+              },
+              {
+                "id": "node-best",
+                "text": "Excellent! The customer feels heard and valued. They leave happy and tell a friend about the great service. Score: 20/20",
+                "options": []
+              }
+            ],
+            "startNodeId": "node-start"
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 50
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p2-04",
+      "title": "Self-Assessment & Action Plan",
+      "order": 3,
+      "components": [
+        {
+          "componentId": "c2-04-01",
+          "componentType": "self-assessment",
+          "order": 0,
+          "data": {
+            "title": "Rate Your Customer Service Skills",
+            "criteria": [
+              {
+                "id": "crit-listen",
+                "name": "Active Listening",
+                "description": "I listen fully before responding",
+                "scale": 5
+              },
+              {
+                "id": "crit-empathy",
+                "name": "Empathy",
+                "description": "I genuinely understand customer feelings",
+                "scale": 5
+              },
+              {
+                "id": "crit-resolve",
+                "name": "Problem Resolution",
+                "description": "I find effective solutions quickly",
+                "scale": 5
+              },
+              {
+                "id": "crit-follow",
+                "name": "Follow-Up",
+                "description": "I follow up to ensure satisfaction",
+                "scale": 5
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c2-04-02",
+          "componentType": "action-planning",
+          "order": 1,
+          "data": {
+            "title": "My Action Plan",
+            "goals": [
+              {
+                "id": "goal-1",
+                "description": "Practice the HEART framework with 3 customers this week",
+                "deadline": "",
+                "actions": [
+                  "Use the phrase card at my desk",
+                  "Ask a colleague to role-play"
+                ]
+              },
+              {
+                "id": "goal-2",
+                "description": "Reduce average complaint resolution time by 20%",
+                "deadline": "",
+                "actions": [
+                  "Identify common issues",
+                  "Prepare solution templates"
+                ]
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p2-05",
+      "title": "Final Quiz & Certificate",
+      "order": 4,
+      "components": [
+        {
+          "componentId": "c2-05-01",
+          "componentType": "quiz-game",
+          "order": 0,
+          "data": {
+            "title": "Customer Service Challenge",
+            "questions": [
+              {
+                "id": "qg-1",
+                "question": "What does the \"H\" in HEART stand for?",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "Hear",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "b",
+                    "text": "Help",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "c",
+                    "text": "Handle",
+                    "isCorrect": false
+                  }
+                ],
+                "difficulty": "easy",
+                "timeLimit": 20
+              },
+              {
+                "id": "qg-2",
+                "question": "When a customer is angry, you should first...",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "Listen without interrupting",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "b",
+                    "text": "Offer a discount",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "c",
+                    "text": "Transfer to manager",
+                    "isCorrect": false
+                  }
+                ],
+                "difficulty": "medium",
+                "timeLimit": 25
+              },
+              {
+                "id": "qg-3",
+                "question": "Which is the best way to close a service interaction?",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "Say goodbye and hang up",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "b",
+                    "text": "Thank the customer and confirm resolution",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "c",
+                    "text": "Ask them to fill out a survey",
+                    "isCorrect": false
+                  }
+                ],
+                "difficulty": "medium",
+                "timeLimit": 25
+              }
+            ],
+            "streakBonus": true,
+            "showLeaderboard": false
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 60
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c2-05-02",
+          "componentType": "completion-certificate",
+          "order": 1,
+          "data": {
+            "title": "Certificate of Excellence",
+            "recipientField": "learnerName",
+            "courseTitle": "Customer Service Excellence",
+            "completionDate": "",
+            "signatureText": "Learning & Development",
+            "templateStyle": "classic"
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    }
+  ],
+  "navigation": {
+    "allowSkip": true,
+    "showProgress": true,
+    "linearProgression": false
+  },
+  "settings": {
+    "themeId": "preset-vibrant",
+    "autoplay": false,
+    "duration": 30
+  },
+  "scoring": {
+    "config": {
+      "passingScore": 60,
+      "maxAttempts": null,
+      "attemptScoring": "best",
+      "showCorrectAnswers": true,
+      "showScoreAfterQuestion": true,
+      "showScoreAfterPage": true,
+      "weightedScoring": true,
+      "allowPartialCredit": true
+    },
+    "componentScores": [
+      {
+        "componentId": "c2-03-01",
+        "componentType": "branching-scenario",
+        "maxPoints": 20,
+        "weight": 2
+      },
+      {
+        "componentId": "c2-05-01",
+        "componentType": "quiz-game",
+        "maxPoints": 30,
+        "weight": 1
+      }
+    ]
+  },
+  "createdAt": "2026-01-20T14:00:00Z",
+  "updatedAt": "2026-02-14T16:30:00Z"
+}

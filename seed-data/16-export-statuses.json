@@ -1,0 +1,30 @@
+{
+  "pending": {
+    "exportId": "exp-001",
+    "status": "pending",
+    "progress": 0,
+    "downloadUrl": null,
+    "error": null
+  },
+  "processing": {
+    "exportId": "exp-001",
+    "status": "processing",
+    "progress": 45,
+    "downloadUrl": null,
+    "error": null
+  },
+  "completed": {
+    "exportId": "exp-001",
+    "status": "completed",
+    "progress": 100,
+    "downloadUrl": "/exports/course-safety-101-scorm12.zip",
+    "error": null
+  },
+  "failed": {
+    "exportId": "exp-002",
+    "status": "failed",
+    "progress": 60,
+    "downloadUrl": null,
+    "error": "Failed to package audio assets: file not found /audio/missing.mp3"
+  }
+}

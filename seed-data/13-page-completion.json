@@ -1,0 +1,23 @@
+{
+  "pageId": "p1-02",
+  "title": "Hazard Identification",
+  "completed": true,
+  "strategy": "all",
+  "components": [
+    {
+      "componentId": "c1-02-01",
+      "completed": true,
+      "completionType": "interact"
+    },
+    {
+      "componentId": "c1-02-02",
+      "completed": true,
+      "completionType": "interact"
+    },
+    {
+      "componentId": "c1-02-03",
+      "completed": true,
+      "completionType": "view"
+    }
+  ]
+}

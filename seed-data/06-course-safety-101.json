@@ -1,0 +1,842 @@
+{
+  "courseId": "course-safety-101",
+  "title": "Workplace Safety & Compliance",
+  "author": "Safety Training Dept.",
+  "language": "en",
+  "description": "A comprehensive workplace safety course covering hazard identification, PPE requirements, emergency procedures, and OSHA compliance guidelines.",
+  "version": "1.0.0",
+  "status": "published",
+  "pages": [
+    {
+      "pageId": "p1-01",
+      "title": "Welcome to Workplace Safety",
+      "order": 0,
+      "components": [
+        {
+          "componentId": "c1-01-01",
+          "componentType": "text-with-media",
+          "order": 0,
+          "data": {
+            "title": "Workplace Safety & Compliance",
+            "body": "<h2>Welcome!</h2><p>This course covers essential workplace safety principles, hazard identification, and compliance requirements. By the end, you will be able to identify common hazards and apply OSHA guidelines.</p>",
+            "mediaUrl": "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800",
+            "mediaType": "image"
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c1-01-02",
+          "componentType": "module-overview",
+          "order": 1,
+          "data": {
+            "title": "Course Overview",
+            "description": "This course contains 7 modules covering hazard identification, PPE, emergency procedures, and compliance requirements.",
+            "objectives": [
+              "Identify common workplace hazards",
+              "Understand personal protective equipment requirements",
+              "Know emergency evacuation procedures",
+              "Apply OSHA compliance guidelines"
+            ],
+            "estimatedDuration": 45
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c1-01-03",
+          "componentType": "learning-roadmap",
+          "order": 2,
+          "data": {
+            "title": "Your Learning Path",
+            "milestones": [
+              {
+                "id": "ms-1",
+                "title": "Hazard Identification",
+                "description": "Learn to spot workplace hazards",
+                "pageId": "p1-02"
+              },
+              {
+                "id": "ms-2",
+                "title": "PPE Requirements",
+                "description": "Personal protective equipment",
+                "pageId": "p1-03"
+              },
+              {
+                "id": "ms-3",
+                "title": "Emergency Procedures",
+                "description": "What to do in an emergency",
+                "pageId": "p1-04"
+              },
+              {
+                "id": "ms-4",
+                "title": "Knowledge Check",
+                "description": "Test your understanding",
+                "pageId": "p1-05"
+              },
+              {
+                "id": "ms-5",
+                "title": "Final Assessment",
+                "description": "Prove your competency",
+                "pageId": "p1-06"
+              },
+              {
+                "id": "ms-6",
+                "title": "Completion",
+                "description": "Certificate of completion",
+                "pageId": "p1-07"
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p1-02",
+      "title": "Hazard Identification",
+      "order": 1,
+      "components": [
+        {
+          "componentId": "c1-02-01",
+          "componentType": "tabs",
+          "order": 0,
+          "data": {
+            "tabs": [
+              {
+                "id": "tab-physical",
+                "title": "Physical Hazards",
+                "body": "<p><strong>Physical hazards</strong> include slippery floors, falling objects, moving machinery, and extreme temperatures. Always be aware of your surroundings.</p>"
+              },
+              {
+                "id": "tab-chemical",
+                "title": "Chemical Hazards",
+                "body": "<p><strong>Chemical hazards</strong> include toxic fumes, corrosive substances, and flammable materials. Always read Safety Data Sheets (SDS) before handling.</p>"
+              },
+              {
+                "id": "tab-ergonomic",
+                "title": "Ergonomic Hazards",
+                "body": "<p><strong>Ergonomic hazards</strong> arise from repetitive motions, poor posture, and improper workstation setup. Take regular breaks.</p>"
+              },
+              {
+                "id": "tab-biological",
+                "title": "Biological Hazards",
+                "body": "<p><strong>Biological hazards</strong> include bacteria, viruses, mold, and animal-related risks. Proper hygiene is essential.</p>"
+              }
+            ],
+            "defaultTabId": "tab-physical"
+          },
+          "audioConfig": {
+            "enabled": true,
+            "audioItems": [
+              {
+                "audioUrl": "/audio/hazards-overview.mp3",
+                "triggerOn": "load",
+                "autoplay": false,
+                "requiredForCompletion": false,
+                "label": "Hazard Overview Narration",
+                "duration": 120
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c1-02-02",
+          "componentType": "image-hotspots",
+          "order": 1,
+          "data": {
+            "title": "Identify Hazards in This Workspace",
+            "imageUrl": "https://images.unsplash.com/photo-1581092921461-eab62e97a780?w=800",
+            "hotspots": [
+              {
+                "id": "hs-1",
+                "x": 15,
+                "y": 40,
+                "label": "Wet Floor",
+                "content": "This wet floor is a slip hazard. Place a warning sign and mop up immediately."
+              },
+              {
+                "id": "hs-2",
+                "x": 55,
+                "y": 25,
+                "label": "Unsecured Shelf",
+                "content": "This heavy shelf is not bolted to the wall. It could topple and cause injury."
+              },
+              {
+                "id": "hs-3",
+                "x": 80,
+                "y": 60,
+                "label": "Blocked Exit",
+                "content": "This emergency exit is blocked by boxes. Emergency exits must always remain clear."
+              },
+              {
+                "id": "hs-4",
+                "x": 35,
+                "y": 75,
+                "label": "Frayed Wire",
+                "content": "This electrical cord is frayed and could cause a fire or shock. Replace it immediately."
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "interact",
+            "requiredInteractions": [
+              "hs-1",
+              "hs-2",
+              "hs-3",
+              "hs-4"
+            ]
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c1-02-03",
+          "componentType": "dos-donts",
+          "order": 2,
+          "data": {
+            "title": "Hazard Awareness Best Practices",
+            "dos": [
+              "Report hazards immediately to your supervisor",
+              "Wear appropriate PPE at all times",
+              "Keep emergency exits clear",
+              "Follow lockout/tagout procedures"
+            ],
+            "donts": [
+              "Ignore wet floor signs",
+              "Block fire exits with equipment",
+              "Use damaged equipment",
+              "Handle chemicals without reading SDS"
+            ],
+            "showIcons": true
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p1-03",
+      "title": "Personal Protective Equipment (PPE)",
+      "order": 2,
+      "components": [
+        {
+          "componentId": "c1-03-01",
+          "componentType": "accordion",
+          "order": 0,
+          "data": {
+            "panels": [
+              {
+                "id": "panel-head",
+                "title": "Head Protection",
+                "body": "<p>Hard hats protect against falling objects, bumps, and electrical hazards. Choose ANSI-rated helmets appropriate for your work environment.</p>"
+              },
+              {
+                "id": "panel-eye",
+                "title": "Eye & Face Protection",
+                "body": "<p>Safety glasses, goggles, and face shields protect against flying debris, chemical splashes, and radiation. Always use ANSI Z87.1 rated eyewear.</p>"
+              },
+              {
+                "id": "panel-hand",
+                "title": "Hand Protection",
+                "body": "<p>Select gloves based on the hazard: leather for cuts, nitrile for chemicals, insulated for electricity. Replace when worn or torn.</p>"
+              },
+              {
+                "id": "panel-foot",
+                "title": "Foot Protection",
+                "body": "<p>Steel-toed boots protect against falling objects and compression. Anti-slip soles prevent falls on wet surfaces.</p>"
+              },
+              {
+                "id": "panel-resp",
+                "title": "Respiratory Protection",
+                "body": "<p>Respirators and masks protect against dust, fumes, and toxic gases. Ensure proper fit testing and filter selection.</p>"
+              }
+            ],
+            "allowMultipleOpen": true
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c1-03-02",
+          "componentType": "comparison-table",
+          "order": 1,
+          "data": {
+            "title": "PPE Selection Guide",
+            "columns": [
+              {
+                "id": "col-hazard",
+                "header": "Hazard Type"
+              },
+              {
+                "id": "col-ppe",
+                "header": "Required PPE"
+              },
+              {
+                "id": "col-standard",
+                "header": "Standard"
+              }
+            ],
+            "rows": [
+              {
+                "id": "row-1",
+                "cells": [
+                  "Falling objects",
+                  "Hard hat (Type I or II)",
+                  "ANSI Z89.1"
+                ]
+              },
+              {
+                "id": "row-2",
+                "cells": [
+                  "Chemical splash",
+                  "Safety goggles + face shield",
+                  "ANSI Z87.1"
+                ]
+              },
+              {
+                "id": "row-3",
+                "cells": [
+                  "Noise > 85 dB",
+                  "Ear plugs / muffs",
+                  "OSHA 1910.95"
+                ]
+              },
+              {
+                "id": "row-4",
+                "cells": [
+                  "Airborne particles",
+                  "N95 respirator",
+                  "NIOSH 42 CFR 84"
+                ]
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p1-04",
+      "title": "Emergency Procedures",
+      "order": 3,
+      "components": [
+        {
+          "componentId": "c1-04-01",
+          "componentType": "step-by-step",
+          "order": 0,
+          "data": {
+            "title": "Fire Emergency Evacuation",
+            "steps": [
+              {
+                "id": "step-1",
+                "title": "Sound the Alarm",
+                "description": "Pull the nearest fire alarm and call 911. Do not attempt to fight the fire unless you are trained and it is small.",
+                "icon": "alert-triangle"
+              },
+              {
+                "id": "step-2",
+                "title": "Evacuate",
+                "description": "Walk quickly to the nearest exit. Do NOT use elevators. Close doors behind you to slow fire spread.",
+                "icon": "log-out"
+              },
+              {
+                "id": "step-3",
+                "title": "Assembly Point",
+                "description": "Go to the designated assembly point. Stay at least 50 feet away from the building.",
+                "icon": "map-pin"
+              },
+              {
+                "id": "step-4",
+                "title": "Head Count",
+                "description": "Report to your section warden for a head count. Inform them of any missing persons.",
+                "icon": "users"
+              },
+              {
+                "id": "step-5",
+                "title": "Wait for All Clear",
+                "description": "Do not re-enter the building until the fire department gives the all-clear signal.",
+                "icon": "check-circle"
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c1-04-02",
+          "componentType": "scenario",
+          "order": 1,
+          "data": {
+            "title": "Emergency Decision",
+            "context": "You smell smoke coming from the server room. The smoke alarm has not gone off yet.",
+            "question": "What should you do first?",
+            "options": [
+              {
+                "id": "opt-1",
+                "text": "Investigate the server room yourself",
+                "points": 2,
+                "feedback": "Risky — you could be exposed to toxic fumes. Let trained personnel handle it."
+              },
+              {
+                "id": "opt-2",
+                "text": "Pull the fire alarm and evacuate",
+                "points": 10,
+                "feedback": "Correct! Safety first. Alert everyone and evacuate immediately."
+              },
+              {
+                "id": "opt-3",
+                "text": "Wait to see if the alarm goes off automatically",
+                "points": 0,
+                "feedback": "Dangerous — alarms can fail. Act immediately when you detect a hazard."
+              },
+              {
+                "id": "opt-4",
+                "text": "Email the facilities team",
+                "points": 1,
+                "feedback": "Too slow for an emergency. Use the fire alarm for immediate response."
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 80
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p1-05",
+      "title": "Knowledge Check",
+      "order": 4,
+      "components": [
+        {
+          "componentId": "c1-05-01",
+          "componentType": "knowledge-check",
+          "order": 0,
+          "data": {
+            "title": "Check Your Understanding",
+            "questions": [
+              {
+                "id": "kc-q1",
+                "question": "Which type of PPE protects against airborne particles?",
+                "options": [
+                  {
+                    "id": "kc-q1-a",
+                    "text": "Hard hat",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "kc-q1-b",
+                    "text": "N95 respirator",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "kc-q1-c",
+                    "text": "Safety glasses",
+                    "isCorrect": false
+                  }
+                ],
+                "explanation": "N95 respirators filter at least 95% of airborne particles."
+              },
+              {
+                "id": "kc-q2",
+                "question": "What should you do first when you smell smoke?",
+                "options": [
+                  {
+                    "id": "kc-q2-a",
+                    "text": "Pull the fire alarm and evacuate",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "kc-q2-b",
+                    "text": "Investigate the source",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "kc-q2-c",
+                    "text": "Send an email to management",
+                    "isCorrect": false
+                  }
+                ],
+                "explanation": "Always prioritize safety. Pull the alarm and evacuate immediately."
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 50
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p1-06",
+      "title": "Final Assessment",
+      "order": 5,
+      "components": [
+        {
+          "componentId": "c1-06-01",
+          "componentType": "final-assessment",
+          "order": 0,
+          "data": {
+            "title": "Workplace Safety Final Assessment",
+            "instructions": "You must score 70% or higher to pass and receive your certificate. You have 3 attempts.",
+            "passingScore": 70,
+            "questions": [
+              {
+                "id": "fa-q1",
+                "type": "mcq",
+                "question": "What is the minimum noise level requiring hearing protection?",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "70 dB",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "b",
+                    "text": "85 dB",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "c",
+                    "text": "100 dB",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "d",
+                    "text": "60 dB",
+                    "isCorrect": false
+                  }
+                ],
+                "maxScore": 10
+              },
+              {
+                "id": "fa-q2",
+                "type": "mcq",
+                "question": "Which agency sets workplace safety standards in the US?",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "EPA",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "b",
+                    "text": "FDA",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "c",
+                    "text": "OSHA",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "d",
+                    "text": "CDC",
+                    "isCorrect": false
+                  }
+                ],
+                "maxScore": 10
+              },
+              {
+                "id": "fa-q3",
+                "type": "true-false",
+                "question": "You should use elevators during a fire evacuation.",
+                "correctAnswer": false,
+                "explanation": "Never use elevators during a fire. Use stairs.",
+                "maxScore": 10
+              },
+              {
+                "id": "fa-q4",
+                "type": "mcq",
+                "question": "What document provides information about chemical hazards?",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "Safety Data Sheet (SDS)",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "b",
+                    "text": "Employee handbook",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "c",
+                    "text": "Fire escape plan",
+                    "isCorrect": false
+                  }
+                ],
+                "maxScore": 10
+              },
+              {
+                "id": "fa-q5",
+                "type": "mcq",
+                "question": "Lockout/Tagout procedures are used for:",
+                "options": [
+                  {
+                    "id": "a",
+                    "text": "Fire prevention",
+                    "isCorrect": false
+                  },
+                  {
+                    "id": "b",
+                    "text": "Machine maintenance safety",
+                    "isCorrect": true
+                  },
+                  {
+                    "id": "c",
+                    "text": "Chemical storage",
+                    "isCorrect": false
+                  }
+                ],
+                "maxScore": 10
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 70
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p1-07",
+      "title": "Course Complete",
+      "order": 6,
+      "components": [
+        {
+          "componentId": "c1-07-01",
+          "componentType": "summary-takeaways",
+          "order": 0,
+          "data": {
+            "title": "Key Takeaways",
+            "keyPoints": [
+              "Workplace hazards fall into physical, chemical, ergonomic, and biological categories",
+              "Always select PPE based on the specific hazard and applicable standard",
+              "In an emergency: Alarm → Evacuate → Assembly → Head Count → Wait for All Clear",
+              "OSHA mandates hearing protection at 85 dB or above",
+              "Safety Data Sheets (SDS) provide essential chemical hazard information"
+            ],
+            "nextSteps": "Download the reference card below and keep it at your workstation."
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c1-07-02",
+          "componentType": "policy-acknowledgement",
+          "order": 1,
+          "data": {
+            "title": "Workplace Safety Policy",
+            "policyText": "I acknowledge that I have completed the Workplace Safety & Compliance training and understand my responsibilities to maintain a safe working environment. I will follow all safety procedures and report hazards immediately.",
+            "acknowledgementText": "I have read and agree to abide by the workplace safety policy",
+            "requireSignature": true
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c1-07-03",
+          "componentType": "completion-certificate",
+          "order": 2,
+          "data": {
+            "title": "Certificate of Completion",
+            "recipientField": "learnerName",
+            "courseTitle": "Workplace Safety & Compliance",
+            "completionDate": "",
+            "signatureText": "Safety Training Department",
+            "templateStyle": "classic"
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    }
+  ],
+  "navigation": {
+    "allowSkip": false,
+    "showProgress": true,
+    "linearProgression": true
+  },
+  "settings": {
+    "themeId": "preset-corporate",
+    "autoplay": false,
+    "duration": 45
+  },
+  "scoring": {
+    "config": {
+      "passingScore": 70,
+      "maxAttempts": 3,
+      "attemptScoring": "best",
+      "showCorrectAnswers": true,
+      "showScoreAfterQuestion": true,
+      "showScoreAfterPage": true,
+      "weightedScoring": false,
+      "allowPartialCredit": true
+    },
+    "componentScores": [
+      {
+        "componentId": "c1-04-02",
+        "maxPoints": 10,
+        "weight": 1
+      },
+      {
+        "componentId": "c1-05-01",
+        "maxPoints": 20,
+        "weight": 1
+      },
+      {
+        "componentId": "c1-06-01",
+        "maxPoints": 50,
+        "weight": 2
+      }
+    ],
+    "scormReporting": {
+      "enabled": true,
+      "version": "1.2",
+      "reportScore": true,
+      "reportCompletion": true,
+      "reportInteractions": true
+    }
+  },
+  "createdAt": "2026-01-15T09:00:00Z",
+  "updatedAt": "2026-02-15T10:00:00Z"
+}

@@ -1,0 +1,56 @@
+{
+  "totalScore": 35,
+  "maxScore": 100,
+  "percentage": 35,
+  "passed": false,
+  "passingScore": 70,
+  "attemptNumber": 1,
+  "remainingAttempts": 2,
+  "componentResults": [
+    {
+      "componentId": "c1-06-01",
+      "componentType": "final-assessment",
+      "score": 20,
+      "maxScore": 50,
+      "weight": 2,
+      "weightedScore": 40,
+      "questionResults": [
+        {
+          "questionId": "fa-q1",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "fa-q2",
+          "correct": false,
+          "score": 0,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "fa-q3",
+          "correct": false,
+          "score": 0,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "fa-q4",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "fa-q5",
+          "correct": false,
+          "score": 0,
+          "maxScore": 10,
+          "partialCredit": false
+        }
+      ]
+    }
+  ]
+}

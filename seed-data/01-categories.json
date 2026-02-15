@@ -1,0 +1,138 @@
+[
+  {
+    "categoryId": "content-presentation",
+    "displayName": "Content Presentation",
+    "description": "Core content display components including tabs, accordion, text, image, and video",
+    "icon": "layout",
+    "componentCount": 7,
+    "sortOrder": 0
+  },
+  {
+    "categoryId": "process-flow",
+    "displayName": "Process & Flow",
+    "description": "Step-by-step processes, cycles, flowcharts, and decision trees",
+    "icon": "git-merge",
+    "componentCount": 5,
+    "sortOrder": 1
+  },
+  {
+    "categoryId": "interaction",
+    "displayName": "Interaction",
+    "description": "Interactive elements like drag-and-drop, flip cards, sliders, and carousels",
+    "icon": "mouse-pointer",
+    "componentCount": 5,
+    "sortOrder": 2
+  },
+  {
+    "categoryId": "scenario",
+    "displayName": "Scenario-Based",
+    "description": "Scenario simulations, branching narratives, role-plays, and case studies",
+    "icon": "git-branch",
+    "componentCount": 4,
+    "sortOrder": 3
+  },
+  {
+    "categoryId": "assessment",
+    "displayName": "Assessment",
+    "description": "Quizzes and assessments: MCQ, multi-select, true/false, fill-blanks, matching",
+    "icon": "check-circle",
+    "componentCount": 8,
+    "sortOrder": 4
+  },
+  {
+    "categoryId": "comparison",
+    "displayName": "Comparison & Analysis",
+    "description": "Side-by-side comparisons, pros/cons, before/after, and matrix grids",
+    "icon": "columns",
+    "componentCount": 4,
+    "sortOrder": 5
+  },
+  {
+    "categoryId": "media-rich",
+    "displayName": "Media-Rich",
+    "description": "Video-based slides, audio slides, animated explainers, and infographics",
+    "icon": "film",
+    "componentCount": 4,
+    "sortOrder": 6
+  },
+  {
+    "categoryId": "microlearning",
+    "displayName": "Microlearning",
+    "description": "Bite-size learning cards, flashcards, and quick tips",
+    "icon": "zap",
+    "componentCount": 3,
+    "sortOrder": 7
+  },
+  {
+    "categoryId": "navigation",
+    "displayName": "Navigation & Structural",
+    "description": "Course menu, learning roadmap, module overview, summary, resources",
+    "icon": "map",
+    "componentCount": 5,
+    "sortOrder": 8
+  },
+  {
+    "categoryId": "gamification",
+    "displayName": "Gamification",
+    "description": "Quiz games, points & badges, progress trackers, level-based learning",
+    "icon": "trophy",
+    "componentCount": 4,
+    "sortOrder": 9
+  },
+  {
+    "categoryId": "compliance",
+    "displayName": "Compliance & Corporate",
+    "description": "Policy acknowledgement, dos/don'ts, code of conduct, regulatory scenarios",
+    "icon": "shield",
+    "componentCount": 5,
+    "sortOrder": 10
+  },
+  {
+    "categoryId": "diagnostic",
+    "displayName": "Diagnostic & Adaptive",
+    "description": "Pre-assessments, diagnostic quizzes, skill gap analysis, adaptive paths",
+    "icon": "activity",
+    "componentCount": 5,
+    "sortOrder": 11
+  },
+  {
+    "categoryId": "practice",
+    "displayName": "Practice & Simulation",
+    "description": "Guided practice, try-it simulations, sandbox practice, error identification",
+    "icon": "cpu",
+    "componentCount": 5,
+    "sortOrder": 12
+  },
+  {
+    "categoryId": "feedback",
+    "displayName": "Feedback & Reflection",
+    "description": "Reflective questions, learner journals, self-assessments, action planning",
+    "icon": "message-circle",
+    "componentCount": 5,
+    "sortOrder": 13
+  },
+  {
+    "categoryId": "social",
+    "displayName": "Social & Collaborative",
+    "description": "Discussion prompts, peer reviews, polls, team challenges, debates",
+    "icon": "users",
+    "componentCount": 5,
+    "sortOrder": 14
+  },
+  {
+    "categoryId": "accessibility",
+    "displayName": "Accessibility & Support",
+    "description": "Accessibility tips, keyboard guides, screen reader guides, language selectors",
+    "icon": "eye",
+    "componentCount": 5,
+    "sortOrder": 15
+  },
+  {
+    "categoryId": "analytics",
+    "displayName": "Analytics & Learning Insight",
+    "description": "Progress summaries, performance dashboards, skill mastery, certificates",
+    "icon": "bar-chart-2",
+    "componentCount": 5,
+    "sortOrder": 16
+  }
+]

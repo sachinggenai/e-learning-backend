@@ -1,0 +1,47 @@
+[
+  {
+    "fileId": "media-001",
+    "filePath": "/uploads/images/workspace-hazards.jpg",
+    "fileUrl": "https://images.unsplash.com/photo-1581092921461-eab62e97a780?w=800",
+    "fileName": "workspace-hazards.jpg",
+    "mimeType": "image/jpeg",
+    "fileSize": 245760,
+    "category": "image"
+  },
+  {
+    "fileId": "media-002",
+    "filePath": "/uploads/images/customer-service.jpg",
+    "fileUrl": "https://images.unsplash.com/photo-1556745757-8d76bdb6984b?w=800",
+    "fileName": "customer-service.jpg",
+    "mimeType": "image/jpeg",
+    "fileSize": 198400,
+    "category": "image"
+  },
+  {
+    "fileId": "media-003",
+    "filePath": "/uploads/images/webdev-coding.jpg",
+    "fileUrl": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800",
+    "fileName": "webdev-coding.jpg",
+    "mimeType": "image/jpeg",
+    "fileSize": 312000,
+    "category": "image"
+  },
+  {
+    "fileId": "media-004",
+    "filePath": "/uploads/audio/hazards-overview.mp3",
+    "fileUrl": "/audio/hazards-overview.mp3",
+    "fileName": "hazards-overview.mp3",
+    "mimeType": "audio/mpeg",
+    "fileSize": 1920000,
+    "category": "audio"
+  },
+  {
+    "fileId": "media-005",
+    "filePath": "/uploads/documents/html-cheatsheet.pdf",
+    "fileUrl": "/downloads/html-cheatsheet.pdf",
+    "fileName": "html-cheatsheet.pdf",
+    "mimeType": "application/pdf",
+    "fileSize": 524288,
+    "category": "document"
+  }
+]

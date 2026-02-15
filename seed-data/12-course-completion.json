@@ -1,0 +1,141 @@
+{
+  "courseId": "course-safety-101",
+  "status": "in-progress",
+  "overallProgress": 57,
+  "pages": [
+    {
+      "pageId": "p1-01",
+      "title": "Welcome to Workplace Safety",
+      "completed": true,
+      "strategy": "all",
+      "components": [
+        {
+          "componentId": "c1-01-01",
+          "completed": true,
+          "completionType": "view"
+        },
+        {
+          "componentId": "c1-01-02",
+          "completed": true,
+          "completionType": "view"
+        },
+        {
+          "componentId": "c1-01-03",
+          "completed": true,
+          "completionType": "view"
+        }
+      ]
+    },
+    {
+      "pageId": "p1-02",
+      "title": "Hazard Identification",
+      "completed": true,
+      "strategy": "all",
+      "components": [
+        {
+          "componentId": "c1-02-01",
+          "completed": true,
+          "completionType": "interact"
+        },
+        {
+          "componentId": "c1-02-02",
+          "completed": true,
+          "completionType": "interact"
+        },
+        {
+          "componentId": "c1-02-03",
+          "completed": true,
+          "completionType": "view"
+        }
+      ]
+    },
+    {
+      "pageId": "p1-03",
+      "title": "Personal Protective Equipment (PPE)",
+      "completed": true,
+      "strategy": "all",
+      "components": [
+        {
+          "componentId": "c1-03-01",
+          "completed": true,
+          "completionType": "interact"
+        },
+        {
+          "componentId": "c1-03-02",
+          "completed": true,
+          "completionType": "view"
+        }
+      ]
+    },
+    {
+      "pageId": "p1-04",
+      "title": "Emergency Procedures",
+      "completed": true,
+      "strategy": "all",
+      "components": [
+        {
+          "componentId": "c1-04-01",
+          "completed": true,
+          "completionType": "interact"
+        },
+        {
+          "componentId": "c1-04-02",
+          "completed": true,
+          "completionType": "score",
+          "threshold": 80
+        }
+      ]
+    },
+    {
+      "pageId": "p1-05",
+      "title": "Knowledge Check",
+      "completed": false,
+      "strategy": "all",
+      "components": [
+        {
+          "componentId": "c1-05-01",
+          "completed": false,
+          "completionType": "score",
+          "threshold": 50
+        }
+      ]
+    },
+    {
+      "pageId": "p1-06",
+      "title": "Final Assessment",
+      "completed": false,
+      "strategy": "all",
+      "components": [
+        {
+          "componentId": "c1-06-01",
+          "completed": false,
+          "completionType": "score",
+          "threshold": 70
+        }
+      ]
+    },
+    {
+      "pageId": "p1-07",
+      "title": "Course Complete",
+      "completed": false,
+      "strategy": "all",
+      "components": [
+        {
+          "componentId": "c1-07-01",
+          "completed": false,
+          "completionType": "view"
+        },
+        {
+          "componentId": "c1-07-02",
+          "completed": false,
+          "completionType": "interact"
+        },
+        {
+          "componentId": "c1-07-03",
+          "completed": false,
+          "completionType": "view"
+        }
+      ]
+    }
+  ]
+}

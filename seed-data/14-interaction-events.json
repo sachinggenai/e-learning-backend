@@ -1,0 +1,149 @@
+[
+  {
+    "pageId": "p1-01",
+    "componentId": "c1-01-01",
+    "interactionType": "view",
+    "completed": true
+  },
+  {
+    "pageId": "p1-02",
+    "componentId": "c1-02-01",
+    "interactionType": "click",
+    "data": {
+      "interactionId": "tab-chemical",
+      "value": "Chemical Hazards"
+    },
+    "completed": true
+  },
+  {
+    "pageId": "p1-02",
+    "componentId": "c1-02-02",
+    "interactionType": "click",
+    "data": {
+      "interactionId": "hs-1",
+      "value": "Wet Floor"
+    },
+    "completed": false
+  },
+  {
+    "pageId": "p1-02",
+    "componentId": "c1-02-02",
+    "interactionType": "click",
+    "data": {
+      "interactionId": "hs-2",
+      "value": "Unsecured Shelf"
+    },
+    "completed": false
+  },
+  {
+    "pageId": "p1-02",
+    "componentId": "c1-02-02",
+    "interactionType": "click",
+    "data": {
+      "interactionId": "hs-3",
+      "value": "Blocked Exit"
+    },
+    "completed": false
+  },
+  {
+    "pageId": "p1-02",
+    "componentId": "c1-02-02",
+    "interactionType": "click",
+    "data": {
+      "interactionId": "hs-4",
+      "value": "Frayed Wire"
+    },
+    "completed": true
+  },
+  {
+    "pageId": "p1-04",
+    "componentId": "c1-04-02",
+    "interactionType": "submit",
+    "data": {
+      "interactionId": "opt-2",
+      "value": "Pull the fire alarm",
+      "score": 10,
+      "maxScore": 10,
+      "isCorrect": true
+    },
+    "completed": true
+  },
+  {
+    "pageId": "p1-02",
+    "componentId": "c1-02-01",
+    "interactionType": "audio-play",
+    "data": {
+      "interactionId": "audio-hazards",
+      "duration": 120
+    },
+    "completed": false
+  },
+  {
+    "pageId": "p1-02",
+    "componentId": "c1-02-01",
+    "interactionType": "audio-complete",
+    "data": {
+      "interactionId": "audio-hazards",
+      "duration": 120
+    },
+    "completed": true
+  },
+  {
+    "pageId": "p2-02",
+    "componentId": "c2-02-02",
+    "interactionType": "click",
+    "data": {
+      "interactionId": "fc-1"
+    },
+    "completed": false
+  },
+  {
+    "pageId": "p2-03",
+    "componentId": "c2-03-01",
+    "interactionType": "select",
+    "data": {
+      "interactionId": "opt-1a",
+      "value": "Respond calmly",
+      "score": 10,
+      "maxScore": 10,
+      "isCorrect": true
+    },
+    "completed": false
+  },
+  {
+    "pageId": "p2-03",
+    "componentId": "c2-03-01",
+    "interactionType": "select",
+    "data": {
+      "interactionId": "opt-2a",
+      "value": "Show empathy & resolve",
+      "score": 10,
+      "maxScore": 10,
+      "isCorrect": true
+    },
+    "completed": true
+  },
+  {
+    "pageId": "p3-02",
+    "componentId": "c3-02-01",
+    "interactionType": "navigation",
+    "data": {
+      "interactionId": "sl-3",
+      "value": "Document Structure"
+    },
+    "completed": false
+  },
+  {
+    "pageId": "p3-04",
+    "componentId": "c3-04-03",
+    "interactionType": "submit",
+    "data": {
+      "interactionId": "opt-3",
+      "value": "const",
+      "score": 10,
+      "maxScore": 10,
+      "isCorrect": true
+    },
+    "completed": true
+  }
+]

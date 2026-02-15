@@ -1,0 +1,3742 @@
+{
+  "content-presentation": [
+    {
+      "typeId": "tabs",
+      "category": "content-presentation",
+      "displayName": "Tabs",
+      "description": "Tabbed content panels with per-tab audio",
+      "icon": "panel-top",
+      "tags": [
+        "tabs",
+        "tabbed",
+        "panels"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per tab"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "tabs": [
+          {
+            "id": "tab-1",
+            "title": "Tab 1",
+            "body": "Content for tab 1"
+          },
+          {
+            "id": "tab-2",
+            "title": "Tab 2",
+            "body": "Content for tab 2"
+          }
+        ],
+        "defaultTabId": "tab-1"
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "accordion",
+      "category": "content-presentation",
+      "displayName": "Accordion",
+      "description": "Expandable/collapsible panels with per-panel audio",
+      "icon": "list-collapse",
+      "tags": [
+        "accordion",
+        "expand",
+        "collapse"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per panel"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "panels": [
+          {
+            "id": "panel-1",
+            "title": "Panel 1",
+            "body": "Content for panel 1"
+          },
+          {
+            "id": "panel-2",
+            "title": "Panel 2",
+            "body": "Content for panel 2"
+          }
+        ],
+        "allowMultipleOpen": false
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "click-reveal",
+      "category": "content-presentation",
+      "displayName": "Click and Reveal",
+      "description": "Hidden content revealed on click with per-item audio",
+      "icon": "mouse-pointer-click",
+      "tags": [
+        "click",
+        "reveal",
+        "explore"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per reveal item"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "items": [
+          {
+            "id": "item-1",
+            "label": "Item 1",
+            "content": "Hidden content 1"
+          },
+          {
+            "id": "item-2",
+            "label": "Item 2",
+            "content": "Hidden content 2"
+          }
+        ],
+        "columns": 3
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "timeline",
+      "category": "content-presentation",
+      "displayName": "Timeline",
+      "description": "Chronological event display with per-event audio",
+      "icon": "calendar-range",
+      "tags": [
+        "timeline",
+        "history",
+        "chronology"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per event"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Timeline",
+        "events": [
+          {
+            "id": "evt-1",
+            "date": "2025-01",
+            "title": "Event 1",
+            "description": "Description 1"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "image-hotspots",
+      "category": "content-presentation",
+      "displayName": "Image Hotspots",
+      "description": "Interactive image with clickable hotspot zones",
+      "icon": "map-pin",
+      "tags": [
+        "hotspots",
+        "image",
+        "interactive",
+        "explore"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per hotspot"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "imageUrl": "",
+        "hotspots": [
+          {
+            "id": "hs-1",
+            "x": 25,
+            "y": 30,
+            "label": "Hotspot 1",
+            "content": "Details here"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "layered-content",
+      "category": "content-presentation",
+      "displayName": "Layered Content",
+      "description": "Stacked content layers with toggle navigation",
+      "icon": "layers",
+      "tags": [
+        "layered",
+        "stacked",
+        "toggle"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "layers": [
+          {
+            "id": "layer-1",
+            "label": "Layer 1",
+            "content": "Layer 1 content"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 5,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "text-with-media",
+      "category": "content-presentation",
+      "displayName": "Text with Media",
+      "description": "Rich text block with optional image or video",
+      "icon": "file-text",
+      "tags": [
+        "text",
+        "media",
+        "content"
+      ],
+      "completionCapabilities": [
+        "view",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "body": "<p>Enter your content here...</p>",
+        "mediaUrl": "",
+        "mediaType": "none"
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 6,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "process-flow": [
+    {
+      "typeId": "step-by-step",
+      "category": "process-flow",
+      "displayName": "Step-by-Step Process",
+      "description": "Numbered step-through guide with progress indicators",
+      "icon": "footprints",
+      "tags": [
+        "steps",
+        "process",
+        "guide",
+        "how-to"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per step"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "steps": [
+          {
+            "id": "step-1",
+            "title": "Step 1",
+            "description": "First step",
+            "icon": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "cycle-diagram",
+      "category": "process-flow",
+      "displayName": "Cycle Diagram",
+      "description": "Circular process diagram showing repeating stages",
+      "icon": "refresh-cw",
+      "tags": [
+        "cycle",
+        "circular",
+        "loop",
+        "process"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "stages": [
+          {
+            "id": "stage-1",
+            "label": "Stage 1",
+            "description": "First stage"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "flowchart",
+      "category": "process-flow",
+      "displayName": "Flowchart",
+      "description": "Visual flowchart diagram for processes and decisions",
+      "icon": "git-merge",
+      "tags": [
+        "flowchart",
+        "diagram",
+        "flow",
+        "process"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "nodes": [
+          {
+            "id": "node-1",
+            "type": "start",
+            "label": "Start"
+          }
+        ],
+        "connections": []
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "process-map",
+      "category": "process-flow",
+      "displayName": "Process Map",
+      "description": "Detailed process map with roles and swimlanes",
+      "icon": "trello",
+      "tags": [
+        "process",
+        "map",
+        "swimlane",
+        "workflow"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "lanes": [
+          {
+            "id": "lane-1",
+            "label": "Lane 1",
+            "steps": []
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "decision-tree",
+      "category": "process-flow",
+      "displayName": "Decision Tree",
+      "description": "Interactive branching decision tree with node exploration",
+      "icon": "git-branch",
+      "tags": [
+        "decision",
+        "tree",
+        "branch",
+        "choice"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per node"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "rootNode": {
+          "id": "root",
+          "question": "Start question?",
+          "options": []
+        }
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "interaction": [
+    {
+      "typeId": "drag-and-drop",
+      "category": "interaction",
+      "displayName": "Drag and Drop",
+      "description": "Drag items to correct drop zones",
+      "icon": "grip-vertical",
+      "tags": [
+        "drag",
+        "drop",
+        "sort",
+        "categorize"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "instructions": "",
+        "items": [
+          {
+            "id": "item-1",
+            "text": "Item 1",
+            "correctZone": "zone-1"
+          }
+        ],
+        "zones": [
+          {
+            "id": "zone-1",
+            "label": "Zone 1"
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": {
+        "mode": "per-item"
+      },
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "flip-cards",
+      "category": "interaction",
+      "displayName": "Flip Cards",
+      "description": "Grid of cards that flip to reveal content on click",
+      "icon": "flip-horizontal",
+      "tags": [
+        "flip",
+        "cards",
+        "reveal"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per card"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "cards": [
+          {
+            "id": "card-1",
+            "front": "Front 1",
+            "back": "Back 1"
+          },
+          {
+            "id": "card-2",
+            "front": "Front 2",
+            "back": "Back 2"
+          }
+        ],
+        "columns": 3
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "slider",
+      "category": "interaction",
+      "displayName": "Slider",
+      "description": "Adjustable value selector for numeric input",
+      "icon": "sliders-horizontal",
+      "tags": [
+        "slider",
+        "range",
+        "adjust"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "defaultValue": 50,
+        "label": "",
+        "unit": ""
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "carousel",
+      "category": "interaction",
+      "displayName": "Carousel",
+      "description": "Slide carousel for sequenced content navigation",
+      "icon": "gallery-horizontal",
+      "tags": [
+        "carousel",
+        "slides",
+        "gallery"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per slide"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "slides": [
+          {
+            "id": "slide-1",
+            "title": "Slide 1",
+            "body": "Content 1",
+            "imageUrl": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "clickable-icons",
+      "category": "interaction",
+      "displayName": "Clickable Icons",
+      "description": "Icon-based content triggers with popover details",
+      "icon": "layout-grid",
+      "tags": [
+        "icons",
+        "clickable",
+        "explore"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per icon"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "icons": [
+          {
+            "id": "icon-1",
+            "icon": "star",
+            "label": "Icon 1",
+            "content": "Details for icon 1"
+          }
+        ],
+        "columns": 4
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "scenario": [
+    {
+      "typeId": "scenario",
+      "category": "scenario",
+      "displayName": "Scenario",
+      "description": "Linear scenario with choice-based outcomes",
+      "icon": "book-open",
+      "tags": [
+        "scenario",
+        "story",
+        "context"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per choice"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "context": "",
+        "question": "",
+        "options": [
+          {
+            "id": "opt-1",
+            "text": "",
+            "points": 0,
+            "feedback": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "branching-scenario",
+      "category": "scenario",
+      "displayName": "Branching Scenario",
+      "description": "Multi-path decision tree scenario with scoring",
+      "icon": "git-branch",
+      "tags": [
+        "branching",
+        "scenario",
+        "decision",
+        "tree"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per branch"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "nodes": [
+          {
+            "id": "node-1",
+            "text": "Start scenario",
+            "options": []
+          }
+        ],
+        "startNodeId": "node-1"
+      },
+      "defaultCompletionType": "view",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "role-play-simulation",
+      "category": "scenario",
+      "displayName": "Role-Play Simulation",
+      "description": "Interactive role-play dialog with character responses",
+      "icon": "theater",
+      "tags": [
+        "role-play",
+        "simulation",
+        "dialog"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "audio",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "characters": [],
+        "scenes": [
+          {
+            "id": "scene-1",
+            "dialog": "",
+            "choices": []
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "case-study",
+      "category": "scenario",
+      "displayName": "Case Study",
+      "description": "Multi-section case analysis with discussion prompts",
+      "icon": "briefcase",
+      "tags": [
+        "case",
+        "study",
+        "analysis"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "overview": "",
+        "sections": [
+          {
+            "id": "sec-1",
+            "title": "Background",
+            "content": ""
+          }
+        ],
+        "questions": []
+      },
+      "defaultCompletionType": "view",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "assessment": [
+    {
+      "typeId": "mcq",
+      "category": "assessment",
+      "displayName": "Multiple Choice",
+      "description": "Single-answer multiple choice question with feedback",
+      "icon": "circle-check",
+      "tags": [
+        "quiz",
+        "mcq",
+        "question",
+        "assessment"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "question": "What is the capital of France?",
+        "options": [
+          {
+            "id": "opt-1",
+            "text": "Paris",
+            "isCorrect": true
+          },
+          {
+            "id": "opt-2",
+            "text": "London",
+            "isCorrect": false
+          },
+          {
+            "id": "opt-3",
+            "text": "Berlin",
+            "isCorrect": false
+          },
+          {
+            "id": "opt-4",
+            "text": "Madrid",
+            "isCorrect": false
+          }
+        ],
+        "explanation": "Paris is the capital of France.",
+        "maxScore": 10
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 10,
+      "scoringRules": {
+        "mode": "all-or-nothing"
+      },
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "multiple-select",
+      "category": "assessment",
+      "displayName": "Multiple Select",
+      "description": "Select all correct answers from a list (partial credit)",
+      "icon": "list-checks",
+      "tags": [
+        "quiz",
+        "multi-select",
+        "checkbox",
+        "assessment"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "question": "Which of the following are primary colors?",
+        "options": [
+          {
+            "id": "opt-1",
+            "text": "Red",
+            "isCorrect": true
+          },
+          {
+            "id": "opt-2",
+            "text": "Green",
+            "isCorrect": false
+          },
+          {
+            "id": "opt-3",
+            "text": "Blue",
+            "isCorrect": true
+          },
+          {
+            "id": "opt-4",
+            "text": "Yellow",
+            "isCorrect": true
+          }
+        ],
+        "partialCredit": true,
+        "maxScore": 10
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 10,
+      "scoringRules": {
+        "mode": "proportional"
+      },
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "true-false",
+      "category": "assessment",
+      "displayName": "True / False",
+      "description": "True or false statement question",
+      "icon": "toggle-left",
+      "tags": [
+        "quiz",
+        "true",
+        "false",
+        "assessment"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "question": "The Earth revolves around the Sun.",
+        "correctAnswer": true,
+        "explanation": "The Earth orbits the Sun once per year.",
+        "maxScore": 5
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 5,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "fill-blanks",
+      "category": "assessment",
+      "displayName": "Fill in the Blanks",
+      "description": "Complete sentences by filling in missing words",
+      "icon": "text-cursor-input",
+      "tags": [
+        "fill",
+        "blanks",
+        "complete",
+        "assessment"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Complete the Sentence",
+        "templateText": "The _____ is the largest planet in our solar system.",
+        "blanks": [
+          {
+            "id": "b-1",
+            "correctAnswers": [
+              "Jupiter"
+            ],
+            "caseSensitive": false
+          }
+        ],
+        "maxScore": 5
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 5,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "matching",
+      "category": "assessment",
+      "displayName": "Matching",
+      "description": "Match items from two columns",
+      "icon": "link",
+      "tags": [
+        "match",
+        "pair",
+        "connect",
+        "assessment"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Match Countries to Capitals",
+        "pairs": [
+          {
+            "id": "pair-1",
+            "left": "France",
+            "right": "Paris"
+          },
+          {
+            "id": "pair-2",
+            "left": "Germany",
+            "right": "Berlin"
+          },
+          {
+            "id": "pair-3",
+            "left": "Italy",
+            "right": "Rome"
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 10,
+      "scoringRules": {
+        "mode": "per-pair"
+      },
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "scenario-question",
+      "category": "assessment",
+      "displayName": "Scenario-Based Question",
+      "description": "Scenario-based question with context and weighted options",
+      "icon": "book-open",
+      "tags": [
+        "scenario",
+        "case",
+        "question",
+        "assessment"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score",
+        "audio"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "scenario": "A customer complains about a defective product. What should you do?",
+        "question": "Choose the best response:",
+        "options": [
+          {
+            "id": "opt-1",
+            "text": "Apologize and offer a replacement",
+            "points": 10,
+            "feedback": "Great choice! Empathy and action."
+          },
+          {
+            "id": "opt-2",
+            "text": "Ask them to read the manual",
+            "points": 2,
+            "feedback": "This may frustrate the customer."
+          }
+        ],
+        "maxScore": 10
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 5,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "knowledge-check",
+      "category": "assessment",
+      "displayName": "Knowledge Check",
+      "description": "Quick inline quiz with 1-3 questions (non-graded feedback)",
+      "icon": "brain",
+      "tags": [
+        "quiz",
+        "check",
+        "inline",
+        "knowledge"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Check Your Understanding",
+        "questions": [
+          {
+            "id": "q-1",
+            "question": "What is 2+2?",
+            "options": [
+              {
+                "id": "opt-1",
+                "text": "4",
+                "isCorrect": true
+              },
+              {
+                "id": "opt-2",
+                "text": "5",
+                "isCorrect": false
+              }
+            ],
+            "explanation": "2+2 = 4"
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 6,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "final-assessment",
+      "category": "assessment",
+      "displayName": "Final Assessment",
+      "description": "Comprehensive end-of-course assessment with mixed question types",
+      "icon": "award",
+      "tags": [
+        "final",
+        "exam",
+        "assessment",
+        "comprehensive"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Final Assessment",
+        "instructions": "Answer all questions. You need 70% to pass.",
+        "passingScore": 70,
+        "questions": []
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 7,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "comparison": [
+    {
+      "typeId": "comparison-table",
+      "category": "comparison",
+      "displayName": "Comparison Table",
+      "description": "Side-by-side comparison table with highlighting",
+      "icon": "table-2",
+      "tags": [
+        "comparison",
+        "table",
+        "versus",
+        "compare"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Feature Comparison",
+        "columns": [
+          {
+            "id": "col-1",
+            "header": "Feature"
+          },
+          {
+            "id": "col-2",
+            "header": "Plan A"
+          },
+          {
+            "id": "col-3",
+            "header": "Plan B"
+          }
+        ],
+        "rows": [
+          {
+            "id": "row-1",
+            "cells": [
+              "Storage",
+              "10 GB",
+              "100 GB"
+            ]
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "pros-cons",
+      "category": "comparison",
+      "displayName": "Pros and Cons",
+      "description": "Two-column pros and cons analysis",
+      "icon": "columns",
+      "tags": [
+        "pros",
+        "cons",
+        "advantages",
+        "compare"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "topic": "",
+        "pros": [
+          "Advantage 1"
+        ],
+        "cons": [
+          "Disadvantage 1"
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "before-after",
+      "category": "comparison",
+      "displayName": "Before and After",
+      "description": "Visual before/after comparison with slider",
+      "icon": "arrow-right-left",
+      "tags": [
+        "before",
+        "after",
+        "compare",
+        "transform"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "beforeLabel": "Before",
+        "afterLabel": "After",
+        "beforeContent": "",
+        "afterContent": ""
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "matrix-grid",
+      "category": "comparison",
+      "displayName": "Matrix / Grid",
+      "description": "Multi-dimensional matrix or grid display",
+      "icon": "grid-3x3",
+      "tags": [
+        "matrix",
+        "grid",
+        "table",
+        "multi-dimensional"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "rowHeaders": [
+          "Row 1"
+        ],
+        "columnHeaders": [
+          "Col 1"
+        ],
+        "cells": [
+          [
+            "Cell 1,1"
+          ]
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "media-rich": [
+    {
+      "typeId": "video-slide",
+      "category": "media-rich",
+      "displayName": "Video-Based Slide",
+      "description": "Video player with caption, transcript, and chapter markers",
+      "icon": "clapperboard",
+      "tags": [
+        "video",
+        "slide",
+        "media",
+        "presentation"
+      ],
+      "completionCapabilities": [
+        "view",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Video Lesson",
+        "videoUrl": "",
+        "caption": "",
+        "transcript": "",
+        "chapters": [],
+        "watchThreshold": 0.9
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "audio-slide",
+      "category": "media-rich",
+      "displayName": "Audio-Based Slide",
+      "description": "Audio narration slide with visual content",
+      "icon": "headphones",
+      "tags": [
+        "audio",
+        "narration",
+        "listen",
+        "media"
+      ],
+      "completionCapabilities": [
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "audioUrl": "",
+        "transcript": "",
+        "visualContent": ""
+      },
+      "defaultCompletionType": "audio",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "animated-explainer",
+      "category": "media-rich",
+      "displayName": "Animated Explainer",
+      "description": "Animated content with step explanations",
+      "icon": "play-circle",
+      "tags": [
+        "animation",
+        "explainer",
+        "motion"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "animationUrl": "",
+        "steps": [
+          {
+            "id": "step-1",
+            "timestamp": 0,
+            "title": "Introduction",
+            "description": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "infographic",
+      "category": "media-rich",
+      "displayName": "Infographic",
+      "description": "Visual data presentation with sections and stats",
+      "icon": "bar-chart-3",
+      "tags": [
+        "infographic",
+        "data",
+        "visual",
+        "stats"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Key Statistics",
+        "sections": [
+          {
+            "id": "sec-1",
+            "title": "Section 1",
+            "value": "85%",
+            "description": "Description here",
+            "icon": "trending-up"
+          }
+        ],
+        "layout": "grid"
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "microlearning": [
+    {
+      "typeId": "microlearning-cards",
+      "category": "microlearning",
+      "displayName": "Microlearning Cards",
+      "description": "Bite-size learning cards for quick consumption",
+      "icon": "square-stack",
+      "tags": [
+        "micro",
+        "cards",
+        "bite-size",
+        "quick"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per card"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "cards": [
+          {
+            "id": "mc-1",
+            "title": "Tip 1",
+            "body": "Quick tip content",
+            "icon": "lightbulb"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "flashcards",
+      "category": "microlearning",
+      "displayName": "Flashcards",
+      "description": "Study flashcard deck with flip animation and shuffle",
+      "icon": "layers",
+      "tags": [
+        "flashcards",
+        "study",
+        "memorize"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per card"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Study Deck",
+        "cards": [
+          {
+            "id": "fc-1",
+            "front": "What is HTML?",
+            "back": "HyperText Markup Language"
+          },
+          {
+            "id": "fc-2",
+            "front": "What is CSS?",
+            "back": "Cascading Style Sheets"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "quick-tips",
+      "category": "microlearning",
+      "displayName": "Quick Tips",
+      "description": "List of quick tips and best practices",
+      "icon": "lightbulb",
+      "tags": [
+        "tips",
+        "quick",
+        "best-practices"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Quick Tips",
+        "tips": [
+          {
+            "id": "tip-1",
+            "text": "Always save your work frequently",
+            "icon": "save"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "navigation": [
+    {
+      "typeId": "course-menu",
+      "category": "navigation",
+      "displayName": "Course Menu",
+      "description": "Table of contents for course navigation",
+      "icon": "menu",
+      "tags": [
+        "menu",
+        "navigation",
+        "toc",
+        "contents"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Course Contents",
+        "showProgress": true,
+        "showPageNumbers": true
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "learning-roadmap",
+      "category": "navigation",
+      "displayName": "Learning Roadmap",
+      "description": "Visual learning path with milestones",
+      "icon": "map",
+      "tags": [
+        "roadmap",
+        "path",
+        "milestones"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "milestones": [
+          {
+            "id": "ms-1",
+            "title": "Module 1",
+            "description": "Getting Started",
+            "pageId": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "module-overview",
+      "category": "navigation",
+      "displayName": "Module Overview",
+      "description": "Overview page for a course module with objectives",
+      "icon": "book-open",
+      "tags": [
+        "module",
+        "overview",
+        "objectives"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "description": "",
+        "objectives": [
+          "Objective 1"
+        ],
+        "estimatedDuration": 30
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "summary-takeaways",
+      "category": "navigation",
+      "displayName": "Summary / Key Takeaways",
+      "description": "Course or module summary with key points",
+      "icon": "check-square",
+      "tags": [
+        "summary",
+        "takeaways",
+        "recap",
+        "review"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Key Takeaways",
+        "keyPoints": [
+          "Key point 1",
+          "Key point 2"
+        ],
+        "nextSteps": ""
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "resources-downloads",
+      "category": "navigation",
+      "displayName": "Resources & Downloads",
+      "description": "Downloadable files and reference links",
+      "icon": "download",
+      "tags": [
+        "resources",
+        "downloads",
+        "files",
+        "links"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Resources",
+        "resources": [
+          {
+            "id": "res-1",
+            "title": "Course Handbook",
+            "type": "pdf",
+            "url": "",
+            "description": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "gamification": [
+    {
+      "typeId": "quiz-game",
+      "category": "gamification",
+      "displayName": "Quiz Game",
+      "description": "Gamified quiz with timer, streak counter, difficulty levels",
+      "icon": "trophy",
+      "tags": [
+        "game",
+        "quiz",
+        "fun",
+        "timer"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Quiz Challenge",
+        "questions": [
+          {
+            "id": "q-1",
+            "question": "Sample question?",
+            "options": [
+              {
+                "id": "o-1",
+                "text": "Answer A",
+                "isCorrect": true
+              },
+              {
+                "id": "o-2",
+                "text": "Answer B",
+                "isCorrect": false
+              }
+            ],
+            "difficulty": "easy",
+            "timeLimit": 30
+          }
+        ],
+        "streakBonus": true,
+        "showLeaderboard": false
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "points-badges",
+      "category": "gamification",
+      "displayName": "Points and Badges",
+      "description": "Achievement system with points and earned badges",
+      "icon": "star",
+      "tags": [
+        "points",
+        "badges",
+        "achievements",
+        "rewards"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Achievements",
+        "badges": [
+          {
+            "id": "badge-1",
+            "name": "First Step",
+            "description": "Complete your first lesson",
+            "icon": "award",
+            "unlockCriteria": "page-complete"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "progress-tracker",
+      "category": "gamification",
+      "displayName": "Progress Tracker",
+      "description": "Visual progress indicator with milestones and completion %",
+      "icon": "bar-chart",
+      "tags": [
+        "progress",
+        "tracker",
+        "milestones",
+        "completion"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Your Progress",
+        "milestones": [
+          {
+            "id": "pm-1",
+            "label": "Module 1",
+            "target": 25
+          },
+          {
+            "id": "pm-2",
+            "label": "Module 2",
+            "target": 50
+          }
+        ],
+        "showPercentage": true
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "level-learning",
+      "category": "gamification",
+      "displayName": "Level-Based Learning",
+      "description": "Leveled content that unlocks progressively",
+      "icon": "trending-up",
+      "tags": [
+        "levels",
+        "progressive",
+        "unlock",
+        "difficulty"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "levels": [
+          {
+            "id": "lvl-1",
+            "name": "Beginner",
+            "requiredScore": 0,
+            "content": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "compliance": [
+    {
+      "typeId": "policy-acknowledgement",
+      "category": "compliance",
+      "displayName": "Policy Acknowledgement",
+      "description": "Policy text with mandatory acknowledgement checkbox",
+      "icon": "file-check",
+      "tags": [
+        "policy",
+        "acknowledge",
+        "compliance",
+        "confirm"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "policyText": "",
+        "acknowledgementText": "I have read and understand this policy",
+        "requireSignature": false
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "dos-donts",
+      "category": "compliance",
+      "displayName": "Do's and Don'ts",
+      "description": "Two-column best practice vs. bad practice guide",
+      "icon": "thumbs-up",
+      "tags": [
+        "dos",
+        "donts",
+        "best-practices",
+        "compliance"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "dos": [
+          "Do this"
+        ],
+        "donts": [
+          "Don't do this"
+        ],
+        "showIcons": true
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "code-of-conduct",
+      "category": "compliance",
+      "displayName": "Code of Conduct",
+      "description": "Interactive code of conduct with acceptance sections",
+      "icon": "shield",
+      "tags": [
+        "code",
+        "conduct",
+        "ethics",
+        "compliance"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "sections": [
+          {
+            "id": "sec-1",
+            "title": "Section 1",
+            "content": "",
+            "requireAcknowledgement": true
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "regulatory-scenario",
+      "category": "compliance",
+      "displayName": "Regulatory Scenario",
+      "description": "Compliance-focused scenario with regulatory outcomes",
+      "icon": "alert-triangle",
+      "tags": [
+        "regulatory",
+        "compliance",
+        "scenario",
+        "risk"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "scenario": "",
+        "decisions": [
+          {
+            "id": "dec-1",
+            "situation": "",
+            "options": [
+              {
+                "id": "opt-1",
+                "text": "",
+                "isCompliant": true,
+                "feedback": ""
+              }
+            ]
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "audit-checklist",
+      "category": "compliance",
+      "displayName": "Audit Checklist",
+      "description": "Step-by-step audit checklist with compliance status",
+      "icon": "clipboard-check",
+      "tags": [
+        "audit",
+        "checklist",
+        "compliance",
+        "inspection"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "items": [
+          {
+            "id": "item-1",
+            "text": "Check item 1",
+            "category": "",
+            "required": true
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "diagnostic": [
+    {
+      "typeId": "pre-assessment",
+      "category": "diagnostic",
+      "displayName": "Pre-Assessment",
+      "description": "Diagnostic test taken before course to gauge knowledge",
+      "icon": "clipboard",
+      "tags": [
+        "pre-test",
+        "diagnostic",
+        "baseline",
+        "assessment"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Pre-Assessment",
+        "instructions": "This assessment helps us understand your current knowledge.",
+        "questions": [],
+        "skipIfPassed": true,
+        "passingScore": 80
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "diagnostic-quiz",
+      "category": "diagnostic",
+      "displayName": "Diagnostic Quiz",
+      "description": "Short quiz to identify knowledge gaps",
+      "icon": "search",
+      "tags": [
+        "diagnostic",
+        "quiz",
+        "gap",
+        "identify"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "questions": [],
+        "skillMapping": {}
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "skill-gap-analysis",
+      "category": "diagnostic",
+      "displayName": "Skill Gap Analysis",
+      "description": "Visual skill assessment with gap identification",
+      "icon": "target",
+      "tags": [
+        "skill",
+        "gap",
+        "analysis",
+        "competency"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "skills": [
+          {
+            "id": "skill-1",
+            "name": "Communication",
+            "currentLevel": 0,
+            "targetLevel": 5,
+            "category": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "adaptive-learning-path",
+      "category": "diagnostic",
+      "displayName": "Adaptive Learning Path",
+      "description": "Dynamic content path that adapts to learner performance",
+      "icon": "route",
+      "tags": [
+        "adaptive",
+        "path",
+        "dynamic",
+        "personalized"
+      ],
+      "completionCapabilities": [
+        "view",
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "rules": [
+          {
+            "condition": "score >= 80",
+            "targetPageId": "",
+            "label": "Advanced"
+          }
+        ],
+        "defaultPath": ""
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "recommendation-card",
+      "category": "diagnostic",
+      "displayName": "Recommendation Card",
+      "description": "Personalized content recommendation based on performance",
+      "icon": "sparkles",
+      "tags": [
+        "recommendation",
+        "suggestion",
+        "personalized"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "recommendations": [
+          {
+            "id": "rec-1",
+            "title": "Recommended Module",
+            "description": "",
+            "targetPageId": "",
+            "reason": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "practice": [
+    {
+      "typeId": "guided-practice",
+      "category": "practice",
+      "displayName": "Guided Practice",
+      "description": "Step-by-step guided practice with hints and feedback",
+      "icon": "compass",
+      "tags": [
+        "guided",
+        "practice",
+        "tutorial",
+        "hands-on"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per step"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "steps": [
+          {
+            "id": "gp-1",
+            "instruction": "Step 1 instruction",
+            "hint": "",
+            "expectedAction": "",
+            "feedback": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "try-it-simulation",
+      "category": "practice",
+      "displayName": "Try-It Simulation",
+      "description": "Safe practice environment with undo capability",
+      "icon": "play",
+      "tags": [
+        "simulation",
+        "try",
+        "practice",
+        "safe"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "scenario": "",
+        "instructions": "",
+        "allowUndo": true,
+        "maxAttempts": 3
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "software-simulation",
+      "category": "practice",
+      "displayName": "Software Simulation",
+      "description": "Watch → Try → Do software walkthrough",
+      "icon": "monitor",
+      "tags": [
+        "software",
+        "simulation",
+        "walkthrough",
+        "tutorial"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "audio"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": true,
+        "interactionPoints": [
+          "per phase"
+        ]
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "phases": [
+          {
+            "id": "watch",
+            "type": "watch",
+            "content": ""
+          },
+          {
+            "id": "try",
+            "type": "try",
+            "content": ""
+          },
+          {
+            "id": "do",
+            "type": "do",
+            "content": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "sandbox-practice",
+      "category": "practice",
+      "displayName": "Sandbox Practice",
+      "description": "Free-form practice environment",
+      "icon": "box",
+      "tags": [
+        "sandbox",
+        "free-form",
+        "practice",
+        "experiment"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "instructions": "",
+        "tools": [],
+        "saveProgress": true
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "error-identification",
+      "category": "practice",
+      "displayName": "Error Identification",
+      "description": "Find and fix errors in presented content",
+      "icon": "alert-circle",
+      "tags": [
+        "error",
+        "find",
+        "fix",
+        "identify"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "content": "",
+        "errors": [
+          {
+            "id": "err-1",
+            "text": "",
+            "location": "",
+            "explanation": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "feedback": [
+    {
+      "typeId": "reflective-question",
+      "category": "feedback",
+      "displayName": "Reflective Question",
+      "description": "Open-ended reflective question for critical thinking",
+      "icon": "help-circle",
+      "tags": [
+        "reflective",
+        "question",
+        "think",
+        "journal"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "question": "What did you learn from this module?",
+        "promptText": "",
+        "allowMultipleResponses": false
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "learner-journal",
+      "category": "feedback",
+      "displayName": "Learner Journal",
+      "description": "Personal learning diary with dated entries",
+      "icon": "book",
+      "tags": [
+        "journal",
+        "diary",
+        "notes",
+        "personal"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "My Learning Journal",
+        "prompts": [
+          "What surprised me today?",
+          "How can I apply this?"
+        ],
+        "maxEntries": 10
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "self-assessment",
+      "category": "feedback",
+      "displayName": "Self-Assessment",
+      "description": "Self-evaluation rubric for skill rating",
+      "icon": "user-check",
+      "tags": [
+        "self",
+        "assessment",
+        "rating",
+        "evaluate"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "criteria": [
+          {
+            "id": "crit-1",
+            "name": "Communication",
+            "description": "",
+            "scale": 5
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "confidence-rating",
+      "category": "feedback",
+      "displayName": "Confidence Rating",
+      "description": "Rate your confidence level on covered topics",
+      "icon": "thermometer",
+      "tags": [
+        "confidence",
+        "rating",
+        "self-report"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "topics": [
+          {
+            "id": "topic-1",
+            "name": "Topic 1",
+            "description": ""
+          }
+        ],
+        "scale": {
+          "min": 1,
+          "max": 5,
+          "labels": [
+            "Not confident",
+            "Very confident"
+          ]
+        }
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "action-planning",
+      "category": "feedback",
+      "displayName": "Action Planning",
+      "description": "Create an actionable plan with goals and deadlines",
+      "icon": "calendar",
+      "tags": [
+        "action",
+        "plan",
+        "goals",
+        "commitment"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "My Action Plan",
+        "goals": [
+          {
+            "id": "goal-1",
+            "description": "",
+            "deadline": "",
+            "actions": [
+              ""
+            ]
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "social": [
+    {
+      "typeId": "discussion-prompt",
+      "category": "social",
+      "displayName": "Discussion Prompt",
+      "description": "Prompt for group discussion with threading",
+      "icon": "message-square",
+      "tags": [
+        "discussion",
+        "forum",
+        "talk",
+        "collaborate"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "prompt": "Share your thoughts on...",
+        "allowAnonymous": false,
+        "moderatedReplies": false
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "peer-review",
+      "category": "social",
+      "displayName": "Peer Review",
+      "description": "Submit work and review peers with rubrics",
+      "icon": "users",
+      "tags": [
+        "peer",
+        "review",
+        "feedback",
+        "collaborative"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "instructions": "",
+        "rubric": [
+          {
+            "id": "rub-1",
+            "criterion": "Clarity",
+            "maxScore": 5,
+            "description": ""
+          }
+        ],
+        "minReviews": 2
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "poll-vote",
+      "category": "social",
+      "displayName": "Poll / Vote",
+      "description": "Quick poll or vote with results visualization",
+      "icon": "bar-chart-2",
+      "tags": [
+        "poll",
+        "vote",
+        "survey",
+        "opinion"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "question": "",
+        "options": [
+          {
+            "id": "opt-1",
+            "text": "Option A"
+          },
+          {
+            "id": "opt-2",
+            "text": "Option B"
+          }
+        ],
+        "allowMultiple": false,
+        "isAnonymous": true
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "team-challenge",
+      "category": "social",
+      "displayName": "Team Challenge",
+      "description": "Group activity requiring team collaboration",
+      "icon": "shield",
+      "tags": [
+        "team",
+        "challenge",
+        "group",
+        "competition"
+      ],
+      "completionCapabilities": [
+        "interact",
+        "score"
+      ],
+      "scoringEnabled": true,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "description": "",
+        "maxTeamSize": 5,
+        "tasks": [
+          {
+            "id": "task-1",
+            "title": "Task 1",
+            "points": 10,
+            "description": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": 100,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "scenario-debate",
+      "category": "social",
+      "displayName": "Scenario Debate",
+      "description": "Two-sided debate on a scenario topic",
+      "icon": "scale",
+      "tags": [
+        "debate",
+        "argument",
+        "perspective",
+        "discuss"
+      ],
+      "completionCapabilities": [
+        "interact"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "topic": "",
+        "sideA": {
+          "label": "For",
+          "arguments": []
+        },
+        "sideB": {
+          "label": "Against",
+          "arguments": []
+        }
+      },
+      "defaultCompletionType": "interact",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "accessibility": [
+    {
+      "typeId": "accessibility-tip",
+      "category": "accessibility",
+      "displayName": "Accessibility Tip Card",
+      "description": "Accessibility best practice tip with examples",
+      "icon": "eye",
+      "tags": [
+        "accessibility",
+        "tip",
+        "a11y",
+        "wcag"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "tip": "",
+        "category": "visual",
+        "examples": [
+          {
+            "good": "",
+            "bad": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "keyboard-nav-guide",
+      "category": "accessibility",
+      "displayName": "Keyboard Navigation Guide",
+      "description": "Guide for keyboard-only navigation",
+      "icon": "keyboard",
+      "tags": [
+        "keyboard",
+        "navigation",
+        "a11y",
+        "shortcuts"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Keyboard Shortcuts",
+        "shortcuts": [
+          {
+            "keys": "Tab",
+            "action": "Move to next element"
+          },
+          {
+            "keys": "Enter",
+            "action": "Activate current element"
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "screen-reader-guide",
+      "category": "accessibility",
+      "displayName": "Screen Reader Guide",
+      "description": "Instructions for screen reader users",
+      "icon": "volume-2",
+      "tags": [
+        "screen-reader",
+        "a11y",
+        "assistive",
+        "guide"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": true,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Screen Reader Guide",
+        "instructions": "",
+        "sections": [
+          {
+            "id": "sr-1",
+            "heading": "Getting Started",
+            "content": ""
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "language-selector",
+      "category": "accessibility",
+      "displayName": "Language Selector",
+      "description": "Multi-language content selector",
+      "icon": "globe",
+      "tags": [
+        "language",
+        "i18n",
+        "translation",
+        "locale"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "languages": [
+          {
+            "code": "en",
+            "label": "English",
+            "isDefault": true
+          }
+        ],
+        "showFlags": true
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "transcript-caption",
+      "category": "accessibility",
+      "displayName": "Transcript / Caption Page",
+      "description": "Full transcript or closed captions for media content",
+      "icon": "file-text",
+      "tags": [
+        "transcript",
+        "caption",
+        "subtitle",
+        "a11y"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "mediaRef": "",
+        "captions": [
+          {
+            "startTime": 0,
+            "endTime": 5,
+            "text": "Sample caption..."
+          }
+        ],
+        "downloadable": true
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ],
+  "analytics": [
+    {
+      "typeId": "progress-summary",
+      "category": "analytics",
+      "displayName": "Learning Progress Summary",
+      "description": "Visual progress overview with completion stats",
+      "icon": "pie-chart",
+      "tags": [
+        "progress",
+        "summary",
+        "overview",
+        "stats"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Your Progress",
+        "showCharts": true,
+        "showTimeline": true
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "performance-dashboard",
+      "category": "analytics",
+      "displayName": "Performance Dashboard",
+      "description": "Dashboard with score charts and performance trends",
+      "icon": "bar-chart-2",
+      "tags": [
+        "performance",
+        "dashboard",
+        "charts",
+        "analytics"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Performance Dashboard",
+        "metrics": [
+          "score",
+          "time",
+          "attempts"
+        ],
+        "showTrends": true
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "skill-mastery-report",
+      "category": "analytics",
+      "displayName": "Skill Mastery Report",
+      "description": "Report showing mastery level across skills/topics",
+      "icon": "target",
+      "tags": [
+        "skill",
+        "mastery",
+        "report",
+        "competency"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "",
+        "skills": [
+          {
+            "name": "Communication",
+            "masteryLevel": 0,
+            "targetLevel": 5
+          }
+        ]
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "completion-certificate",
+      "category": "analytics",
+      "displayName": "Completion Certificate",
+      "description": "Auto-generated certificate upon course completion",
+      "icon": "award",
+      "tags": [
+        "certificate",
+        "completion",
+        "diploma",
+        "credential"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Certificate of Completion",
+        "recipientField": "learnerName",
+        "courseTitle": "",
+        "completionDate": "",
+        "signatureText": "",
+        "templateStyle": "classic"
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 3,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    },
+    {
+      "typeId": "manager-review",
+      "category": "analytics",
+      "displayName": "Manager Review Page",
+      "description": "Manager/admin view of learner performance data",
+      "icon": "user-check",
+      "tags": [
+        "manager",
+        "review",
+        "admin",
+        "report"
+      ],
+      "completionCapabilities": [
+        "view"
+      ],
+      "scoringEnabled": false,
+      "audioSupport": {
+        "perComponent": false,
+        "perInteraction": false
+      },
+      "estimatedDuration": null,
+      "thumbnail": null,
+      "schema": {},
+      "defaultData": {
+        "title": "Manager Review",
+        "showScores": true,
+        "showCompletion": true,
+        "showTimeSpent": true,
+        "exportable": true
+      },
+      "defaultCompletionType": "view",
+      "maxScore": null,
+      "scoringRules": null,
+      "sortOrder": 4,
+      "isActive": true,
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-02-14T00:00:00Z"
+    }
+  ]
+}

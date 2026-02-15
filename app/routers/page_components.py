@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import get_session
 from app.repositories.page_component_repo import PageRepository, ComponentRepository
-from app.repositories.course_repo import CourseRepository
+from app.repositories.course_repo import CourseRepository, CourseNotFoundError
 from app.models.page_component import PageRecord, ComponentRecord
 
 
@@ -61,10 +61,11 @@ class ReorderDTO(BaseModel):
 
 async def _require_course(session: AsyncSession, courseId: str):
     repo = CourseRepository(session)
-    course = await repo.get_by_course_id(courseId)
-    if not course:
+    try:
+        course = await repo.get_by_course_id(courseId)
+        return course
+    except CourseNotFoundError:
         raise HTTPException(404, f"Course '{courseId}' not found")
-    return course
 
 
 async def _require_page(session: AsyncSession, courseId: str, pageId: str):
@@ -110,11 +111,11 @@ async def create_page(
         theme_config=body.theme,
         completion_config=body.pageCompletion,
     )
-    page = await page_repo.create(page)
+    session.add(page)
+    await session.flush()  # Get page_id without committing
 
     # Add initial components if provided
     if body.components:
-        comp_repo = ComponentRepository(session)
         for idx, comp_dto in enumerate(body.components):
             comp = ComponentRecord(
                 page_id=page.page_id,
@@ -125,9 +126,11 @@ async def create_page(
                 completion_criteria=comp_dto.completionCriteria,
                 styling=comp_dto.styling,
             )
-            await comp_repo.create(comp)
-        # Refresh to get components
-        page = await page_repo.get(page.page_id)
+            session.add(comp)
+    
+    # Commit everything together
+    await session.commit()
+    await session.refresh(page)
 
     return page.to_dict()
 

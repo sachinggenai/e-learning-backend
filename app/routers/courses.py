@@ -283,18 +283,18 @@ async def get_templates_for_pages(
         templates = [
             t
             for t in templates
-            if search_lower in t.name.lower()
-            or search_lower in t.description.lower()
+            if search_lower in (t.name or "").lower()
+            or search_lower in (t.description or "").lower()
         ]
 
     # Sort templates
     if sort_by == "rating":
         templates = sorted(
-            templates, key=lambda x: x.rating, reverse=True
+            templates, key=lambda x: x.rating or 0, reverse=True
         )
     elif sort_by == "usage":
         templates = sorted(
-            templates, key=lambda x: x.usage_count, reverse=True
+            templates, key=lambda x: x.usage_count or 0, reverse=True
         )
 
     # Get categories

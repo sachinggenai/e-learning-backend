@@ -1,0 +1,97 @@
+{
+  "totalScore": 82,
+  "maxScore": 100,
+  "percentage": 82,
+  "passed": true,
+  "passingScore": 70,
+  "attemptNumber": 1,
+  "remainingAttempts": 2,
+  "componentResults": [
+    {
+      "componentId": "c1-04-02",
+      "componentType": "scenario",
+      "score": 10,
+      "maxScore": 10,
+      "weight": 1,
+      "weightedScore": 10,
+      "questionResults": [
+        {
+          "questionId": "opt-2",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        }
+      ]
+    },
+    {
+      "componentId": "c1-05-01",
+      "componentType": "knowledge-check",
+      "score": 20,
+      "maxScore": 20,
+      "weight": 1,
+      "weightedScore": 20,
+      "questionResults": [
+        {
+          "questionId": "kc-q1",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "kc-q2",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        }
+      ]
+    },
+    {
+      "componentId": "c1-06-01",
+      "componentType": "final-assessment",
+      "score": 42,
+      "maxScore": 50,
+      "weight": 2,
+      "weightedScore": 84,
+      "questionResults": [
+        {
+          "questionId": "fa-q1",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "fa-q2",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "fa-q3",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "fa-q4",
+          "correct": true,
+          "score": 10,
+          "maxScore": 10,
+          "partialCredit": false
+        },
+        {
+          "questionId": "fa-q5",
+          "correct": false,
+          "score": 0,
+          "maxScore": 10,
+          "partialCredit": false
+        }
+      ]
+    }
+  ]
+}

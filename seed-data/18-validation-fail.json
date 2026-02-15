@@ -1,0 +1,21 @@
+{
+  "valid": false,
+  "errors": [
+    {
+      "field": "pages[2].components[0].data.question",
+      "message": "Question text is required for MCQ component."
+    },
+    {
+      "field": "pages[4].components[1].data.pairs",
+      "message": "Matching component requires at least 2 pairs."
+    },
+    {
+      "field": "scoring.config.passingScore",
+      "message": "Passing score must be between 0 and 100."
+    },
+    {
+      "field": "pages[5].pageCompletion.requiredComponents",
+      "message": "Cannot reference non-existent component ID \"c-missing\"."
+    }
+  ]
+}

@@ -1,0 +1,609 @@
+{
+  "courseId": "course-webdev-intro",
+  "title": "Introduction to Web Development",
+  "author": "Tech Academy",
+  "language": "en",
+  "description": "A beginner-friendly introduction to web development covering HTML, CSS, and JavaScript fundamentals with interactive exercises.",
+  "version": "1.2.0",
+  "status": "draft",
+  "pages": [
+    {
+      "pageId": "p3-01",
+      "title": "Welcome to Web Development",
+      "order": 0,
+      "components": [
+        {
+          "componentId": "c3-01-01",
+          "componentType": "text-with-media",
+          "order": 0,
+          "data": {
+            "title": "Learn HTML, CSS & JavaScript",
+            "body": "<h2>Welcome, Future Web Developer!</h2><p>In this hands-on course you'll build your first web page from scratch. We start with HTML structure, add CSS styling, and bring it to life with JavaScript.</p>",
+            "mediaUrl": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800",
+            "mediaType": "image"
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "hero-content",
+        "spacing": "spacious"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p3-02",
+      "title": "HTML Fundamentals",
+      "order": 1,
+      "components": [
+        {
+          "componentId": "c3-02-01",
+          "componentType": "carousel",
+          "order": 0,
+          "data": {
+            "title": "HTML Building Blocks",
+            "slides": [
+              {
+                "id": "sl-1",
+                "title": "What is HTML?",
+                "body": "HTML (HyperText Markup Language) is the standard markup language for creating web pages. It describes the structure of a web page using elements.",
+                "imageUrl": ""
+              },
+              {
+                "id": "sl-2",
+                "title": "Elements & Tags",
+                "body": "HTML elements are defined by a start tag, content, and an end tag: <code>&lt;p&gt;Hello World&lt;/p&gt;</code>",
+                "imageUrl": ""
+              },
+              {
+                "id": "sl-3",
+                "title": "Document Structure",
+                "body": "Every HTML page has: <code>&lt;!DOCTYPE html&gt;</code>, <code>&lt;html&gt;</code>, <code>&lt;head&gt;</code>, and <code>&lt;body&gt;</code> elements.",
+                "imageUrl": ""
+              },
+              {
+                "id": "sl-4",
+                "title": "Common Elements",
+                "body": "<ul><li>Headings: h1 – h6</li><li>Paragraphs: p</li><li>Links: a</li><li>Images: img</li><li>Lists: ul, ol, li</li></ul>",
+                "imageUrl": ""
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c3-02-02",
+          "componentType": "flashcards",
+          "order": 1,
+          "data": {
+            "title": "HTML Tag Flashcards",
+            "cards": [
+              {
+                "id": "fc-1",
+                "front": "&lt;h1&gt;",
+                "back": "Main heading — the most important heading on the page. Use only once per page."
+              },
+              {
+                "id": "fc-2",
+                "front": "&lt;p&gt;",
+                "back": "Paragraph — defines a block of text content."
+              },
+              {
+                "id": "fc-3",
+                "front": "&lt;a href=\"...\"&gt;",
+                "back": "Anchor — creates a hyperlink to another page or resource."
+              },
+              {
+                "id": "fc-4",
+                "front": "&lt;img src=\"...\" alt=\"...\"&gt;",
+                "back": "Image — embeds an image. Always include alt text for accessibility."
+              },
+              {
+                "id": "fc-5",
+                "front": "&lt;div&gt;",
+                "back": "Division — a generic container for grouping elements."
+              },
+              {
+                "id": "fc-6",
+                "front": "&lt;ul&gt; / &lt;ol&gt;",
+                "back": "Unordered / Ordered list — contains &lt;li&gt; list items."
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c3-02-03",
+          "componentType": "fill-blanks",
+          "order": 2,
+          "data": {
+            "title": "Complete the HTML",
+            "templateText": "To create a link, use the _____ tag with the _____ attribute to specify the URL.",
+            "blanks": [
+              {
+                "id": "b-1",
+                "correctAnswers": [
+                  "a",
+                  "<a>",
+                  "anchor"
+                ],
+                "caseSensitive": false
+              },
+              {
+                "id": "b-2",
+                "correctAnswers": [
+                  "href"
+                ],
+                "caseSensitive": false
+              }
+            ],
+            "maxScore": 10
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 50
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p3-03",
+      "title": "CSS Styling",
+      "order": 2,
+      "components": [
+        {
+          "componentId": "c3-03-01",
+          "componentType": "tabs",
+          "order": 0,
+          "data": {
+            "tabs": [
+              {
+                "id": "tab-selectors",
+                "title": "Selectors",
+                "body": "<p>CSS selectors target HTML elements. Types include: <strong>element</strong> (p), <strong>class</strong> (.intro), <strong>id</strong> (#header), and <strong>attribute</strong> ([type=\"text\"]).</p>"
+              },
+              {
+                "id": "tab-box",
+                "title": "Box Model",
+                "body": "<p>Every element is a box with: <strong>content</strong>, <strong>padding</strong>, <strong>border</strong>, and <strong>margin</strong>. Use <code>box-sizing: border-box</code> for predictable sizing.</p>"
+              },
+              {
+                "id": "tab-layout",
+                "title": "Flexbox",
+                "body": "<p>Flexbox creates flexible layouts. Set <code>display: flex</code> on a container, then use <code>justify-content</code>, <code>align-items</code>, and <code>flex-wrap</code> to control layout.</p>"
+              },
+              {
+                "id": "tab-grid",
+                "title": "CSS Grid",
+                "body": "<p>Grid creates 2D layouts. Use <code>display: grid</code> with <code>grid-template-columns</code> and <code>grid-template-rows</code> to define structure.</p>"
+              }
+            ],
+            "defaultTabId": "tab-selectors"
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c3-03-02",
+          "componentType": "before-after",
+          "order": 1,
+          "data": {
+            "title": "CSS Transformation",
+            "beforeLabel": "Without CSS",
+            "afterLabel": "With CSS",
+            "beforeContent": "Plain HTML with no styling — black text on white, no spacing, default fonts, elements stacked vertically.",
+            "afterContent": "Styled page with custom fonts, colors, spacing, responsive layout, shadows, and animations."
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c3-03-03",
+          "componentType": "matching",
+          "order": 2,
+          "data": {
+            "title": "Match CSS Properties",
+            "pairs": [
+              {
+                "id": "pair-1",
+                "left": "color",
+                "right": "Changes text color"
+              },
+              {
+                "id": "pair-2",
+                "left": "margin",
+                "right": "Space outside the border"
+              },
+              {
+                "id": "pair-3",
+                "left": "padding",
+                "right": "Space inside the border"
+              },
+              {
+                "id": "pair-4",
+                "left": "display: flex",
+                "right": "Creates a flex container"
+              },
+              {
+                "id": "pair-5",
+                "left": "font-size",
+                "right": "Sets text size"
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 60
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p3-04",
+      "title": "JavaScript Basics",
+      "order": 3,
+      "components": [
+        {
+          "componentId": "c3-04-01",
+          "componentType": "timeline",
+          "order": 0,
+          "data": {
+            "title": "JavaScript History",
+            "events": [
+              {
+                "id": "evt-1",
+                "date": "1995",
+                "title": "JavaScript Created",
+                "description": "Brendan Eich created JavaScript in 10 days at Netscape."
+              },
+              {
+                "id": "evt-2",
+                "date": "1997",
+                "title": "ECMAScript 1",
+                "description": "JavaScript standardized as ECMAScript."
+              },
+              {
+                "id": "evt-3",
+                "date": "2009",
+                "title": "Node.js Released",
+                "description": "JavaScript runs on servers with V8 engine."
+              },
+              {
+                "id": "evt-4",
+                "date": "2015",
+                "title": "ES6 / ES2015",
+                "description": "Major update: let/const, arrow functions, classes, modules."
+              },
+              {
+                "id": "evt-5",
+                "date": "2024",
+                "title": "Modern JavaScript",
+                "description": "Top programming language with vast ecosystem."
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c3-04-02",
+          "componentType": "click-reveal",
+          "order": 1,
+          "data": {
+            "title": "JavaScript Core Concepts",
+            "items": [
+              {
+                "id": "cr-1",
+                "label": "Variables",
+                "content": "Use <code>let</code> for mutable variables and <code>const</code> for constants. Avoid <code>var</code>."
+              },
+              {
+                "id": "cr-2",
+                "label": "Functions",
+                "content": "Functions are declared with <code>function name() {}</code> or <code>const name = () => {}</code> (arrow function)."
+              },
+              {
+                "id": "cr-3",
+                "label": "DOM Manipulation",
+                "content": "Use <code>document.querySelector()</code> to select elements and modify their content, styles, and attributes."
+              },
+              {
+                "id": "cr-4",
+                "label": "Events",
+                "content": "Attach event listeners: <code>element.addEventListener(\"click\", handler)</code>"
+              }
+            ],
+            "columns": 2
+          },
+          "completionCriteria": {
+            "type": "interact",
+            "requiredInteractions": [
+              "cr-1",
+              "cr-2",
+              "cr-3",
+              "cr-4"
+            ]
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c3-04-03",
+          "componentType": "mcq",
+          "order": 2,
+          "data": {
+            "question": "Which keyword declares a variable that cannot be reassigned?",
+            "options": [
+              {
+                "id": "opt-1",
+                "text": "var",
+                "isCorrect": false
+              },
+              {
+                "id": "opt-2",
+                "text": "let",
+                "isCorrect": false
+              },
+              {
+                "id": "opt-3",
+                "text": "const",
+                "isCorrect": true
+              },
+              {
+                "id": "opt-4",
+                "text": "function",
+                "isCorrect": false
+              }
+            ],
+            "explanation": "const declares a constant — its value cannot be reassigned after initialization.",
+            "maxScore": 10
+          },
+          "completionCriteria": {
+            "type": "score",
+            "threshold": 100
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    },
+    {
+      "pageId": "p3-05",
+      "title": "Wrap-Up & Resources",
+      "order": 4,
+      "components": [
+        {
+          "componentId": "c3-05-01",
+          "componentType": "summary-takeaways",
+          "order": 0,
+          "data": {
+            "title": "What You Learned",
+            "keyPoints": [
+              "HTML provides the structure of web pages using elements and tags",
+              "CSS controls visual presentation: colors, layout, typography",
+              "JavaScript adds interactivity and dynamic behavior",
+              "The Box Model, Flexbox, and Grid are key CSS layout tools",
+              "Modern JavaScript (ES6+) uses let/const, arrow functions, and modules"
+            ],
+            "nextSteps": "Build a personal portfolio page to practice everything you've learned!"
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c3-05-02",
+          "componentType": "resources-downloads",
+          "order": 1,
+          "data": {
+            "title": "Helpful Resources",
+            "resources": [
+              {
+                "id": "res-1",
+                "title": "MDN Web Docs",
+                "type": "link",
+                "url": "https://developer.mozilla.org",
+                "description": "The best reference for HTML, CSS, and JavaScript"
+              },
+              {
+                "id": "res-2",
+                "title": "CSS Tricks — Flexbox Guide",
+                "type": "link",
+                "url": "https://css-tricks.com/snippets/css/a-guide-to-flexbox/",
+                "description": "Visual guide to CSS Flexbox"
+              },
+              {
+                "id": "res-3",
+                "title": "JavaScript.info",
+                "type": "link",
+                "url": "https://javascript.info",
+                "description": "Modern JavaScript tutorial"
+              },
+              {
+                "id": "res-4",
+                "title": "HTML Cheat Sheet",
+                "type": "pdf",
+                "url": "/downloads/html-cheatsheet.pdf",
+                "description": "Quick reference card"
+              }
+            ]
+          },
+          "completionCriteria": {
+            "type": "view"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        },
+        {
+          "componentId": "c3-05-03",
+          "componentType": "confidence-rating",
+          "order": 2,
+          "data": {
+            "title": "Rate Your Confidence",
+            "topics": [
+              {
+                "id": "topic-html",
+                "name": "HTML",
+                "description": "Creating page structure with HTML elements"
+              },
+              {
+                "id": "topic-css",
+                "name": "CSS",
+                "description": "Styling pages with CSS selectors and properties"
+              },
+              {
+                "id": "topic-js",
+                "name": "JavaScript",
+                "description": "Adding interactivity with JS"
+              }
+            ],
+            "scale": {
+              "min": 1,
+              "max": 5,
+              "labels": [
+                "Not confident",
+                "Very confident"
+              ]
+            }
+          },
+          "completionCriteria": {
+            "type": "interact"
+          },
+          "createdAt": "2026-02-15T10:00:00Z",
+          "updatedAt": "2026-02-15T10:00:00Z"
+        }
+      ],
+      "layout": {
+        "preset": "single-column",
+        "spacing": "normal"
+      },
+      "pageCompletion": {
+        "enabled": true,
+        "strategy": "all"
+      },
+      "theme": {
+        "inheritCourse": true
+      },
+      "createdAt": "2026-02-15T10:00:00Z",
+      "updatedAt": "2026-02-15T10:00:00Z"
+    }
+  ],
+  "navigation": {
+    "allowSkip": true,
+    "showProgress": true,
+    "linearProgression": false
+  },
+  "settings": {
+    "themeId": "preset-light",
+    "autoplay": false,
+    "duration": 60
+  },
+  "scoring": {
+    "config": {
+      "passingScore": 60,
+      "maxAttempts": null,
+      "attemptScoring": "best",
+      "showCorrectAnswers": true,
+      "showScoreAfterQuestion": true,
+      "showScoreAfterPage": false,
+      "weightedScoring": false,
+      "allowPartialCredit": true
+    },
+    "componentScores": [
+      {
+        "componentId": "c3-02-03",
+        "componentType": "fill-blanks",
+        "maxPoints": 10,
+        "weight": 1
+      },
+      {
+        "componentId": "c3-03-03",
+        "componentType": "matching",
+        "maxPoints": 10,
+        "weight": 1
+      },
+      {
+        "componentId": "c3-04-03",
+        "componentType": "mcq",
+        "maxPoints": 10,
+        "weight": 1
+      }
+    ]
+  },
+  "createdAt": "2026-02-01T08:00:00Z",
+  "updatedAt": "2026-02-15T09:00:00Z"
+}
