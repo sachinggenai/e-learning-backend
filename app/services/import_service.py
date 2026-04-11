@@ -22,6 +22,8 @@ from app.services.import_strategies.registry import StrategyRegistry
 from app.services.import_strategies.json_strategy import JsonPayloadStrategy
 from app.services.import_strategies.scorm12_strategy import Scorm12Strategy
 from app.repositories.import_job_repository import ImportJobRepository
+from app.repositories.course_repo import CourseRepository, CourseConflictError
+from app.repositories.template_repo import TemplateRepository
 from app.repositories.template_type_repo import (
     TemplateTypeRepository,
     TemplateTypeConflictError,
@@ -163,8 +165,8 @@ class ImportService:
                         "ambiguous": len(ambiguous),
                         "ambiguous_files": list(ambiguous.keys())
                     },
-                        "warnings": list(strategy_result.warnings)
-                        + await self._collect_warnings(analyzed_templates),
+                    "warnings": list(strategy_result.warnings)
+                    + await self._collect_warnings(analyzed_templates),
                 }
 
                 # Update job with staged data
@@ -245,9 +247,79 @@ class ImportService:
                 job_id, "committing", progress=0.9
             )
 
+            course_data = dict(job.result_data or {})
+            target_course_id = (
+                job.course_id
+                or course_data.get("courseId")
+                or str(uuid.uuid4())
+            )
+            course_title = course_data.get("title") or "Imported Course"
+            course_description = course_data.get("description") or ""
+
+            imported_templates = list(course_data.get("templates") or [])
+            persisted_course_data = {
+                **course_data,
+                "courseId": target_course_id,
+                "title": course_title,
+                "description": course_description,
+                "templates": [],
+                "importMeta": {
+                    "jobId": job_id,
+                    "committedAt": datetime.utcnow().isoformat(),
+                },
+            }
+
+            course_repo = CourseRepository(self.session)
+            try:
+                course_record = await course_repo.create(
+                    course_id=target_course_id,
+                    title=course_title,
+                    description=course_description,
+                    data=persisted_course_data,
+                )
+            except CourseConflictError as exc:
+                raise ImportServiceError(
+                    f"Course '{target_course_id}' already exists"
+                ) from exc
+
+            template_repo = TemplateRepository(self.session)
+            persisted_template_count = 0
+            skipped_template_count = 0
+            for index, template in enumerate(imported_templates):
+                if not isinstance(template, dict) or "error" in template:
+                    skipped_template_count += 1
+                    continue
+
+                template_id = template.get("id") or f"template_{index}"
+                template_type = template.get("type") or "content-text"
+                template_title = (
+                    template.get("title") or f"Template {index + 1}"
+                )
+                template_data = template.get("data") or {}
+                template_order = template.get("order")
+                if not isinstance(template_data, dict):
+                    skipped_template_count += 1
+                    continue
+
+                await template_repo.create(
+                    course_id=course_record.id,
+                    template_uid=template_id,
+                    template_type=template_type,
+                    title=template_title,
+                    data=template_data,
+                    order=(
+                        template_order
+                        if isinstance(template_order, int)
+                        else None
+                    ),
+                )
+                persisted_template_count += 1
+
+            await self.job_repo.update_course_id(job_id, target_course_id)
+
             # Harvest unique templates into the global library
             # (idempotent, capped)
-            templates = (job.result_data or {}).get("templates", [])
+            templates = imported_templates
             harvest_result = await self._harvest_templates(
                 templates=templates,
                 source_job_id=job_id,
@@ -259,8 +331,6 @@ class ImportService:
                 harvest_result,
             )
 
-            # In Phase 1, we just mark it as committed
-            # Phase 2 will actually create the course record
             await self.job_repo.update_status(
                 job_id, "committed", progress=1.0
             )
@@ -268,7 +338,15 @@ class ImportService:
             return {
                 "jobId": job_id,
                 "status": "committed",
-                "courseData": job.result_data,
+                "courseId": target_course_id,
+                "courseData": {
+                    **course_data,
+                    "courseId": target_course_id,
+                },
+                "persisted": {
+                    "templateCount": persisted_template_count,
+                    "skippedTemplates": skipped_template_count,
+                },
                 "harvest": harvest_result,
             }
 

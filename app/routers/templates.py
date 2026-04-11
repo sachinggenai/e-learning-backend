@@ -1,7 +1,7 @@
 """Templates router for normalized template/page entities.
 
-All endpoints operate under a course scope: /courses/{course_id}/templates
-Keeps course JSON snapshot templates array in sync via repository layer.
+All endpoints operate under a course scope: /courses/{courseId}/templates.
+Public course IDs are resolved to the internal course PK before repository use.
 """
 from __future__ import annotations
 from typing import List, Optional
@@ -10,13 +10,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import get_session
+from app.repositories.course_repo import CourseRepository, CourseNotFoundError
 from app.repositories.template_repo import (
     TemplateRepository,
     TemplateNotFoundError,
     TemplateConflictError,
 )
 
-router = APIRouter(prefix="/courses/{course_id}/templates", tags=["Templates"])
+router = APIRouter(prefix="/courses/{courseId}/templates", tags=["Templates"])
 
 
 class TemplateCreate(BaseModel):
@@ -54,11 +55,27 @@ async def _get_repo(
     return TemplateRepository(session)
 
 
+async def _get_course_pk(
+    courseId: str,
+    session: AsyncSession = Depends(get_session),
+) -> int:
+    course_repo = CourseRepository(session)
+    try:
+        course = await course_repo.get_by_course_id(courseId)
+    except CourseNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="Course not found",
+        ) from exc
+    return course.id
+
+
 @router.get("", response_model=List[TemplateOut])
 async def list_templates(
-    course_id: int, repo: TemplateRepository = Depends(_get_repo)
+    course_pk: int = Depends(_get_course_pk),
+    repo: TemplateRepository = Depends(_get_repo),
 ):
-    templates = await repo.list(course_id)
+    templates = await repo.list(course_pk)
     return [t.to_dict() for t in templates]
 
 
@@ -66,13 +83,13 @@ async def list_templates(
     "", response_model=TemplateOut, status_code=status.HTTP_201_CREATED
 )
 async def create_template(
-    course_id: int,
     payload: TemplateCreate,
+    course_pk: int = Depends(_get_course_pk),
     repo: TemplateRepository = Depends(_get_repo),
 ):
     try:
         tmpl = await repo.create(
-            course_id=course_id,
+            course_id=course_pk,
             template_uid=payload.templateId,
             template_type=payload.type,
             title=payload.title,
@@ -88,12 +105,12 @@ async def create_template(
 
 @router.get("/{template_id}", response_model=TemplateOut)
 async def get_template(
-    course_id: int,
     template_id: int,
+    course_pk: int = Depends(_get_course_pk),
     repo: TemplateRepository = Depends(_get_repo),
 ):
     try:
-        tmpl = await repo.get(course_id, template_id)
+        tmpl = await repo.get(course_pk, template_id)
     except TemplateNotFoundError:
         raise HTTPException(status_code=404, detail="Template not found")
     return tmpl.to_dict()
@@ -101,14 +118,14 @@ async def get_template(
 
 @router.patch("/{template_id}", response_model=TemplateOut)
 async def update_template(
-    course_id: int,
     template_id: int,
     payload: TemplateUpdate,
+    course_pk: int = Depends(_get_course_pk),
     repo: TemplateRepository = Depends(_get_repo),
 ):
     try:
         tmpl = await repo.update(
-            course_id,
+            course_pk,
             template_id,
             title=payload.title,
             data=payload.data,
@@ -121,12 +138,12 @@ async def update_template(
 
 @router.post("/reorder", response_model=List[TemplateOut])
 async def reorder_templates(
-    course_id: int,
     payload: ReorderRequest,
+    course_pk: int = Depends(_get_course_pk),
     repo: TemplateRepository = Depends(_get_repo),
 ):
     try:
-        ordered = await repo.reorder(course_id, payload.orderedIds)
+        ordered = await repo.reorder(course_pk, payload.orderedIds)
     except TemplateConflictError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except TemplateNotFoundError:
@@ -136,12 +153,12 @@ async def reorder_templates(
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_template(
-    course_id: int,
     template_id: int,
+    course_pk: int = Depends(_get_course_pk),
     repo: TemplateRepository = Depends(_get_repo),
 ):
     try:
-        await repo.delete(course_id, template_id)
+        await repo.delete(course_pk, template_id)
     except TemplateNotFoundError:
         raise HTTPException(status_code=404, detail="Template not found")
     return None

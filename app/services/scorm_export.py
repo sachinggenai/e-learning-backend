@@ -8,6 +8,7 @@ import json
 import zipfile
 import tempfile
 import os
+import shutil
 import re
 import mimetypes
 import html
@@ -1561,9 +1562,45 @@ console.log('✓ SCORM wrapper with Mock API loaded');
         except Exception as e:
             logger.error(f"Failed to create SCORM wrapper: {e}")
             raise Exception(f"SCORM wrapper creation failed: {str(e)}")
+
+    def _resolve_asset_source_path(self, raw_path: str) -> Path:
+        """Resolve an asset path into a concrete local filesystem path."""
+        if not raw_path:
+            raise ValueError("Asset path is empty")
+
+        media_root = Path("media").resolve()
+
+        # Absolute path support (must stay under workspace/media).
+        if os.path.isabs(raw_path):
+            candidate = Path(raw_path).resolve()
+            if candidate.exists():
+                return candidate
+
+        # API URL format from media endpoints.
+        api_prefix = "/api/v1/media/files/"
+        if raw_path.startswith(api_prefix):
+            relative = raw_path[len(api_prefix):].lstrip("/")
+            candidate = (media_root / relative).resolve()
+            if str(candidate).startswith(str(media_root)) and candidate.exists():
+                return candidate
+
+        # Relative media path stored by upload response.
+        relative_candidate = (media_root / raw_path.lstrip("/")).resolve()
+        if (
+            str(relative_candidate).startswith(str(media_root))
+            and relative_candidate.exists()
+        ):
+            return relative_candidate
+
+        # Last resort: relative to current workspace.
+        workspace_candidate = Path(raw_path).expanduser().resolve()
+        if workspace_candidate.exists():
+            return workspace_candidate
+
+        raise FileNotFoundError(f"Asset file not found for path '{raw_path}'")
     
     async def _copy_assets(self, package_dir: Path, assets: List[Any]) -> None:
-        """Copy asset files to the package (Phase 1: creates placeholder files)"""
+        """Copy real asset files into the package and fail on invalid assets."""
         try:
             # Validate inputs
             if not package_dir or not package_dir.exists():
@@ -1575,34 +1612,43 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             assets_dir = package_dir / "assets"
             assets_dir.mkdir(exist_ok=True)
 
-            # In Phase 1, we create placeholder files for assets
-            # In later phases, this would copy actual files from storage
-            for asset in assets:
+            copied_count = 0
+            seen_target_names = set()
+            copy_errors = []
+            for index, asset in enumerate(assets):
                 try:
-                    if not hasattr(asset, 'path') or not hasattr(asset, 'name'):
-                        logger.warning(f"Asset missing required attributes: {asset}")
-                        continue
+                    if not hasattr(asset, "path"):
+                        raise ValueError(
+                            f"Asset at index {index} is missing 'path'"
+                        )
 
-                    filename = os.path.basename(asset.path)
+                    source_path = self._resolve_asset_source_path(asset.path)
+                    filename = os.path.basename(source_path.name)
                     if not filename:
-                        logger.warning(f"Could not extract filename from asset path: {asset.path}")
-                        continue
+                        raise ValueError(
+                            f"Asset path '{asset.path}' has no filename"
+                        )
 
-                    asset_path = assets_dir / filename
+                    if filename in seen_target_names:
+                        raise ValueError(
+                            f"Duplicate asset filename '{filename}' in package"
+                        )
+                    seen_target_names.add(filename)
 
-                    # Create placeholder content based on asset type
-                    asset_type = getattr(asset, 'type', 'unknown')
-                    asset_name = getattr(asset, 'name', 'Unknown Asset')
-                    placeholder_content = f"Placeholder for {asset_name} ({asset_type})"
-
-                    with open(asset_path, 'w', encoding='utf-8') as f:
-                        f.write(placeholder_content)
+                    target_path = assets_dir / filename
+                    shutil.copy2(source_path, target_path)
+                    copied_count += 1
 
                 except Exception as e:
-                    logger.warning(f"Failed to create placeholder for asset {asset}: {e}")
-                    continue
+                    asset_name = getattr(asset, "name", f"asset_{index}")
+                    copy_errors.append(f"{asset_name}: {e}")
 
-            logger.info(f"✓ Created {len(assets)} asset placeholders")
+            if copy_errors:
+                raise ValueError(
+                    "Asset copy failed: " + "; ".join(copy_errors)
+                )
+
+            logger.info(f"✓ Copied {copied_count} asset files")
 
         except Exception as e:
             logger.error(f"Failed to copy assets: {e}")

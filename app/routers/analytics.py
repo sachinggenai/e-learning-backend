@@ -6,13 +6,14 @@ and manager-facing views of learner progress.
 from __future__ import annotations
 from typing import Optional
 from datetime import datetime
+from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import get_session
 from app.repositories.course_repo import CourseRepository
-from app.repositories.page_component_repo import PageRepository, ComponentRepository
+from app.repositories.page_component_repo import PageRepository
 from app.repositories.scoring_repo import ScoringRepository
 from app.repositories.interaction_event_repo import InteractionEventRepository
 
@@ -31,6 +32,7 @@ router = APIRouter(tags=["Analytics"])
 @router.get("/courses/{courseId}/analytics/summary")
 async def get_analytics_summary(
     courseId: str,
+    learnerId: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
 ):
     """Course-level performance summary.
@@ -63,8 +65,26 @@ async def get_analytics_summary(
 
     # Interaction event stats
     event_repo = InteractionEventRepository(session)
-    total_events = await event_repo.count_by_course(courseId)
-    events_by_type = await event_repo.aggregate_by_type(courseId)
+    events = await event_repo.list_by_course(
+        courseId,
+        learner_id=learnerId,
+        limit=10000,
+    )
+    total_events = len(events)
+    distinct_learners = len({event.learner_id for event in events})
+    completed_events = sum(1 for event in events if event.completed)
+    scored_events = [float(event.score) for event in events if event.score is not None]
+    average_score = (
+        round(sum(scored_events) / len(scored_events), 2)
+        if scored_events
+        else None
+    )
+
+    by_type_counter = Counter(event.interaction_type for event in events)
+    events_by_type = [
+        {"interactionType": interaction_type, "count": count}
+        for interaction_type, count in by_type_counter.most_common()
+    ]
 
     return {
         "courseId": courseId,
@@ -81,6 +101,15 @@ async def get_analytics_summary(
         "interactions": {
             "totalEvents": total_events,
             "byType": events_by_type,
+            "filteredByLearnerId": learnerId,
+            "distinctLearners": distinct_learners,
+            "completedEvents": completed_events,
+            "completionEventRate": (
+                round((completed_events / total_events) * 100, 2)
+                if total_events
+                else 0.0
+            ),
+            "averageScore": average_score,
         },
         "generatedAt": datetime.utcnow().isoformat(),
     }
@@ -134,6 +163,7 @@ async def get_skill_mastery(
 @router.get("/courses/{courseId}/analytics/manager-view")
 async def get_manager_view(
     courseId: str,
+    learnerId: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
 ):
     """Manager-facing view of learner progress.
@@ -151,7 +181,44 @@ async def get_manager_view(
     scoring_record = await scoring_repo.get_by_course(courseId)
 
     event_repo = InteractionEventRepository(session)
-    total_events = await event_repo.count_by_course(courseId)
+    events = await event_repo.list_by_course(
+        courseId,
+        learner_id=learnerId,
+        limit=10000,
+    )
+    total_events = len(events)
+
+    learner_stats_map = {}
+    for event in events:
+        learner_key = event.learner_id or "anonymous"
+        if learner_key not in learner_stats_map:
+            learner_stats_map[learner_key] = {
+                "learnerId": learner_key,
+                "eventCount": 0,
+                "completedEvents": 0,
+                "scoreTotal": 0.0,
+                "scoreCount": 0,
+            }
+        bucket = learner_stats_map[learner_key]
+        bucket["eventCount"] += 1
+        if event.completed:
+            bucket["completedEvents"] += 1
+        if event.score is not None:
+            bucket["scoreTotal"] += float(event.score)
+            bucket["scoreCount"] += 1
+
+    learner_stats = []
+    for stats in learner_stats_map.values():
+        score_count = stats.pop("scoreCount")
+        score_total = stats.pop("scoreTotal")
+        stats["averageScore"] = (
+            round(score_total / score_count, 2)
+            if score_count > 0
+            else None
+        )
+        learner_stats.append(stats)
+
+    learner_stats.sort(key=lambda row: row["eventCount"], reverse=True)
 
     page_details = []
     for page in pages:
@@ -172,5 +239,7 @@ async def get_manager_view(
         "totalPages": len(pages),
         "scoring": scoring_record.to_dict() if scoring_record else None,
         "totalInteractionEvents": total_events,
+        "learnerStats": learner_stats,
+        "filteredByLearnerId": learnerId,
         "generatedAt": datetime.utcnow().isoformat(),
     }

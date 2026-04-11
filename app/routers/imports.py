@@ -14,7 +14,11 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
 from pydantic import BaseModel
 
 from app.db.config import get_session
-from app.services.import_service import ImportService, NoPayloadFoundError, ImportServiceError
+from app.services.import_service import (
+    ImportService,
+    NoPayloadFoundError,
+    ImportServiceError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +47,6 @@ class ImportStatusResponse(BaseModel):
 
 class ImportCommitRequest(BaseModel):
     """Request to commit an import."""
-    job_id: str
     merge_with_course_id: Optional[str] = None
 
 
@@ -118,7 +121,10 @@ async def analyze_import(
             detail=f"Import error: {str(e)}"
         )
     except Exception as e:
-        logger.error(f"Unexpected error during import analysis: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error during import analysis: {e}",
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=500,
             detail="Unexpected error during import analysis"
@@ -194,7 +200,8 @@ async def commit_import(
         return ImportCommitResponse(
             job_id=job_id,
             status="committed",
-            course_id=result.get("courseData", {}).get("courseId"),
+            course_id=result.get("courseId")
+            or result.get("courseData", {}).get("courseId"),
             message="Import committed successfully"
         )
 

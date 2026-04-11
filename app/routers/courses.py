@@ -4,12 +4,18 @@ Initial Phase 2 foundation: minimal CRUD over persisted JSON course data.
 """
 from __future__ import annotations
 from typing import List, Optional
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
+try:
+    from pydantic import ValidationError as PydanticValidationError
+except ImportError:  # pragma: no cover
+    from pydantic.error_wrappers import ValidationError as PydanticValidationError  # type: ignore
 
 from app.db.config import get_session
+from app.models.course import Course
 from app.repositories.course_repo import (
     CourseRepository,
     CourseConflictError,
@@ -434,6 +440,7 @@ async def validate_course(request: CourseValidationRequest) -> ValidationResult:
 
     try:
         course_data = request.courseData
+        validation_timestamp = datetime.utcnow().isoformat()
 
         errors = []
         warnings = []
@@ -451,8 +458,26 @@ async def validate_course(request: CourseValidationRequest) -> ValidationResult:
                 valid=False,
                 errors=errors,
                 warnings=warnings,
-                timestamp="2024-01-01T00:00:00Z"  # Would use datetime.utcnow().isoformat()
+                timestamp=validation_timestamp,
             )
+
+        # When payload is template-based, verify compatibility with the
+        # export model so save/validate/export semantics stay aligned.
+        if "templates" in course_data:
+            try:
+                Course(**course_data)
+            except PydanticValidationError as exc:
+                for idx, issue in enumerate(exc.errors()):
+                    field_path = ".".join(str(part) for part in issue.get("loc", []))
+                    errors.append(
+                        ValidationError(
+                            id=f"export-compat-{idx}",
+                            field=field_path or "courseData",
+                            category="schema",
+                            message=issue.get("msg", "Invalid export payload"),
+                            level="error",
+                        )
+                    )
 
         # Required fields validation
         required_fields = ["courseId", "title", "pages"]
@@ -575,7 +600,7 @@ async def validate_course(request: CourseValidationRequest) -> ValidationResult:
             valid=len(errors) == 0,
             errors=errors,
             warnings=warnings,
-            timestamp="2024-01-01T00:00:00Z"  # Would use datetime.utcnow().isoformat()
+            timestamp=validation_timestamp,
         )
 
     except Exception as e:
@@ -590,5 +615,5 @@ async def validate_course(request: CourseValidationRequest) -> ValidationResult:
                 level="error"
             )],
             warnings=[],
-            timestamp="2024-01-01T00:00:00Z"
+            timestamp=datetime.utcnow().isoformat(),
         )

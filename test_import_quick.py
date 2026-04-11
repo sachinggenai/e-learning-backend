@@ -211,7 +211,7 @@ def main():
     print("\nNext steps:")
     print("  1. Check database: sqlite3 data/elearning.db \"SELECT * FROM import_jobs LIMIT 1;\"")
     print("  2. View in Swagger: http://localhost:8000/docs")
-    print("  3. Read: TESTING_PHASE_1C_AND_2.md")
+    print("  3. Read: docs/TESTING.md")
     
     return True
 

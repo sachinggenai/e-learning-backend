@@ -9,18 +9,21 @@ Endpoints:
   POST         /courses/{courseId}/interactions
 """
 from __future__ import annotations
-from typing import Optional, List
-import uuid
-from datetime import datetime
+from typing import Optional, List, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import get_session
+from app.models.interaction_event import InteractionEventRecord
 from app.repositories.scoring_repo import ScoringRepository
 from app.repositories.course_repo import CourseRepository
-from app.repositories.page_component_repo import PageRepository, ComponentRepository
+from app.repositories.interaction_event_repo import InteractionEventRepository
+from app.repositories.page_component_repo import (
+    PageRepository,
+    ComponentRepository,
+)
 
 
 # ── DTOs ─────────────────────────────────────
@@ -66,11 +69,185 @@ class InteractionEventDTO(BaseModel):
     pageId: str
     componentId: str
     interactionType: str
+    learnerId: Optional[str] = None
     data: Optional[InteractionDataDTO] = None
     completed: bool = False
 
 
 router = APIRouter(tags=["Scoring", "Completion"])
+
+
+def _extract_question_definitions(component_data: dict) -> dict[str, dict]:
+    questions = component_data.get("questions") or []
+    if not isinstance(questions, list):
+        return {}
+
+    return {
+        str(question.get("id")): question
+        for question in questions
+        if isinstance(question, dict) and question.get("id")
+    }
+
+
+def _get_correct_option_ids(question: dict) -> set[str]:
+    option_ids = set()
+    for option in question.get("options") or []:
+        if option.get("isCorrect") or option.get("correct"):
+            option_id = option.get("id")
+            if option_id is not None:
+                option_ids.add(str(option_id))
+    return option_ids
+
+
+async def _build_scorable_lookup(
+    course_id: str,
+    course,
+    session: AsyncSession,
+) -> dict[str, dict[str, Any]]:
+    component_repo = ComponentRepository(session)
+    components = await component_repo.list_by_course(course_id)
+    lookup = {
+        component.component_id: {
+            "componentType": component.component_type,
+            "data": component.data or {},
+        }
+        for component in components
+    }
+    if lookup:
+        return lookup
+
+    templates = (course.json_data or {}).get("templates") or []
+    for template in templates:
+        if not isinstance(template, dict) or not template.get("id"):
+            continue
+        lookup[str(template["id"])] = {
+            "componentType": template.get("type"),
+            "data": template.get("data") or {},
+        }
+    return lookup
+
+
+async def _latest_events_by_component(
+    course_id: str,
+    session: AsyncSession,
+    page_id: Optional[str] = None,
+) -> dict[str, InteractionEventRecord]:
+    repo = InteractionEventRepository(session)
+    events = await repo.list_by_course(
+        course_id,
+        page_id=page_id,
+        limit=1000,
+    )
+    latest = {}
+    for event in events:
+        if event.component_id not in latest:
+            latest[event.component_id] = event
+    return latest
+
+
+def _is_component_completed(
+    component,
+    latest_event: Optional[InteractionEventRecord],
+) -> bool:
+    if not latest_event:
+        return False
+
+    criteria = component.completion_criteria or {}
+    completion_type = criteria.get("type", "view")
+    threshold = criteria.get("threshold")
+
+    event_data = latest_event.data or {}
+    event_score = latest_event.score
+    if event_score is None:
+        event_score = event_data.get("score")
+    event_max = latest_event.max_score
+    if event_max is None:
+        event_max = event_data.get("maxScore")
+
+    if completion_type in ("score", "scored-interaction"):
+        if event_score is None:
+            return bool(latest_event.completed)
+        if event_max:
+            required = threshold if threshold is not None else 100
+            return (event_score / event_max * 100) >= required
+        if threshold is not None:
+            return event_score >= threshold
+        return bool(latest_event.completed or event_score > 0)
+
+    if completion_type == "interaction":
+        return bool(latest_event.completed or latest_event.interaction_type)
+
+    return bool(latest_event.completed)
+
+
+def _evaluate_page_completion(
+    strategy: str,
+    component_statuses: list[dict],
+    required_ids: Optional[list[str]],
+    threshold: Optional[float],
+) -> bool:
+    if not component_statuses:
+        return True
+
+    completed_count = sum(
+        1 for status in component_statuses if status["completed"]
+    )
+    total_count = len(component_statuses)
+
+    if strategy == "all":
+        return completed_count >= total_count
+    if strategy == "any":
+        return completed_count > 0
+    if strategy == "percentage":
+        percent = (completed_count / total_count * 100) if total_count else 100
+        return percent >= (threshold if threshold is not None else 100)
+    if strategy == "custom" and required_ids:
+        completed_ids = {
+            status["componentId"]
+            for status in component_statuses
+            if status["completed"]
+        }
+        return all(
+            component_id in completed_ids for component_id in required_ids
+        )
+    return completed_count >= total_count
+
+
+def _build_page_completion_payload(
+    page,
+    latest_events: dict[str, InteractionEventRecord],
+) -> dict:
+    component_statuses = []
+    for component in (page.components or []):
+        criteria = component.completion_criteria or {}
+        latest_event = latest_events.get(component.component_id)
+        component_statuses.append(
+            {
+                "componentId": component.component_id,
+                "completed": _is_component_completed(component, latest_event),
+                "completionType": criteria.get("type", "view"),
+                "threshold": criteria.get("threshold"),
+            }
+        )
+
+    completion_config = page.completion_config or {}
+    strategy = completion_config.get("strategy", "all")
+    required_ids = completion_config.get("requiredComponents")
+    threshold = completion_config.get("completionThreshold")
+    page_completed = _evaluate_page_completion(
+        strategy,
+        component_statuses,
+        required_ids,
+        threshold,
+    )
+
+    return {
+        "pageId": page.page_id,
+        "title": page.title,
+        "completed": page_completed,
+        "strategy": strategy,
+        "components": component_statuses,
+    }
 
 
 # ── Scoring Endpoints ───────────────────────
@@ -155,7 +332,19 @@ async def validate_scoring_config(
     warnings = []
 
     if not record:
-        return {"valid": True, "errors": [], "warnings": [{"field": "scoring", "message": "No scoring configuration found, defaults will be used"}]}
+        return {
+            "valid": True,
+            "errors": [],
+            "warnings": [
+                {
+                    "field": "scoring",
+                    "message": (
+                        "No scoring configuration found, defaults "
+                        "will be used"
+                    ),
+                }
+            ],
+        }
 
     config = record.config or {}
     component_scores = record.component_scores or []
@@ -163,7 +352,12 @@ async def validate_scoring_config(
     # Check passing score range
     ps = config.get("passingScore", 70)
     if not (0 <= ps <= 100):
-        errors.append({"field": "config.passingScore", "message": f"Passing score must be 0-100, got {ps}"})
+        errors.append(
+            {
+                "field": "config.passingScore",
+                "message": f"Passing score must be 0-100, got {ps}",
+            }
+        )
 
     # Check weights sum to 1.0 if weighted scoring is enabled
     if config.get("weightedScoring") and component_scores:
@@ -196,7 +390,10 @@ async def calculate_score(
         "weightedScoring": False,
         "allowPartialCredit": True,
     }
-    component_score_configs = (record.component_scores if record else None) or []
+    component_score_configs = (
+        record.component_scores if record else None
+    ) or []
+    scorable_lookup = await _build_scorable_lookup(courseId, course, session)
 
     # Build lookup
     cs_lookup = {cs["componentId"]: cs for cs in component_score_configs}
@@ -206,6 +403,24 @@ async def calculate_score(
     total_max = 0.0
 
     for answer in body.answers:
+        source_component = scorable_lookup.get(answer.componentId)
+        if not source_component:
+            raise HTTPException(
+                422,
+                "Component "
+                f"'{answer.componentId}' not found for course "
+                f"'{courseId}'",
+            )
+
+        question_lookup = _extract_question_definitions(
+            source_component.get("data") or {}
+        )
+        if not question_lookup:
+            raise HTTPException(
+                422,
+                f"Component '{answer.componentId}' has no scorable questions",
+            )
+
         comp_config = cs_lookup.get(answer.componentId, {})
         max_points = comp_config.get("maxPoints", 100)
         weight = comp_config.get("weight", 1.0)
@@ -214,34 +429,82 @@ async def calculate_score(
         comp_score = 0.0
         comp_max = 0.0
 
-        # Simple per-question scoring
-        # Real implementation would look up correct answers from component data
         for resp in answer.responses:
+            question = question_lookup.get(resp.questionId)
+            if not question:
+                raise HTTPException(
+                    422,
+                    "Question "
+                    f"'{resp.questionId}' not found on component "
+                    f"'{answer.componentId}'",
+                )
+
+            correct_option_ids = _get_correct_option_ids(question)
+            if not correct_option_ids:
+                raise HTTPException(
+                    422,
+                    "Question "
+                    f"'{resp.questionId}' has no correct options configured",
+                )
+
+            selected_option_ids = {
+                str(opt_id) for opt_id in resp.selectedOptionIds
+            }
             q_max = max_points / max(len(answer.responses), 1)
             comp_max += q_max
-            # Placeholder: mark as needing actual answer validation
+
+            is_exact_match = selected_option_ids == correct_option_ids
+            question_score = q_max if is_exact_match else 0.0
+            partial_credit = False
+            if (
+                not is_exact_match
+                and config.get("allowPartialCredit")
+                and len(correct_option_ids) > 1
+            ):
+                correct_selected = len(
+                    selected_option_ids & correct_option_ids
+                )
+                incorrect_selected = len(
+                    selected_option_ids - correct_option_ids
+                )
+                fraction = (
+                    (correct_selected - incorrect_selected)
+                    / len(correct_option_ids)
+                )
+                fraction = max(0.0, fraction)
+                question_score = round(q_max * fraction, 4)
+                partial_credit = 0.0 < question_score < q_max
+
+            comp_score += question_score
             question_results.append({
                 "questionId": resp.questionId,
-                "correct": False,
-                "score": 0,
+                "correct": is_exact_match,
+                "score": round(question_score, 4),
                 "maxScore": q_max,
-                "partialCredit": False,
+                "partialCredit": partial_credit,
             })
 
-        weighted_score = comp_score * weight if config.get("weightedScoring") else comp_score
+        weighted_score = (
+            comp_score * weight
+            if config.get("weightedScoring")
+            else comp_score
+        )
 
         component_results.append({
             "componentId": answer.componentId,
-            "componentType": answer.componentType,
-            "score": comp_score,
+            "componentType": source_component.get("componentType")
+            or answer.componentType,
+            "score": round(comp_score, 4),
             "maxScore": comp_max,
             "weight": weight,
-            "weightedScore": weighted_score,
+            "weightedScore": round(weighted_score, 4),
             "questionResults": question_results,
         })
 
         total_score += weighted_score
-        total_max += comp_max * (weight if config.get("weightedScoring") else 1.0)
+        total_max += comp_max * (
+            weight if config.get("weightedScoring") else 1.0
+        )
 
     percentage = (total_score / total_max * 100) if total_max > 0 else 0
     passing_score = config.get("passingScore", 70)
@@ -255,7 +518,9 @@ async def calculate_score(
         "passingScore": passing_score,
         "componentResults": component_results,
         "attemptNumber": body.attemptNumber,
-        "remainingAttempts": (max_attempts - body.attemptNumber) if max_attempts else None,
+        "remainingAttempts": (
+            max_attempts - body.attemptNumber
+        ) if max_attempts else None,
     }
 
 
@@ -277,28 +542,14 @@ async def get_course_completion(
     page_results = []
     completed_pages = 0
     for page in pages:
-        comp_statuses = []
-        page_completed = True
-        for comp in (page.components or []):
-            criteria = comp.completion_criteria or {}
-            comp_statuses.append({
-                "componentId": comp.component_id,
-                "completed": False,  # Default — real tracking via SCORM/interactions
-                "completionType": criteria.get("type", "view"),
-                "threshold": criteria.get("threshold"),
-            })
-            # A component needing completion means page is not yet automatically completed
-            if criteria.get("type") and criteria["type"] != "view":
-                page_completed = False
-
-        page_results.append({
-            "pageId": page.page_id,
-            "title": page.title,
-            "completed": page_completed,
-            "strategy": (page.completion_config or {}).get("strategy", "all"),
-            "components": comp_statuses,
-        })
-        if page_completed:
+        latest_events = await _latest_events_by_component(
+            courseId,
+            session,
+            page.page_id,
+        )
+        page_payload = _build_page_completion_payload(page, latest_events)
+        page_results.append(page_payload)
+        if page_payload["completed"]:
             completed_pages += 1
 
     total = len(pages)
@@ -329,23 +580,12 @@ async def get_page_completion(
     if not page:
         raise HTTPException(404, f"Page '{pageId}' not found")
 
-    comp_statuses = []
-    for comp in (page.components or []):
-        criteria = comp.completion_criteria or {}
-        comp_statuses.append({
-            "componentId": comp.component_id,
-            "completed": False,
-            "completionType": criteria.get("type", "view"),
-            "threshold": criteria.get("threshold"),
-        })
-
-    return {
-        "pageId": page.page_id,
-        "title": page.title,
-        "completed": False,
-        "strategy": (page.completion_config or {}).get("strategy", "all"),
-        "components": comp_statuses,
-    }
+    latest_events = await _latest_events_by_component(
+        courseId,
+        session,
+        pageId,
+    )
+    return _build_page_completion_payload(page, latest_events)
 
 
 @router.post("/courses/{courseId}/pages/{pageId}/completion")
@@ -359,6 +599,28 @@ async def record_page_completion(
     page = await page_repo.get_by_course_and_page(courseId, pageId)
     if not page:
         raise HTTPException(404, f"Page '{pageId}' not found")
+
+    event_repo = InteractionEventRepository(session)
+
+    # Persist the latest reported state for each component so completion reads
+    # are derived from stored evidence, not transient request data.
+    for component_state in body.componentStates:
+        event = InteractionEventRecord(
+            course_id=courseId,
+            page_id=pageId,
+            component_id=component_state.componentId,
+            interaction_type="page-completion-state",
+            data={
+                "interactionsCompleted": component_state.interactionsCompleted,
+                "audiosCompleted": component_state.audiosCompleted,
+                "score": component_state.score,
+                "maxScore": 100 if component_state.score is not None else None,
+            },
+            completed=component_state.completed,
+            score=component_state.score,
+            max_score=100 if component_state.score is not None else None,
+        )
+        await event_repo.create(event)
 
     # Process completion states
     completion_config = page.completion_config or {}
@@ -390,19 +652,12 @@ async def record_page_completion(
                 completed_count += 1
 
     # Evaluate page completion based on strategy
-    page_completed = False
-    if strategy == "all":
-        page_completed = completed_count >= total_count if total_count > 0 else True
-    elif strategy == "any":
-        page_completed = completed_count > 0
-    elif strategy == "percentage":
-        pct = (completed_count / total_count * 100) if total_count > 0 else 100
-        page_completed = pct >= threshold
-    elif strategy == "custom" and required_ids:
-        page_completed = all(
-            state_map.get(rid, ComponentStateDTO(componentId=rid, completed=False)).completed
-            for rid in required_ids
-        )
+    page_completed = _evaluate_page_completion(
+        strategy,
+        comp_statuses,
+        required_ids,
+        threshold,
+    )
 
     return {
         "pageId": page.page_id,
@@ -432,17 +687,18 @@ async def record_interaction(
     # Serialize data with Pydantic v1/v2 compat
     data_dict = None
     if body.data:
-        data_dict = body.data.model_dump() if hasattr(body.data, "model_dump") else body.data.dict()
-
-    # Persist the interaction event to DB
-    from app.repositories.interaction_event_repo import InteractionEventRepository
-    from app.models.interaction_event import InteractionEventRecord
+        data_dict = (
+            body.data.model_dump()
+            if hasattr(body.data, "model_dump")
+            else body.data.dict()
+        )
 
     event_repo = InteractionEventRepository(session)
     event = InteractionEventRecord(
         course_id=courseId,
         page_id=body.pageId,
         component_id=body.componentId,
+        learner_id=body.learnerId or "anonymous",
         interaction_type=body.interactionType,
         data=data_dict,
         completed=body.completed,
@@ -469,8 +725,6 @@ async def list_interactions(
     course = await course_repo.get_by_course_id(courseId)
     if not course:
         raise HTTPException(404, f"Course '{courseId}' not found")
-
-    from app.repositories.interaction_event_repo import InteractionEventRepository
 
     repo = InteractionEventRepository(session)
     events = await repo.list_by_course(

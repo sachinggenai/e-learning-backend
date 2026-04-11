@@ -133,8 +133,9 @@ def main():
     print("🧪 Test Files:")
     print("-" * 70)
     results.append(check_file_exists("test_import_quick.py", "Quick test script"))
-    results.append(check_file_exists("TESTING_QUICK_START.md", "Quick start guide"))
-    results.append(check_file_exists("HOW_TO_TEST_PHASE_1C_AND_2.md", "Testing guide"))
+    results.append(check_file_exists("README.md", "Project quick start guide"))
+    results.append(check_file_exists("docs/DEVELOPMENT.md", "Development guide"))
+    results.append(check_file_exists("docs/TESTING.md", "Testing guide"))
     print()
     
     # Check 3: Router registration

@@ -12,10 +12,10 @@ def make_course(client: TestClient):
         json={"courseId": f"tpl-neg-{uid}", "title": "Tpl Neg", "data": {}},
     )
     assert r.status_code == 201
-    return r.json()["id"]
+    return r.json()["courseId"]
 
 
-def create_template(client: TestClient, course_id: int, template_id="welcome"):
+def create_template(client: TestClient, course_id: str, template_id="welcome"):
     return client.post(
         f"/api/v1/courses/{course_id}/templates",
         json={

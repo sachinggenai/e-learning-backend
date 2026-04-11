@@ -8,7 +8,7 @@ import json
 import io
 import zipfile
 from fastapi.testclient import TestClient
-from unittest.mock import patch, Mock, AsyncMock
+from unittest.mock import patch, AsyncMock
 
 
 def _make_scorm_zip(course_id: str = "json-course-001", title: str = "JSON Test Course") -> io.BytesIO:
@@ -247,6 +247,140 @@ class TestExportEndpoints:
         # Should complete within 5 seconds for small course
         assert (end_time - start_time) < 5.0
         assert response.status_code == 200
+
+    @patch(
+        "app.routers.export.scorm_service.generate_scorm_package",
+        new_callable=AsyncMock,
+        return_value=_make_scorm_zip(
+            "persisted-course-001",
+            "Persisted Course",
+        ),
+    )
+    def test_export_persisted_course_uses_public_course_id(
+        self,
+        mock_gen,
+        test_client: TestClient,
+    ):
+        create_response = test_client.post(
+            "/api/v1/courses",
+            json={
+                "courseId": "persisted-course-001",
+                "title": "Persisted Course",
+                "description": "Persisted export test",
+                "data": {
+                    "author": "Exporter",
+                    "templates": [
+                        {
+                            "id": "intro-001",
+                            "type": "content-text",
+                            "title": "Intro",
+                            "order": 0,
+                            "data": {"content": "Persisted body"},
+                        }
+                    ],
+                },
+            },
+        )
+        assert create_response.status_code == 201
+
+        response = test_client.post(
+            "/api/v1/export/scorm/persisted-course-001",
+            json={},
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/zip"
+        mock_gen.assert_awaited_once()
+        validated_course = mock_gen.await_args.args[0]
+        assert validated_course.courseId == "persisted-course-001"
+        assert validated_course.title == "Persisted Course"
+
+    def test_export_persisted_course_not_found(self, test_client: TestClient):
+        response = test_client.post(
+            "/api/v1/export/scorm/missing-course",
+            json={},
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Course not found"
+
+    def test_export_persisted_course_rejects_missing_video_url(
+        self,
+        test_client: TestClient,
+    ):
+        create_course = test_client.post(
+            "/api/v1/courses",
+            json={
+                "courseId": "video-course-001",
+                "title": "Video Course",
+                "description": "Missing video url",
+                "data": {"author": "Exporter", "templates": []},
+            },
+        )
+        assert create_course.status_code == 201
+        course_id = create_course.json()["courseId"]
+
+        create_template = test_client.post(
+            f"/api/v1/courses/{course_id}/templates",
+            json={
+                "templateId": "video-template-001",
+                "type": "content-video",
+                "title": "Watch this",
+                "data": {
+                    "content": {
+                        "text": "Training video"
+                    }
+                },
+            },
+        )
+        assert create_template.status_code == 201
+
+        response = test_client.post(
+            "/api/v1/export/scorm/video-course-001",
+            json={},
+        )
+
+        assert response.status_code == 422
+        assert "missing videoUrl" in str(response.json()["detail"])
+
+    def test_export_persisted_course_rejects_missing_mcq_questions(
+        self,
+        test_client: TestClient,
+    ):
+        create_course = test_client.post(
+            "/api/v1/courses",
+            json={
+                "courseId": "mcq-course-001",
+                "title": "MCQ Course",
+                "description": "Missing questions",
+                "data": {"author": "Exporter", "templates": []},
+            },
+        )
+        assert create_course.status_code == 201
+        course_id = create_course.json()["courseId"]
+
+        create_template = test_client.post(
+            f"/api/v1/courses/{course_id}/templates",
+            json={
+                "templateId": "mcq-template-001",
+                "type": "mcq",
+                "title": "Answer this",
+                "data": {
+                    "content": {
+                        "text": "Choose the best option"
+                    }
+                },
+            },
+        )
+        assert create_template.status_code == 201
+
+        response = test_client.post(
+            "/api/v1/export/scorm/mcq-course-001",
+            json={},
+        )
+
+        assert response.status_code == 422
+        assert "missing MCQ questions" in str(response.json()["detail"])
 
     @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip("xss-test-001", "Normal Title"))
     def test_export_course_security_validation(self, mock_gen, test_client: TestClient):

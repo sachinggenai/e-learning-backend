@@ -18,6 +18,12 @@ from datetime import datetime
 
 import io
 from pydantic import BaseModel
+try:
+    from pydantic import ValidationError as PydanticValidationError
+except ImportError:  # pragma: no cover
+    from pydantic.error_wrappers import (  # type: ignore
+        ValidationError as PydanticValidationError,
+    )
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db.config import get_session
 from ..repositories.course_repo import CourseRepository, CourseNotFoundError
@@ -274,7 +280,127 @@ class ScormExportRequest(BaseModel):
     format: str = "scorm_1_2"
     includeMedia: bool = True
 
-@router.post("/export/scorm/{courseId}", summary="Export Persisted Course as SCORM Package")
+
+class PersistedCourseExportValidationError(Exception):
+    """Raised when stored course data cannot be exported safely."""
+
+
+def _extract_text_content(template_uid: str, template_payload: dict) -> str:
+    raw_content = template_payload.get("content")
+    if isinstance(raw_content, str):
+        return raw_content
+    if isinstance(raw_content, dict):
+        return (
+            raw_content.get("text")
+            or raw_content.get("welcomeMessage")
+            or raw_content.get("description")
+            or ""
+        )
+    if raw_content is None:
+        return ""
+    raise PersistedCourseExportValidationError(
+        f"Template '{template_uid}' has unsupported content structure"
+    )
+
+
+def _normalize_questions(
+    template_uid: str,
+    questions: list[dict],
+) -> list[dict]:
+    if not questions:
+        raise PersistedCourseExportValidationError(
+            f"Template '{template_uid}' is missing MCQ questions"
+        )
+
+    normalized_questions = []
+    for question_index, question in enumerate(questions):
+        options = question.get("options", [])
+        if not options:
+            raise PersistedCourseExportValidationError(
+                "Template "
+                f"'{template_uid}' question {question_index + 1} "
+                "has no options"
+            )
+
+        normalized_questions.append(
+            {
+                "id": question.get("id") or f"q{question_index + 1}",
+                "question": question.get("question") or "",
+                "options": [
+                    {
+                        "id": opt.get("id") or f"opt{opt_index + 1}",
+                        "text": opt.get("text") or "",
+                        "isCorrect": opt.get(
+                            "correct",
+                            opt.get("isCorrect", False),
+                        ),
+                    }
+                    for opt_index, opt in enumerate(options)
+                ],
+            }
+        )
+
+    return normalized_questions
+
+
+def _map_template_record(template_record) -> dict:
+    template_payload = template_record.json_data.copy()
+    raw_content = template_payload.get("content")
+    template_type = template_record.template_type
+
+    legacy_type_map = {
+        "video": "content-video",
+        "quiz": "mcq",
+        "content-image": "content-text",
+        "interactive": "content-text",
+    }
+    normalized_type = legacy_type_map.get(template_type, template_type)
+
+    mapped_data = {
+        "content": _extract_text_content(
+            template_record.template_uid,
+            template_payload,
+        )
+    }
+    if "subtitle" in template_payload:
+        mapped_data["subtitle"] = template_payload["subtitle"]
+
+    if normalized_type == "content-video":
+        video_url = None
+        if isinstance(raw_content, dict):
+            video_url = raw_content.get("videoUrl")
+        if video_url is None:
+            video_url = template_payload.get("videoUrl")
+        if not video_url:
+            raise PersistedCourseExportValidationError(
+                "Template "
+                f"'{template_record.template_uid}' is missing videoUrl"
+            )
+        mapped_data["videoUrl"] = video_url
+
+    if normalized_type == "mcq":
+        questions = []
+        if isinstance(raw_content, dict):
+            questions = raw_content.get("questions") or []
+        if not questions:
+            questions = template_payload.get("questions") or []
+        mapped_data["questions"] = _normalize_questions(
+            template_record.template_uid,
+            questions,
+        )
+
+    return {
+        "id": template_record.template_uid,
+        "type": normalized_type,
+        "title": template_record.title,
+        "order": template_record.order_index,
+        "data": mapped_data,
+    }
+
+@router.post(
+    "/export/scorm/{courseId}",
+    summary="Export Persisted Course as SCORM Package",
+)
 async def export_persisted_course(
     courseId: str,
     request: ScormExportRequest,
@@ -286,7 +412,7 @@ async def export_persisted_course(
     repo = CourseRepository(session)
     try:
         # Fetch course record
-        course_record = await repo.get(courseId)
+        course_record = await repo.get_by_course_id(courseId)
         
         # Convert to Pydantic model
         # Merge metadata with json_data
@@ -296,107 +422,21 @@ async def export_persisted_course(
         if course_record.description:
             course_data['description'] = course_record.description
             
-        # Ensure templates exist in data
-        if 'templates' not in course_data:
-            # If templates are stored in a separate table, we might need to fetch them
-            # But for now assuming they are in json_data or we need to fetch them
-            # The seed script puts them in TemplateRecord, NOT in CourseRecord.json_data['templates']
-            # Wait, the seed script does:
-            # json_data={"pages": [], "templates": []} for course
-            # and creates TemplateRecords.
-            
-            # If the application uses TemplateRecords, we need to fetch them and put them into the Course object.
-            pass
-
-        # Fetch templates if they are not in json_data
-        # We need to check if we should fetch from TemplateRepo
+        # Prefer normalized template records when present so export uses
+        # the authoritative persisted representation.
         from ..repositories.template_repo import TemplateRepository
         template_repo = TemplateRepository(session)
         templates = await template_repo.list(course_record.id)
-        
+
         # Add default author if missing
         if 'author' not in course_data:
             course_data['author'] = "Unknown Author"
 
         if templates:
-            # Convert TemplateRecords to dicts and add to course_data
-            course_data['templates'] = []
-            for t in templates:
-                t_data = t.json_data.copy()
-                
-                # Normalise type — the Component Type Registry is the
-                # source of truth.  Legacy aliases are mapped here for
-                # backward compat.
-                _LEGACY_TYPE_MAP = {
-                    "video": "content-video",
-                    "quiz": "mcq",
-                    "content-image": "content-text",
-                    "interactive": "content-text",
-                }
-                t_type = _LEGACY_TYPE_MAP.get(t.template_type, t.template_type)
-                
-                # Map data structure to TemplateData
-                mapped_data = {}
-                
-                # Extract content string
-                raw_content = t_data.get('content', {})
-                if isinstance(raw_content, dict):
-                    mapped_data['content'] = (
-                        raw_content.get('text')
-                        or raw_content.get('welcomeMessage')
-                        or raw_content.get('description')
-                        or "Content"
-                    )
-                else:
-                    mapped_data['content'] = str(raw_content) if raw_content else "Content"
-                
-                if 'subtitle' in t_data:
-                    mapped_data['subtitle'] = t_data['subtitle']
-                
-                if t_type == 'content-video':
-                    if isinstance(raw_content, dict):
-                        mapped_data['videoUrl'] = raw_content.get('videoUrl') or 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    else:
-                        mapped_data['videoUrl'] = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-
-                if t_type == 'mcq':
-                    # Extract questions and map 'correct' to 'isCorrect'
-                    questions = []
-                    if isinstance(raw_content, dict) and 'questions' in raw_content:
-                        for q in raw_content['questions']:
-                            mapped_q = {
-                                "id": q.get("id", "q1"),
-                                "question": q.get("question", "Question"),
-                                "options": [
-                                    {
-                                        "id": opt.get("id", "opt1"),
-                                        "text": opt.get("text", "Option"),
-                                        "isCorrect": opt.get("correct", opt.get("isCorrect", False)),
-                                    }
-                                    for opt in q.get("options", [])
-                                ],
-                            }
-                            questions.append(mapped_q)
-                    
-                    if not questions:
-                        questions = [{
-                            "id": "q1",
-                            "question": "Placeholder Question",
-                            "options": [
-                                {"id": "opt1", "text": "Option 1", "isCorrect": True},
-                                {"id": "opt2", "text": "Option 2", "isCorrect": False}
-                            ]
-                        }]
-                    mapped_data['questions'] = questions
-
-                template_obj = {
-                    "id": t.template_uid,
-                    "type": t_type,
-                    "title": t.title,
-                    "order": t.order_index,
-                    "data": mapped_data
-                }
-                course_data['templates'].append(template_obj)
+            course_data['templates'] = [
+                _map_template_record(template)
+                for template in templates
+            ]
 
         # ── Component-based pages (new format) ───────────────────────
         # If the course has pages with components, convert them to
@@ -431,7 +471,9 @@ async def export_persisted_course(
         validated_course = Course(**course_data)
         
         # Generate SCORM
-        zip_buffer = await scorm_service.generate_scorm_package(validated_course)
+        zip_buffer = await scorm_service.generate_scorm_package(
+            validated_course
+        )
         filename = f"{validated_course.courseId}_scorm_package.zip"
         
         zip_buffer.seek(0)
@@ -450,6 +492,12 @@ async def export_persisted_course(
 
     except CourseNotFoundError:
         raise HTTPException(status_code=404, detail="Course not found")
+    except PersistedCourseExportValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except PydanticValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("SCORM export failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
