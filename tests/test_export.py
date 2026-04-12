@@ -302,7 +302,7 @@ class TestExportEndpoints:
         )
 
         assert response.status_code == 404
-        assert response.json()["detail"] == "Course not found"
+        assert "missing-course" in response.json()["detail"]
 
     def test_export_persisted_course_rejects_missing_video_url(
         self,

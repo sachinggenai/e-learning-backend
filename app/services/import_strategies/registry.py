@@ -1,7 +1,11 @@
 from __future__ import annotations
 from typing import Iterable, List
+import logging
 
 from app.services.import_strategies.base import ImportStrategy, StrategyResult
+
+
+logger = logging.getLogger(__name__)
 
 
 class StrategyRegistry:
@@ -20,8 +24,13 @@ class StrategyRegistry:
             try:
                 if strat.supports(zip_bytes, entries):
                     return strat
-            except Exception:
-                # Ignore errors during capability checks; keep trying others.
+            except Exception as exc:
+                # Continue scanning, but log diagnostics for triage.
+                logger.warning(
+                    "Import strategy '%s' failed during supports() check: %s",
+                    strat.__class__.__name__,
+                    exc,
+                )
                 continue
         return None
 

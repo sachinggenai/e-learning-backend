@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.models.persisted_course import CourseRecord
 
+
 class CourseNotFoundError(Exception):
     """Raised when a course record could not be located."""
 
@@ -99,3 +100,46 @@ class CourseRepository:
         record = await self.get(pk)
         await self.session.delete(record)
         await self.session.commit()
+
+    # UPSERT -----------------------------------------------------------------
+    async def upsert(
+        self,
+        course_id: str,
+        title: str,
+        description: Optional[str] = None,
+        data: Optional[dict] = None,
+        status: Optional[str] = None,
+    ) -> tuple["CourseRecord", bool]:
+        """Create or update a course by course_id.
+
+        Returns (record, created) where created is True if a new row
+        was inserted.
+        """
+        result = await self.session.execute(
+            select(CourseRecord).where(CourseRecord.course_id == course_id)
+        )
+        record = result.scalar_one_or_none()
+        if record is None:
+            record = CourseRecord(
+                course_id=course_id,
+                title=title,
+                description=description,
+                json_data=data or {},
+                status=status or "draft",
+            )
+            self.session.add(record)
+            await self.session.commit()
+            await self.session.refresh(record)
+            return record, True
+
+        # Update existing
+        record.title = title
+        if description is not None:
+            record.description = description
+        if data is not None:
+            record.json_data = data
+        if status is not None:
+            record.status = status
+        await self.session.commit()
+        await self.session.refresh(record)
+        return record, False

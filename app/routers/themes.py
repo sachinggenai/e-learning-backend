@@ -149,18 +149,21 @@ async def list_themes(
     repo = ThemeRepository(session)
     themes = await repo.list(is_preset=isPreset)
 
-    # Seed presets if none exist
+    # Seed presets only if the themes table is completely empty
+    # (avoids duplicates when seed-data import has already run)
     if not themes:
-        for preset in DEFAULT_THEMES:
-            t = ThemeRecord(
-                name=preset["name"],
-                is_preset=True,
-                colors=preset["colors"],
-                typography=preset["typography"],
-                component_styles=preset.get("componentStyles"),
-            )
-            await repo.create(t)
-        themes = await repo.list(is_preset=isPreset)
+        all_themes = await repo.list()
+        if not all_themes:
+            for preset in DEFAULT_THEMES:
+                t = ThemeRecord(
+                    name=preset["name"],
+                    is_preset=True,
+                    colors=preset["colors"],
+                    typography=preset["typography"],
+                    component_styles=preset.get("componentStyles"),
+                )
+                await repo.create(t)
+            themes = await repo.list(is_preset=isPreset)
 
     return [t.to_dict() for t in themes]
 
@@ -187,18 +190,20 @@ async def list_preset_themes(session: AsyncSession = Depends(get_session)):
     repo = ThemeRepository(session)
     themes = await repo.list(is_preset=True)
 
-    # Seed presets if empty
+    # Seed presets only if the themes table is completely empty
     if not themes:
-        for preset in DEFAULT_THEMES:
-            t = ThemeRecord(
-                name=preset["name"],
-                is_preset=True,
-                colors=preset["colors"],
-                typography=preset["typography"],
-                component_styles=preset.get("componentStyles"),
-            )
-            await repo.create(t)
-        themes = await repo.list(is_preset=True)
+        all_themes = await repo.list()
+        if not all_themes:
+            for preset in DEFAULT_THEMES:
+                t = ThemeRecord(
+                    name=preset["name"],
+                    is_preset=True,
+                    colors=preset["colors"],
+                    typography=preset["typography"],
+                    component_styles=preset.get("componentStyles"),
+                )
+                await repo.create(t)
+            themes = await repo.list(is_preset=True)
 
     return [t.to_dict() for t in themes]
 

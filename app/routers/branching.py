@@ -9,11 +9,15 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.db.config import get_session
 from app.repositories.branching_repo import BranchRuleRepository, BranchEventRepository
-from app.repositories.course_repo import CourseRepository
+from app.repositories.course_repo import CourseRepository, CourseNotFoundError
 from app.models.branching import BranchRule, BranchEvent
+
+
+logger = logging.getLogger(__name__)
 
 
 # ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -61,8 +65,11 @@ async def _require_course(session: AsyncSession, course_id: str):
     repo = CourseRepository(session)
     try:
         return await repo.get_by_course_id(course_id)
-    except Exception:
+    except CourseNotFoundError:
         raise HTTPException(404, f"Course '{course_id}' not found")
+    except Exception as exc:
+        logger.error("Failed to load course '%s': %s", course_id, exc, exc_info=True)
+        raise HTTPException(500, "Failed to load course")
 
 
 # ── Router ───────────────────────────────────────────────────────────────────

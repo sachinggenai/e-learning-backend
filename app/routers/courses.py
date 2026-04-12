@@ -31,11 +31,42 @@ router = APIRouter(prefix="/courses", tags=["Courses"])
 # Pydantic DTOs (simplified for initial scaffold)
 
 
+# Keys stored inside json_data but exposed as top-level API fields.
+_EXTENDED_KEYS = ("author", "language", "version", "navigation", "settings", "scoring")
+
+
+def _merge_extended_into_data(payload, base_data: Optional[dict] = None) -> dict:
+    """Merge extended top-level fields into the json_data dict for storage."""
+    merged = dict(base_data or {})
+    merged.update(payload.data or {})
+    for key in _EXTENDED_KEYS:
+        val = getattr(payload, key, None)
+        if val is not None:
+            merged[key] = val
+    return merged
+
+
+def _extract_extended_from_record(record_dict: dict) -> dict:
+    """Lift extended keys out of data{} into top-level response fields."""
+    data = record_dict.get("data") or {}
+    for key in _EXTENDED_KEYS:
+        if key in data and key not in record_dict:
+            record_dict[key] = data[key]
+    return record_dict
+
+
 class CourseCreate(BaseModel):
     courseId: str = Field(..., min_length=1, max_length=64)
     title: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=500)
     data: dict = Field(default_factory=dict)
+    # Phase 3 extended fields (stored inside json_data)
+    author: Optional[str] = None
+    language: Optional[str] = None
+    version: Optional[str] = None
+    navigation: Optional[dict] = None
+    settings: Optional[dict] = None
+    scoring: Optional[dict] = None
 
 
 # New models for Add Page from Template feature
@@ -93,6 +124,13 @@ class CourseUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     data: Optional[dict] = None
     status: Optional[str] = Field(None, pattern=r"^(draft|published)$")
+    # Phase 3 extended fields (merged into json_data)
+    author: Optional[str] = None
+    language: Optional[str] = None
+    version: Optional[str] = None
+    navigation: Optional[dict] = None
+    settings: Optional[dict] = None
+    scoring: Optional[dict] = None
 
 
 class CreatePageFromTemplate(BaseModel):
@@ -116,6 +154,14 @@ class CourseOut(BaseModel):
     createdAt: str
     updatedAt: str
     data: dict
+    # Phase 3 extended fields (extracted from json_data)
+    author: Optional[str] = None
+    language: Optional[str] = None
+    version: Optional[str] = None
+    navigation: Optional[dict] = None
+    settings: Optional[dict] = None
+    scoring: Optional[dict] = None
+    pages: Optional[list] = None
 
     model_config = {"from_attributes": True}
 
@@ -139,32 +185,44 @@ async def create_course(
     payload: CourseCreate, repo: CourseRepository = Depends(_get_repo)
 ):
     try:
+        merged_data = _merge_extended_into_data(payload)
         record = await repo.create(
             course_id=payload.courseId,
             title=payload.title,
             description=payload.description,
-            data=payload.data,
+            data=merged_data,
         )
     except CourseConflictError:
         raise HTTPException(status_code=400, detail="courseId already exists")
-    return record.to_dict()
+    return _extract_extended_from_record(record.to_dict())
 
  
 @router.get("", response_model=List[CourseOut])
 async def list_courses(repo: CourseRepository = Depends(_get_repo)):
     courses = await repo.list()
-    return [c.to_dict() for c in courses]
+    return [_extract_extended_from_record(c.to_dict()) for c in courses]
 
  
 @router.get("/{courseId}", response_model=CourseOut)
 async def get_course(
-    courseId: str, repo: CourseRepository = Depends(_get_repo)
+    courseId: str,
+    repo: CourseRepository = Depends(_get_repo),
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         course = await repo.get_by_course_id(courseId)
     except CourseNotFoundError:
         raise HTTPException(status_code=404, detail="Course not found")
-    return course.to_dict()
+
+    out = _extract_extended_from_record(course.to_dict())
+
+    # Composite response: include pages[] with nested components[]
+    from app.repositories.page_component_repo import PageRepository
+    page_repo = PageRepository(session)
+    pages = await page_repo.list_by_course(courseId)
+    out["pages"] = [p.to_dict(include_components=True) for p in pages]
+
+    return out
 
  
 @router.patch("/{courseId}", response_model=CourseOut)
@@ -174,18 +232,26 @@ async def update_course(
     repo: CourseRepository = Depends(_get_repo),
 ):
     try:
-        # First get the course to find its primary key
         course_record = await repo.get_by_course_id(courseId)
+        # Merge extended fields into existing json_data
+        existing_data = course_record.json_data or {}
+        merged_data = existing_data.copy()
+        if payload.data is not None:
+            merged_data.update(payload.data)
+        for key in _EXTENDED_KEYS:
+            val = getattr(payload, key, None)
+            if val is not None:
+                merged_data[key] = val
         course = await repo.update_record(
             pk=course_record.id,
             title=payload.title,
             description=payload.description,
-            data=payload.data,
+            data=merged_data,
             status=payload.status,
         )
     except CourseNotFoundError:
         raise HTTPException(status_code=404, detail="Course not found")
-    return course.to_dict()
+    return _extract_extended_from_record(course.to_dict())
 
  
 @router.delete("/{courseId}", status_code=status.HTTP_204_NO_CONTENT)
@@ -193,12 +259,57 @@ async def delete_course(
     courseId: str, repo: CourseRepository = Depends(_get_repo)
 ):
     try:
-        # First get the course to find its primary key
         course_record = await repo.get_by_course_id(courseId)
         await repo.delete_record(course_record.id)
     except CourseNotFoundError:
         raise HTTPException(status_code=404, detail="Course not found")
     return None
+
+
+@router.put(
+    "/{courseId}",
+    response_model=CourseOut,
+    status_code=status.HTTP_200_OK,
+    summary="Upsert course (create if absent, update if present)",
+    responses={
+        200: {"description": "Course updated"},
+        201: {"description": "Course created"},
+    },
+)
+async def upsert_course(
+    courseId: str,
+    payload: CourseCreate,
+    repo: CourseRepository = Depends(_get_repo),
+    session: AsyncSession = Depends(get_session),
+    response: "Response" = None,  # type: ignore[assignment]
+):
+    """
+    Idempotent upsert.  Creates the course if it does not exist yet,
+    updates it if it does.  Returns the same shape as POST/PATCH.
+
+    HTTP 201 is returned on creation, HTTP 200 on update.
+    Eliminates the noisy PATCH-then-fallback-create pattern.
+    """
+    from fastapi import Response as FastAPIResponse
+    from fastapi.responses import JSONResponse
+
+    record, created = await repo.upsert(
+        course_id=courseId,
+        title=payload.title,
+        description=payload.description,
+        data=_merge_extended_into_data(payload),
+    )
+    out = _extract_extended_from_record(record.to_dict())
+
+    from app.repositories.page_component_repo import PageRepository
+
+    page_repo = PageRepository(session)
+    pages = await page_repo.list_by_course(record.course_id)
+    out["pages"] = [p.to_dict(include_components=True) for p in pages]
+
+    if created:
+        return JSONResponse(content=out, status_code=status.HTTP_201_CREATED)
+    return out
 
 
 # Add Page from Template Feature Endpoints
@@ -226,6 +337,13 @@ async def create_page_from_template(
     """Create a new page from a template (DB-backed)."""
     from datetime import datetime
     from app.repositories.page_component_repo import PageRepository
+
+    # Verify course exists first — prevents FK violation 500
+    course_repo = CourseRepository(session)
+    try:
+        await course_repo.get_by_course_id(courseId)
+    except CourseNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Course '{courseId}' not found")
 
     # Verify template exists
     tmpl_repo = TemplateTypeRepository(session)

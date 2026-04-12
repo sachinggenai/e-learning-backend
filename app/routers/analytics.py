@@ -7,23 +7,29 @@ from __future__ import annotations
 from typing import Optional
 from datetime import datetime
 from collections import Counter
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import get_session
-from app.repositories.course_repo import CourseRepository
+from app.repositories.course_repo import CourseRepository, CourseNotFoundError
 from app.repositories.page_component_repo import PageRepository
 from app.repositories.scoring_repo import ScoringRepository
 from app.repositories.interaction_event_repo import InteractionEventRepository
+
+logger = logging.getLogger(__name__)
 
 
 async def _require_course(session: AsyncSession, course_id: str):
     repo = CourseRepository(session)
     try:
         return await repo.get_by_course_id(course_id)
-    except Exception:
+    except CourseNotFoundError:
         raise HTTPException(404, f"Course '{course_id}' not found")
+    except Exception as exc:
+        logger.error("Failed to load course '%s': %s", course_id, exc, exc_info=True)
+        raise HTTPException(500, "Failed to load course")
 
 
 router = APIRouter(tags=["Analytics"])

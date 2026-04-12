@@ -22,6 +22,7 @@ from app.db.config import engine, SessionLocal
 from app.models.base import Base
 from app.models.template_type import TemplateType
 from app.models.persisted_course import CourseRecord, TemplateRecord
+from app.models.theme import ThemeRecord
 
 
 async def create_tables():
@@ -75,6 +76,38 @@ async def import_component_types(session: AsyncSession, data_dir: Path):
     
     await session.commit()
     print(f"✓ Imported {imported} component types")
+
+
+async def import_themes(session: AsyncSession, data_dir: Path):
+    """Import theme presets from 04-theme-presets.json."""
+    print("\nImporting theme presets...")
+
+    from sqlalchemy import select, func
+    result = await session.execute(select(func.count(ThemeRecord.id)))
+    existing_count = result.scalar()
+
+    if existing_count > 0:
+        print(f"  Found {existing_count} existing themes. Skipping import.")
+        print("  (Delete data/elearning.db to re-import)")
+        return
+
+    theme_presets = await load_json_file(data_dir / "04-theme-presets.json")
+
+    imported = 0
+    for tp in theme_presets:
+        theme = ThemeRecord(
+            theme_id=tp["themeId"],
+            name=tp["name"],
+            is_preset=tp.get("isPreset", True),
+            colors=tp["colors"],
+            typography=tp["typography"],
+            component_styles=tp.get("componentStyles"),
+        )
+        session.add(theme)
+        imported += 1
+
+    await session.commit()
+    print(f"✓ Imported {imported} theme presets")
 
 
 async def import_courses(session: AsyncSession, data_dir: Path):
@@ -145,6 +178,11 @@ async def verify_import(session: AsyncSession):
     template_type_count = result.scalar()
     print(f"  - Template types: {template_type_count}")
     
+    # Count themes
+    result = await session.execute(select(func.count(ThemeRecord.id)))
+    theme_count = result.scalar()
+    print(f"  - Theme presets: {theme_count}")
+
     # Count courses
     result = await session.execute(select(func.count(CourseRecord.id)))
     course_count = result.scalar()
@@ -185,6 +223,7 @@ async def main():
         try:
             # Import in dependency order
             await import_component_types(session, data_dir)
+            await import_themes(session, data_dir)
             await import_courses(session, data_dir)
             
             # Verify

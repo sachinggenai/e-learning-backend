@@ -56,6 +56,8 @@ if PYDANTIC_V2:
         subtitle: Optional[str] = Field(None, description="Optional subtitle")
         videoUrl: Optional[str] = Field(None, description="Video URL for content-video templates")
         questions: Optional[List[Question]] = Field(None, description="Questions for MCQ templates")
+        tabs: Optional[List[dict]] = Field(None, description="Tabs data for tabs templates")
+        panels: Optional[List[dict]] = Field(None, description="Panel data for accordion templates")
 
     class Template(BaseModel):
         """Course Template/Slide Model"""
@@ -64,6 +66,7 @@ if PYDANTIC_V2:
         order: int = Field(..., ge=0, description="Display order")
         title: str = Field(..., max_length=100, description="Template title")
         data: TemplateData = Field(..., description="Template-specific data")
+        pageId: Optional[str] = Field(None, description="Source page ID for theme scoping")
 
         @model_validator(mode='after')
         def validate_template_data(self):  # type: ignore[override]
@@ -107,6 +110,8 @@ else:
         subtitle: Optional[str] = Field(None, description="Optional subtitle")
         videoUrl: Optional[str] = Field(None, description="Video URL for content-video templates")
         questions: Optional[List[Question]] = Field(None, description="Questions for MCQ templates")
+        tabs: Optional[List[dict]] = Field(None, description="Tabs data for tabs templates")
+        panels: Optional[List[dict]] = Field(None, description="Panel data for accordion templates")
 
     class Template(BaseModel):
         """Course Template/Slide Model"""
@@ -115,6 +120,7 @@ else:
         order: int = Field(..., ge=0, description="Display order")
         title: str = Field(..., max_length=100, description="Template title")
         data: TemplateData = Field(..., description="Template-specific data")
+        pageId: Optional[str] = Field(None, description="Source page ID for theme scoping")
 
         @validator('data')
         def validate_template_data(cls, data, values):  # type: ignore[override]

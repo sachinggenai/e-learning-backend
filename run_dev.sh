@@ -13,6 +13,13 @@ fi
 
 source "$VENV_DIR/bin/activate"
 
+# Load .env if present
+if [ -f "$ROOT_DIR/.env" ]; then
+  set -a
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+
 # Check if uvicorn is installed
 if ! python -c 'import uvicorn' 2>/dev/null; then
   echo "[backend] Installing dependencies..."

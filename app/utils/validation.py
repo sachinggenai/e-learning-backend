@@ -234,7 +234,7 @@ class CourseValidator:
         
         # Query template_definitions table for dynamic template types
         try:
-            from ..repositories.template_definition_repository import TemplateDefinitionRepository
+            from ..repositories.template_definition_repo import TemplateDefinitionRepository
             repo = TemplateDefinitionRepository(db_session)
             definition = await repo.get_by_type_key(template_type)
             if definition is not None:

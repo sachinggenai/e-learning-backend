@@ -25,6 +25,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/imports", tags=["imports"])
 
 
+def _error_payload(code: str, message: str, field: str = "request") -> dict:
+    return {
+        "detail": message,
+        "errors": [
+            {
+                "code": code,
+                "field": field,
+                "message": message,
+            }
+        ],
+    }
+
+
 class ImportAnalysisResponse(BaseModel):
     """Response from import analysis."""
     job_id: str
@@ -112,13 +125,20 @@ async def analyze_import(
         logger.error(f"No payload found in upload: {e}")
         raise HTTPException(
             status_code=400,
-            detail="No JSON payloads found in package"
+            detail=_error_payload(
+                "NO_PAYLOAD_FOUND",
+                "No JSON payloads found in package",
+                field="file",
+            ),
         )
     except ImportServiceError as e:
         logger.error(f"Import analysis error: {e}")
         raise HTTPException(
             status_code=400,
-            detail=f"Import error: {str(e)}"
+            detail=_error_payload(
+                "IMPORT_ANALYSIS_ERROR",
+                "Import analysis failed",
+            ),
         )
     except Exception as e:
         logger.error(
@@ -127,7 +147,10 @@ async def analyze_import(
         )
         raise HTTPException(
             status_code=500,
-            detail="Unexpected error during import analysis"
+            detail=_error_payload(
+                "IMPORT_ANALYSIS_UNEXPECTED",
+                "Unexpected error during import analysis",
+            ),
         )
 
 
@@ -168,7 +191,11 @@ async def get_import_status(
         logger.error(f"Error fetching import status: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail="Error fetching import status"
+            detail=_error_payload(
+                "IMPORT_STATUS_ERROR",
+                "Error fetching import status",
+                field="job_id",
+            ),
         )
 
 
@@ -209,13 +236,21 @@ async def commit_import(
         logger.error(f"Commit error: {e}")
         raise HTTPException(
             status_code=400,
-            detail=f"Commit error: {str(e)}"
+            detail=_error_payload(
+                "IMPORT_COMMIT_ERROR",
+                "Import commit failed",
+                field="job_id",
+            ),
         )
     except Exception as e:
         logger.error(f"Error committing import: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail="Error committing import"
+            detail=_error_payload(
+                "IMPORT_COMMIT_UNEXPECTED",
+                "Error committing import",
+                field="job_id",
+            ),
         )
 
 

@@ -5,7 +5,7 @@ Implements the SCORM export functionality for Phase 1 MVP.
 Provides endpoints for generating SCORM-compliant course packages.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from fastapi.responses import StreamingResponse
 from ..models.course import Course, CourseExportRequest
 from ..services.scorm_export import SCORMExportService
@@ -14,7 +14,9 @@ import json
 import os
 import hashlib
 import logging
+import uuid
 from datetime import datetime
+from typing import Literal, Optional
 
 import io
 from pydantic import BaseModel
@@ -29,11 +31,38 @@ from ..db.config import get_session
 from ..repositories.course_repo import CourseRepository, CourseNotFoundError
 
 # Initialize router and logger
-router = APIRouter()
+router = APIRouter(tags=["Export"])
 logger = logging.getLogger(__name__)
 
 # Initialize SCORM service
 scorm_service = SCORMExportService()
+
+# ── Shared OpenAPI response models ────────────────────────────────────────────
+
+class ExportValidationErrorItem(BaseModel):
+    code: str
+    field: str
+    message: str
+    hint: Optional[str] = None
+
+class ExportValidationError422(BaseModel):
+    detail: list
+
+
+def _error_payload(code: str, message: str, field: str = "request", hint: Optional[str] = None) -> dict:
+    payload: dict = {
+        "detail": message,
+        "errors": [
+            {
+                "code": code,
+                "field": field,
+                "message": message,
+            }
+        ],
+    }
+    if hint:
+        payload["errors"][0]["hint"] = hint
+    return payload
 
 @router.post("/export", summary="Export Course as SCORM Package")
 async def export_course(
@@ -114,13 +143,14 @@ async def export_course(
         filename = f"{validated_course.courseId}_scorm_package.zip"
         
         # Prepare streaming response
+        zip_bytes = zip_buffer.getvalue()
         zip_buffer.seek(0)
         
         # Create headers for download
         headers = {
             "Content-Disposition": f"attachment; filename={filename}",
             "Content-Type": "application/zip",
-            "Content-Length": str(len(zip_buffer.getvalue()))
+            "Content-Length": str(len(zip_bytes))
         }
 
         # Optional feature-flagged headers (BE-EXP-001)
@@ -138,12 +168,12 @@ async def export_course(
 
         logger.info(
             "SCORM export completed successfully. File size: %d bytes",
-            len(zip_buffer.getvalue()),
+            len(zip_bytes),
         )
 
         # Return streaming response
         return StreamingResponse(
-            io.BytesIO(zip_buffer.getvalue()),
+            io.BytesIO(zip_bytes),
             media_type="application/zip",
             headers=headers,
         )
@@ -152,21 +182,22 @@ async def export_course(
         logger.error("Invalid JSON in course data: %s", e)
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid course JSON format: {str(e)}"
+            detail="Invalid course JSON format",
         )
     
     except ValueError as e:
         logger.error("Course validation error: %s", e)
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid course data: {str(e)}"
+            status_code=422,
+            detail=f"Invalid course data: {str(e)}",
         )
     
     except Exception as e:
-        logger.error("SCORM export failed: %s", e, exc_info=True)
+        error_id = uuid.uuid4().hex[:12]
+        logger.error("SCORM export failed [error_id=%s]: %s", error_id, e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Export failed: {str(e)}"
+            detail="Export failed",
         )
 
  
@@ -218,10 +249,16 @@ async def validate_course_for_export(
         }
 
     except Exception as e:
-        logger.error(f"Validation failed: {e}")
+        error_id = uuid.uuid4().hex[:12]
+        logger.error("Validation failed [error_id=%s]: %s", error_id, e, exc_info=True)
         raise HTTPException(
-            status_code=400,
-            detail=f"Validation failed: {str(e)}"
+            status_code=422,
+            detail=_error_payload(
+                code="EXPORT_VALIDATION_FAILED",
+                message="Validation failed",
+                field="course",
+                hint=f"Reference error_id={error_id}",
+            ),
         )
 
  
@@ -277,12 +314,82 @@ async def get_export_status(exportId: str):
     }
 
 class ScormExportRequest(BaseModel):
-    format: str = "scorm_1_2"
+    format: Literal["scorm_1_2", "scorm_2004"] = "scorm_1_2"
     includeMedia: bool = True
+
+
+# ── Structured 422 helpers ────────────────────────────────────────────────────
+
+def _export_error(code: str, field: str, message: str, hint: Optional[str] = None) -> dict:
+    entry: dict = {"code": code, "field": field, "message": message}
+    if hint:
+        entry["hint"] = hint
+    return entry
+
+
+def _validate_course_for_export(course_id: str, db_pages: list, comp_map: dict) -> list[dict]:
+    """Return a list of structured validation errors. Empty list means valid."""
+    errors: list[dict] = []
+
+    if not db_pages:
+        errors.append(_export_error(
+            code="COURSE_NO_PAGES",
+            field="pages",
+            message="Course must contain at least one page",
+            hint="Add at least one page before exporting",
+        ))
+        return errors  # no point checking further
+
+    for idx, pg in enumerate(db_pages):
+        components = comp_map.get(pg.page_id, [])
+        if not components:
+            errors.append(_export_error(
+                code="PAGE_NO_COMPONENTS",
+                field=f"pages[{idx}].components",
+                message=f"Page '{pg.title}' must contain at least one component",
+                hint="Open the page in the editor and add a component",
+            ))
+
+    return errors
 
 
 class PersistedCourseExportValidationError(Exception):
     """Raised when stored course data cannot be exported safely."""
+
+
+def _component_data_with_content(comp_type: str, data: dict) -> dict:
+    """
+    Ensure component data has a 'content' key for legacy Course model validation.
+    Synthesizes a plain-text fallback for rich component types that don't carry
+    a top-level 'content' field (e.g. tabs, accordion).
+    The SCORM service uses the full 'data' dict for rendering; 'content' is
+    only needed to pass Pydantic's TemplateData.content = str Field(...).
+    """
+    if "content" in data:
+        return data
+
+    out = dict(data)
+
+    if comp_type == "tabs":
+        tabs = data.get("tabs") or []
+        out["content"] = " ".join(
+            f"{t.get('title', '')} {t.get('body', '')}" for t in tabs
+        ).strip() or comp_type
+
+    elif comp_type == "accordion":
+        panels = data.get("panels") or []
+        out["content"] = " ".join(
+            f"{p.get('title', '')} {p.get('body', '')}" for p in panels
+        ).strip() or comp_type
+
+    else:
+        # Generic fallback: first string value found, or the type name
+        out["content"] = next(
+            (str(v) for v in data.values() if isinstance(v, str) and v),
+            comp_type,
+        )
+
+    return out
 
 
 def _extract_text_content(template_uid: str, template_payload: dict) -> str:
@@ -389,6 +496,24 @@ def _map_template_record(template_record) -> dict:
             questions,
         )
 
+    if normalized_type == "tabs":
+        tabs = []
+        if isinstance(raw_content, dict):
+            tabs = raw_content.get("tabs") or []
+        if not tabs:
+            tabs = template_payload.get("tabs") or []
+        if isinstance(tabs, list):
+            mapped_data["tabs"] = tabs
+
+    if normalized_type == "accordion":
+        panels = []
+        if isinstance(raw_content, dict):
+            panels = raw_content.get("panels") or []
+        if not panels:
+            panels = template_payload.get("panels") or []
+        if isinstance(panels, list):
+            mapped_data["panels"] = panels
+
     return {
         "id": template_record.template_uid,
         "type": normalized_type,
@@ -397,107 +522,258 @@ def _map_template_record(template_record) -> dict:
         "data": mapped_data,
     }
 
+
+# ── Theme resolution for SCORM export ────────────────────────────────────────
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Deep merge override into base (same as themes.py helper)."""
+    from copy import deepcopy
+    result = deepcopy(base)
+    for key, val in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = deepcopy(val)
+    return result
+
+
+# Sensible fallback when no theme is configured or found in DB
+_FALLBACK_THEME = {
+    "colors": {
+        "primary": "#667eea", "secondary": "#764ba2", "accent": "#FF4081",
+        "background": "#FFFFFF", "surface": "#F5F5F5", "text": "#212121",
+        "textSecondary": "#757575", "border": "#E0E0E0",
+        "success": "#10b981", "warning": "#F57C00", "error": "#D32F2F",
+        "info": "#1976D2",
+    },
+    "typography": {
+        "fontFamily": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "headingFont": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "baseFontSize": 16,
+    },
+    "componentStyles": {},
+}
+
+
+async def _resolve_theme_bundle(
+    session: AsyncSession,
+    course_record,
+    db_pages: list,
+    comp_map: dict,
+) -> dict:
+    """
+    Resolve the full theme cascade for a course being exported.
+
+    Returns a dict with:
+      courseTheme  — fully resolved course-level theme (preset + course overrides)
+      pageOverrides — { pageId: { partial theme overrides } }
+      componentOverrides — { componentId: { styling dict } }
+    """
+    from app.repositories.theme_repo import ThemeRepository
+
+    repo = ThemeRepository(session)
+
+    # 1. Resolve base theme from course settings
+    settings = (course_record.json_data or {}).get("settings", {})
+    theme_id = settings.get("themeId")
+    course_overrides = settings.get("themeOverrides", {})
+
+    base_theme = None
+    if theme_id:
+        theme_record = await repo.get(theme_id)
+        if theme_record:
+            base_theme = {
+                "colors": theme_record.colors or {},
+                "typography": theme_record.typography or {},
+                "componentStyles": theme_record.component_styles or {},
+            }
+
+    if not base_theme:
+        # Try first preset as fallback
+        presets = await repo.list(is_preset=True)
+        if presets:
+            t = presets[0]
+            base_theme = {
+                "colors": t.colors or {},
+                "typography": t.typography or {},
+                "componentStyles": t.component_styles or {},
+            }
+        else:
+            base_theme = _FALLBACK_THEME.copy()
+
+    # Apply course-level overrides on top of preset
+    course_theme = _deep_merge(base_theme, course_overrides) if course_overrides else base_theme
+
+    # 2. Collect page-level theme overrides
+    page_overrides: dict = {}
+    for pg in db_pages:
+        if pg.theme_config:
+            overrides = pg.theme_config.get("overrides", {})
+            if overrides:
+                page_overrides[pg.page_id] = overrides
+
+    # 3. Collect component-level styling overrides
+    component_overrides: dict = {}
+    for pg in db_pages:
+        for comp in comp_map.get(pg.page_id, []):
+            if comp.styling:
+                # Component styling may contain themeOverrides or direct overrides
+                theme_ovr = comp.styling.get("themeOverrides", comp.styling)
+                if theme_ovr:
+                    component_overrides[comp.component_id] = theme_ovr
+
+    return {
+        "courseTheme": course_theme,
+        "pageOverrides": page_overrides,
+        "componentOverrides": component_overrides,
+    }
+
+
 @router.post(
     "/export/scorm/{courseId}",
     summary="Export Persisted Course as SCORM Package",
+    responses={
+        200: {"content": {"application/zip": {}}, "description": "SCORM ZIP archive"},
+        404: {"description": "Course not found"},
+        422: {"description": "Course exists but is not exportable — structured detail array returned"},
+        500: {"description": "Internal export failure"},
+    },
 )
 async def export_persisted_course(
     courseId: str,
-    request: ScormExportRequest,
-    session: AsyncSession = Depends(get_session)
+    body: Optional[ScormExportRequest] = Body(None),
+    format: Optional[Literal["scorm_1_2", "scorm_2004"]] = Query(
+        default=None,
+        description="SCORM format version (query param overrides body)",
+    ),
+    session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """
-    Export a persisted course (by ID) as a SCORM package.
+    Export a persisted course (by ID) as a SCORM ZIP package.
+
+    - **200**: Binary ZIP stream with `Content-Disposition` filename header.
+    - **404**: Course ID not found in the database.
+    - **422**: Course exists but validation failed (no pages, empty pages, etc.).
+      Detail array contains machine-readable entries with `code`, `field`, `message`, optional `hint`.
+    - **500**: Unexpected export failure.
     """
     repo = CourseRepository(session)
     try:
-        # Fetch course record
         course_record = await repo.get_by_course_id(courseId)
-        
-        # Convert to Pydantic model
-        # Merge metadata with json_data
-        course_data = course_record.json_data.copy()
-        course_data['courseId'] = course_record.course_id
-        course_data['title'] = course_record.title
-        if course_record.description:
-            course_data['description'] = course_record.description
-            
-        # Prefer normalized template records when present so export uses
-        # the authoritative persisted representation.
-        from ..repositories.template_repo import TemplateRepository
-        template_repo = TemplateRepository(session)
-        templates = await template_repo.list(course_record.id)
+    except CourseNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Course '{courseId}' not found in database")
 
-        # Add default author if missing
-        if 'author' not in course_data:
-            course_data['author'] = "Unknown Author"
+    # Resolve format: query param > request body > default
+    effective_format: str = format or (body.format if body else "scorm_1_2")
 
-        if templates:
-            course_data['templates'] = [
-                _map_template_record(template)
-                for template in templates
-            ]
+    try:
+        from app.repositories.page_component_repo import PageRepository, ComponentRepository
 
-        # ── Component-based pages (new format) ───────────────────────
-        # If the course has pages with components, convert them to
-        # legacy template format for the existing SCORM export service.
-        from app.repositories.page_component_repo import (
-            PageRepository,
-            ComponentRepository,
-        )
         page_repo = PageRepository(session)
         comp_repo = ComponentRepository(session)
         db_pages = await page_repo.list_by_course(course_record.course_id)
 
-        if db_pages and "templates" not in course_data:
-            course_data["templates"] = []
+        # Build component map upfront for validation and conversion
+        comp_map: dict = {}
+        for pg in db_pages:
+            comp_map[pg.page_id] = await comp_repo.list_by_page(pg.page_id)
 
-        for idx, pg in enumerate(db_pages):
-            components = await comp_repo.list_by_page(pg.page_id)
-            for comp in components:
-                # Map each component to a legacy template entry so
-                # the SCORM export service can handle it unchanged.
-                course_data["templates"].append(
-                    {
+        # ── Build legacy Course model for SCORM service ──────────────────
+        course_data = course_record.json_data.copy()
+        course_data["courseId"] = course_record.course_id
+        course_data["title"] = course_record.title
+        if course_record.description:
+            course_data["description"] = course_record.description
+        if "author" not in course_data:
+            course_data["author"] = "Unknown Author"
+
+        # Prefer normalized TemplateRecord rows when present
+        from ..repositories.template_repo import TemplateRepository
+        template_repo = TemplateRepository(session)
+        templates = await template_repo.list(course_record.id)
+
+        # Legacy json_data blob templates (courses created via old POST body)
+        json_blob_templates = course_data.get("templates") or []
+
+        if templates:
+            # TemplateRecord path — no page/component validation needed
+            course_data["templates"] = [_map_template_record(t) for t in templates]
+        elif json_blob_templates:
+            # JSON blob path — templates already present in course_data, skip validation
+            pass
+        else:
+            # Page/component path — apply structured validation
+            validation_errors = _validate_course_for_export(courseId, db_pages, comp_map)
+            if validation_errors:
+                raise HTTPException(status_code=422, detail=validation_errors)
+
+            course_data["templates"] = []
+            for pg in db_pages:
+                for comp in comp_map.get(pg.page_id, []):
+                    course_data["templates"].append({
                         "id": comp.component_id,
                         "type": comp.component_type,
                         "title": pg.title,
                         "order": len(course_data["templates"]),
-                        "data": comp.data or {},
-                    }
-                )
-        
-        # Validate/Convert to Course model
-        validated_course = Course(**course_data)
-        
-        # Generate SCORM
-        zip_buffer = await scorm_service.generate_scorm_package(
-            validated_course
+                        "pageId": pg.page_id,
+                        "data": _component_data_with_content(
+                            comp.component_type, comp.data or {}
+                        ),
+                    })
+
+        # ── Resolve theme cascade ────────────────────────────────────────
+        theme_bundle = await _resolve_theme_bundle(
+            session, course_record, db_pages, comp_map,
         )
-        filename = f"{validated_course.courseId}_scorm_package.zip"
-        
+
+        validated_course = Course(**course_data)
+
+        zip_buffer = await scorm_service.generate_scorm_package(
+            validated_course, theme_bundle=theme_bundle,
+        )
+        filename = f"{validated_course.courseId}_scorm_{effective_format}.zip"
         zip_buffer.seek(0)
-        
-        headers = {
-            "Content-Disposition": f"attachment; filename={filename}",
-            "Content-Type": "application/zip",
-            "Content-Length": str(len(zip_buffer.getvalue()))
-        }
-        
+
         return StreamingResponse(
             io.BytesIO(zip_buffer.getvalue()),
             media_type="application/zip",
-            headers=headers,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(zip_buffer.getvalue())),
+            },
         )
 
-    except CourseNotFoundError:
-        raise HTTPException(status_code=404, detail="Course not found")
-    except PersistedCourseExportValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    except PydanticValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors())
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("SCORM export failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+    except PersistedCourseExportValidationError as exc:
+        raise HTTPException(status_code=422, detail=[
+            _export_error("EXPORT_VALIDATION_ERROR", "course", str(exc))
+        ])
+    except PydanticValidationError as exc:
+        errors = [
+            _export_error(
+                code="SCHEMA_VALIDATION_ERROR",
+                field=".".join(str(l) for l in e.get("loc", [])),
+                message=e.get("msg", "Validation error"),
+            )
+            for e in exc.errors()
+        ]
+        raise HTTPException(status_code=422, detail=errors)
+    except Exception as exc:
+        error_id = uuid.uuid4().hex[:12]
+        logger.error(
+            "SCORM export failed for %s [error_id=%s]: %s",
+            courseId,
+            error_id,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=_error_payload(
+                code="PERSISTED_EXPORT_FAILED",
+                message="Internal export failure",
+                field="course",
+                hint=f"Reference error_id={error_id}",
+            ),
+        )

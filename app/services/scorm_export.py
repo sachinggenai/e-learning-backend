@@ -27,9 +27,14 @@ except ImportError:
     HAS_BEAUTIFULSOUP = False
     print("Warning: BeautifulSoup not available. HTML sanitization will be limited.")
 
-from ..models.course import Course, Template
+from ..models.course import Course, Template, BUILTIN_TEMPLATE_TYPES
 from .scorm.sanitizers import DynamicSanitizer
 from .scorm.registries import registry
+from ..db.config import get_session
+from ..repositories.template_type_repo import (
+    TemplateTypeRepository,
+    TemplateTypeNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,19 +57,19 @@ def _ensure_dict(data: Any) -> Dict[str, Any]:
     if isinstance(data, dict):
         return data
     
-    # If Pydantic model
-    if hasattr(data, 'dict') and callable(getattr(data, 'dict')):
-        try:
-            return data.dict()
-        except Exception as e:
-            logger.warning(f"Failed to convert Pydantic model to dict: {e}")
-    
     # If Pydantic v2 model
     if hasattr(data, 'model_dump') and callable(getattr(data, 'model_dump')):
         try:
             return data.model_dump()
         except Exception as e:
             logger.warning(f"Failed to convert Pydantic v2 model to dict: {e}")
+
+    # If Pydantic v1 model
+    if hasattr(data, 'dict') and callable(getattr(data, 'dict')):
+        try:
+            return data.dict()
+        except Exception as e:
+            logger.warning(f"Failed to convert Pydantic model to dict: {e}")
     
     # If dataclass
     if hasattr(data, '__dataclass_fields__'):
@@ -97,13 +102,15 @@ class SCORMExportService:
         self.media_resources = {}
         self.resource_dependencies = {}
     
-    async def generate_scorm_package(self, course: Course, include_assets: bool = True) -> BytesIO:
+    async def generate_scorm_package(self, course: Course, include_assets: bool = True,
+                                     theme_bundle: Optional[Dict[str, Any]] = None) -> BytesIO:
         """
         Generate a complete SCORM package as a ZIP file
         
         Args:
             course: Course data to export
             include_assets: Whether to include asset files in package
+            theme_bundle: Resolved theme cascade (courseTheme, pageOverrides, componentOverrides)
             
         Returns:
             BytesIO: ZIP file content as bytes
@@ -157,7 +164,7 @@ class SCORMExportService:
                 logger.info("Creating course data")
                 await self._create_course_data_js(package_dir, course)
                 logger.info("Creating content HTML")
-                await self._create_content_html(package_dir, course)
+                await self._create_content_html(package_dir, course, theme_bundle=theme_bundle)
                 logger.info("Creating SCORM wrapper")
                 await self._create_scorm_wrapper(package_dir, course)
                 
@@ -335,7 +342,8 @@ class SCORMExportService:
                         'type': template.type,
                         'order': template.order,
                         'title': self._sanitize_text(template.title),
-                        'data': sanitized_data
+                        'data': sanitized_data,
+                        'pageId': getattr(template, 'pageId', None),
                     }
                     templates_data.append(safe_template)
                 except Exception as e:
@@ -391,9 +399,133 @@ class SCORMExportService:
         except Exception as e:
             logger.error(f"Failed to create course data JavaScript: {e}")
             raise Exception(f"Course data creation failed: {str(e)}")
-    
+
+    # ── Theme CSS Generation ─────────────────────────────────────────────
+
+    _HEX_RE = re.compile(r'^#(?:[0-9a-fA-F]{3,4}){1,2}$')
+    _SAFE_FONT_RE = re.compile(
+        r"^[\w\s,'\".-]+$"
+    )
+
+    def _sanitize_css_value(self, value: str) -> Optional[str]:
+        """Validate a CSS property value to prevent injection."""
+        if not isinstance(value, str):
+            return None
+        value = value.strip()
+        if not value or len(value) > 200:
+            return None
+        # Block semicolons, braces, url(), expression(), @import, etc.
+        dangerous = re.compile(r'[;{}]|url\s*\(|expression\s*\(|@import|javascript:', re.I)
+        if dangerous.search(value):
+            return None
+        return value
+
+    def _sanitize_color(self, value: str) -> Optional[str]:
+        """Accept only valid hex colours."""
+        if isinstance(value, str) and self._HEX_RE.match(value.strip()):
+            return value.strip()
+        return None
+
+    def _generate_theme_css(self, theme_bundle: Optional[Dict[str, Any]]) -> str:
+        """
+        Generate CSS custom properties from a resolved theme bundle.
+
+        Returns a CSS string with :root variables plus optional
+        per-page and per-component scoped overrides.
+        """
+        if not theme_bundle:
+            return ""
+
+        lines: List[str] = []
+
+        # --- Course-level :root variables ---
+        course_theme = theme_bundle.get("courseTheme", {})
+        colors = course_theme.get("colors", {})
+        typo = course_theme.get("typography", {})
+
+        root_vars: List[str] = []
+        color_map = {
+            "primary": "--theme-primary",
+            "secondary": "--theme-secondary",
+            "accent": "--theme-accent",
+            "background": "--theme-background",
+            "surface": "--theme-surface",
+            "text": "--theme-text",
+            "textSecondary": "--theme-text-secondary",
+            "border": "--theme-border",
+            "success": "--theme-success",
+            "warning": "--theme-warning",
+            "error": "--theme-error",
+            "info": "--theme-info",
+        }
+        for key, var_name in color_map.items():
+            val = self._sanitize_color(colors.get(key, ""))
+            if val:
+                root_vars.append(f"  {var_name}: {val};")
+
+        # Typography
+        font_family = self._sanitize_css_value(str(typo.get("fontFamily", "")))
+        if font_family and self._SAFE_FONT_RE.match(font_family):
+            root_vars.append(f"  --theme-font-family: {font_family};")
+        heading_font = self._sanitize_css_value(str(typo.get("headingFont", "")))
+        if heading_font and self._SAFE_FONT_RE.match(heading_font):
+            root_vars.append(f"  --theme-heading-font: {heading_font};")
+        base_size = typo.get("baseFontSize")
+        if isinstance(base_size, (int, float)) and 8 <= base_size <= 32:
+            root_vars.append(f"  --theme-base-font-size: {int(base_size)}px;")
+
+        if root_vars:
+            lines.append(":root {")
+            lines.extend(root_vars)
+            lines.append("}")
+
+        # --- Per-page overrides ---
+        page_overrides = theme_bundle.get("pageOverrides", {})
+        for page_id, overrides in page_overrides.items():
+            page_vars = self._override_vars(overrides)
+            if page_vars:
+                safe_id = re.sub(r'[^a-zA-Z0-9_-]', '', str(page_id))
+                lines.append(f'[data-page="{safe_id}"] {{')
+                lines.extend(page_vars)
+                lines.append("}")
+
+        # --- Per-component overrides ---
+        comp_overrides = theme_bundle.get("componentOverrides", {})
+        for comp_id, overrides in comp_overrides.items():
+            comp_vars = self._override_vars(overrides)
+            if comp_vars:
+                safe_id = re.sub(r'[^a-zA-Z0-9_-]', '', str(comp_id))
+                lines.append(f'[data-component="{safe_id}"] {{')
+                lines.extend(comp_vars)
+                lines.append("}")
+
+        return "\n".join(lines) + "\n" if lines else ""
+
+    def _override_vars(self, overrides: dict) -> List[str]:
+        """Convert a partial override dict into CSS variable assignments."""
+        vars_list: List[str] = []
+        color_map = {
+            "primary": "--theme-primary", "secondary": "--theme-secondary",
+            "accent": "--theme-accent", "background": "--theme-background",
+            "surface": "--theme-surface", "text": "--theme-text",
+            "textSecondary": "--theme-text-secondary", "border": "--theme-border",
+            "success": "--theme-success", "warning": "--theme-warning",
+            "error": "--theme-error", "info": "--theme-info",
+        }
+        # Could be flat { "primary": "#..." } or nested { "colors": { "primary": "#..." } }
+        colors = overrides.get("colors", overrides) if isinstance(overrides, dict) else {}
+        if isinstance(colors, dict):
+            for key, var_name in color_map.items():
+                val = self._sanitize_color(colors.get(key, ""))
+                if val:
+                    vars_list.append(f"  {var_name}: {val};")
+        return vars_list
+
+    # ── Content HTML + CSS ───────────────────────────────────────────────
+
     async def _create_content_html(
-        self, package_dir: Path, course: Course
+        self, package_dir: Path, course: Course,
+        theme_bundle: Optional[Dict[str, Any]] = None,
     ) -> None:
         """FIX #1 & #2: Unified player with proper script loading"""
         try:
@@ -567,6 +699,8 @@ class SCORMExportService:
                 try {{
                     if (slide.type === 'content-text' || slide.type === 'content') {{
                         content = this.renderContent(slide);
+                    }} else if (slide.type === 'tabs') {{
+                        content = this.renderTabs(slide);
                     }} else if (slide.type === 'mcq') {{
                         content = this.renderMCQ(slide, index);
                     }} else {{
@@ -585,6 +719,15 @@ class SCORMExportService:
                 }}
 
                 container.innerHTML = content;
+
+                // Apply scoping data attributes for theme override CSS
+                if (slide.pageId) {{
+                    container.setAttribute('data-page', slide.pageId);
+                }}
+                if (slide.id) {{
+                    container.setAttribute('data-component', slide.id);
+                }}
+
                 this.state.currentSlide = index;
 
                 // Mark as viewed and save progress (but don't mark as completed here)
@@ -616,6 +759,78 @@ class SCORMExportService:
                 console.error('renderContent error:', error);
                 return '<div class="template error">' +
                        '<p>Content rendering failed</p></div>';
+            }}
+        }},
+
+        renderTabs: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Tabs');
+                var tabs = Array.isArray(data.tabs) ? data.tabs : [];
+
+                if (tabs.length === 0) {{
+                    var fallbackBody = this.sanitize(data.content || '');
+                    return '<div class="template tabs-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<div class="content-body">' + fallbackBody + '</div>' +
+                           '</div>';
+                }}
+
+                var navHtml = '';
+                var panelHtml = '';
+                for (var i = 0; i < tabs.length; i++) {{
+                    var tab = tabs[i] || {{}};
+                    var tabId = this.sanitize(tab.id || ('tab-' + i));
+                    var tabTitle = this.sanitize(tab.title || ('Tab ' + (i + 1)));
+                    var tabBody = this.sanitize(tab.body || '');
+                    var activeClass = i === 0 ? ' active' : '';
+                    navHtml += '<button class="tabs-nav-btn' + activeClass + '" ' +
+                               'type="button" ' +
+                               'onclick="Player.activateTab(' + i + ')">' +
+                               tabTitle + '</button>';
+                    panelHtml += '<div class="tabs-panel' + activeClass + '" ' +
+                                 'id="tabs-panel-' + tabId + '">' +
+                                 '<div class="content-body">' + tabBody + '</div>' +
+                                 '</div>';
+                }}
+
+                return '<div class="template tabs-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="tabs-nav">' + navHtml + '</div>' +
+                       '<div class="tabs-panels">' + panelHtml + '</div>' +
+                       '</div>';
+            }} catch (error) {{
+                console.error('renderTabs error:', error);
+                return '<div class="template error">' +
+                       '<p>Tabs rendering failed</p></div>';
+            }}
+        }},
+
+        activateTab: function(tabIndex) {{
+            try {{
+                var container = document.getElementById('slide-container');
+                if (!container) return;
+
+                var navBtns = container.querySelectorAll('.tabs-nav-btn');
+                var panels = container.querySelectorAll('.tabs-panel');
+
+                navBtns.forEach(function(btn, idx) {{
+                    if (idx === tabIndex) {{
+                        btn.classList.add('active');
+                    }} else {{
+                        btn.classList.remove('active');
+                    }}
+                }});
+
+                panels.forEach(function(panel, idx) {{
+                    if (idx === tabIndex) {{
+                        panel.classList.add('active');
+                    }} else {{
+                        panel.classList.remove('active');
+                    }}
+                }});
+            }} catch (error) {{
+                console.error('activateTab error:', error);
             }}
         }},
 
@@ -942,60 +1157,72 @@ class SCORMExportService:
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
 
-            # Create comprehensive styles
-            styles_css = """body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    margin: 0; padding: 0; background: #f5f5f5; }
-#scorm-player { max-width: 1200px; margin: 0 auto; background: white;
+            # Create comprehensive styles — tokenized with CSS custom properties
+            styles_css = """body { font-family: var(--theme-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+    margin: 0; padding: 0; background: var(--theme-surface, #f5f5f5); }
+#scorm-player { max-width: 1200px; margin: 0 auto; background: var(--theme-background, white);
     min-height: 100vh; display: flex; flex-direction: column; }
-.player-header { background: linear-gradient(135deg, #667eea, #764ba2);
+.player-header { background: linear-gradient(135deg, var(--theme-primary, #667eea), var(--theme-secondary, #764ba2));
     color: white; padding: 2rem; text-align: center; }
-.player-header h1 { margin: 0 0 1rem 0; font-size: 2rem; }
+.player-header h1 { margin: 0 0 1rem 0; font-size: 2rem;
+    font-family: var(--theme-heading-font, var(--theme-font-family, inherit)); }
 .progress-container { display: flex; align-items: center; gap: 1rem; }
 .progress-bar { flex: 1; background: rgba(255,255,255,0.2);
     border-radius: 10px; height: 10px; overflow: hidden; }
-.progress-fill { background: #10b981; height: 100%;
+.progress-fill { background: var(--theme-success, #10b981); height: 100%;
     transition: width 0.3s; width: 0%; }
 .progress-text { min-width: 40px; }
 .player-content { flex: 1; padding: 2rem; }
 .template { max-width: 800px; margin: 0 auto; line-height: 1.6; }
-.template h2 { color: #333; font-size: 1.8rem;
-    border-bottom: 3px solid #667eea; }
-.mcq-template { background: #f8f9fa; padding: 2rem; border-radius: 12px;
+.template h2 { color: var(--theme-text, #333); font-size: 1.8rem;
+    border-bottom: 3px solid var(--theme-primary, #667eea); }
+.mcq-template { background: var(--theme-surface, #f8f9fa); padding: 2rem; border-radius: 12px;
     margin: 2rem 0; }
-.mcq-question { color: #2d3748; font-size: 1.5rem; margin-bottom: 1.5rem; }
+.mcq-question { color: var(--theme-text, #2d3748); font-size: 1.5rem; margin-bottom: 1.5rem; }
 .mcq-options { display: flex; flex-direction: column; gap: 1rem; }
-.mcq-option { display: flex; align-items: center; background: white;
-    padding: 1rem; border-radius: 8px; cursor: pointer; border: 2px solid #e2e8f0;
+.mcq-option { display: flex; align-items: center; background: var(--theme-background, white);
+    padding: 1rem; border-radius: 8px; cursor: pointer; border: 2px solid var(--theme-border, #e2e8f0);
     transition: all 0.2s; }
-.mcq-option:hover { border-color: #667eea; background: #f7fafc; }
-.mcq-option.selected { border-color: #10b981; background: #f0fff4; }
-.mcq-option input[type="radio"] { margin-right: 0.75rem; }
-.option-text { flex: 1; font-size: 1.1rem; }
+.mcq-option:hover { border-color: var(--theme-primary, #667eea); background: var(--theme-surface, #f7fafc); }
+.mcq-option.selected { border-color: var(--theme-success, #10b981); background: #f0fff4; }
+.mcq-option input[type="radio"] { margin-right: 0.75rem; accent-color: var(--theme-primary, #667eea); }
+.option-text { flex: 1; font-size: 1.1rem; color: var(--theme-text, #212121); }
 .mcq-feedback { margin-top: 1.5rem; padding: 1rem; border-radius: 8px;
     font-weight: bold; }
 .mcq-feedback .ok { color: #155724; background: #d4edda; border: 1px solid #c3e6cb; }
 .mcq-feedback .err { color: #721c24; background: #f8d7da; border: 1px solid #f5c6cb; }
-.content-template { background: white; padding: 2rem; border-radius: 12px;
+.content-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px;
     margin: 2rem 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-.content-title { color: #2d3748; font-size: 1.8rem; margin-bottom: 1.5rem;
-    border-bottom: 3px solid #667eea; padding-bottom: 0.5rem; }
-.content-body { font-size: 1.1rem; line-height: 1.7; }
+.content-title { color: var(--theme-text, #2d3748); font-size: 1.8rem; margin-bottom: 1.5rem;
+    border-bottom: 3px solid var(--theme-primary, #667eea); padding-bottom: 0.5rem; }
+.content-body { font-size: 1.1rem; line-height: 1.7; color: var(--theme-text, #212121); }
 .content-body p { margin-bottom: 1rem; }
 .content-body ul, .content-body ol { margin: 1rem 0; padding-left: 2rem; }
 .content-body li { margin-bottom: 0.5rem; }
-.content-body strong { font-weight: 600; color: #2d3748; }
-.content-body em { font-style: italic; color: #4a5568; }
-.player-controls { background: #f8f9fa; padding: 1.5rem 2rem;
+.content-body strong { font-weight: 600; color: var(--theme-text, #2d3748); }
+.content-body em { font-style: italic; color: var(--theme-text-secondary, #4a5568); }
+.tabs-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px;
+    margin: 2rem 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.tabs-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.tabs-nav-btn { padding: 0.5rem 0.75rem; border: 1px solid var(--theme-border, #e2e8f0);
+    background: var(--theme-surface, #f8f9fa); color: var(--theme-text, #212121); border-radius: 6px;
+    cursor: pointer; }
+.tabs-nav-btn.active { background: var(--theme-primary, #667eea); color: #fff;
+    border-color: var(--theme-primary, #667eea); }
+.tabs-panel { display: none; border: 1px solid var(--theme-border, #e2e8f0);
+    background: var(--theme-background, #fff); border-radius: 8px; padding: 1rem; }
+.tabs-panel.active { display: block; }
+.player-controls { background: var(--theme-surface, #f8f9fa); padding: 1.5rem 2rem;
     display: flex; justify-content: space-between; align-items: center; }
-.nav-btn, .finish-btn { padding: 0.75rem 1.5rem; border: 2px solid #667eea;
-    background: white; color: #667eea; border-radius: 6px; cursor: pointer;
+.nav-btn, .finish-btn { padding: 0.75rem 1.5rem; border: 2px solid var(--theme-primary, #667eea);
+    background: var(--theme-background, white); color: var(--theme-primary, #667eea); border-radius: 6px; cursor: pointer;
     font-size: 1rem; font-weight: 500; transition: all 0.2s; }
-.nav-btn:hover, .finish-btn:hover { background: #667eea; color: white; }
+.nav-btn:hover, .finish-btn:hover { background: var(--theme-primary, #667eea); color: white; }
 .nav-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.finish-btn { background: #10b981; border-color: #10b981; color: white; }
-.finish-btn:hover { background: #059669; }
-.slide-counter { font-weight: 500; color: #4a5568; }
-.error { background: #fed7d7; color: #c53030; padding: 1rem; border-radius: 6px;
+.finish-btn { background: var(--theme-success, #10b981); border-color: var(--theme-success, #10b981); color: white; }
+.finish-btn:hover { background: var(--theme-success, #059669); }
+.slide-counter { font-weight: 500; color: var(--theme-text-secondary, #4a5568); }
+.error { background: #fed7d7; color: var(--theme-error, #c53030); padding: 1rem; border-radius: 6px;
     border: 1px solid #feb2b2; }
 @media (max-width: 768px) {{
     .player-header {{ padding: 1rem; }}
@@ -1015,8 +1242,15 @@ class SCORMExportService:
     .progress-text {{ min-width: auto; }}
 }}"""
 
+            # Prepend theme-generated CSS custom properties
+            theme_css = self._generate_theme_css(theme_bundle)
+
             styles_path = package_dir / "styles.css"
             with open(styles_path, 'w', encoding='utf-8') as f:
+                if theme_css:
+                    f.write("/* === Theme: resolved from course settings === */\n")
+                    f.write(theme_css)
+                    f.write("\n/* === Base player styles === */\n")
                 f.write(styles_css)
 
             logger.info("✓ Content HTML and styles created successfully")
@@ -1730,6 +1964,60 @@ console.log('✓ SCORM wrapper with Mock API loaded');
         text_str = re.sub(r'on\w+\s*=', '', text_str, flags=re.IGNORECASE)
         
         return html.escape(text_str)
+
+    async def _exists_in_template_type_catalog(self, type_key: str) -> bool:
+        """
+        Fallback presence check for environments where template_definitions
+        are not seeded yet but template_types is populated.
+        """
+        def _candidates(key: str) -> list[str]:
+            raw = (key or "").strip()
+            if not raw:
+                return []
+
+            lower = raw.lower()
+            dash = lower.replace("_", "-")
+            under = lower.replace("-", "_")
+
+            alias_map = {
+                "video": "content-video",
+                "content-video": "video",
+                "content_text": "content-text",
+                "content-text": "content_text",
+                "quiz": "mcq",
+                "mcq": "quiz",
+            }
+
+            out: list[str] = []
+            for candidate in (raw, lower, dash, under, alias_map.get(lower), alias_map.get(dash), alias_map.get(under)):
+                if candidate and candidate not in out:
+                    out.append(candidate)
+            return out
+
+        candidates = _candidates(type_key)
+
+        # Always accept built-in types defined by the course schema.
+        if any(c in BUILTIN_TEMPLATE_TYPES for c in candidates):
+            return True
+
+        try:
+            async for session in get_session():
+                repo = TemplateTypeRepository(session)
+                for candidate in candidates:
+                    try:
+                        await repo.get_by_template_id(candidate)
+                        return True
+                    except TemplateTypeNotFoundError:
+                        continue
+                return False
+        except Exception as exc:
+            logger.warning(
+                "Template type catalog fallback failed for '%s': %s",
+                type_key,
+                exc,
+            )
+        return False
+
     async def _validate_templates_for_scorm(self, templates: List) -> None:
         """
         Dynamic template validation using template definitions.
@@ -1764,16 +2052,27 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                     )
                     continue
                 
-                # Check if template type is registered
-                if not await registry.exists(template.type):
-                    validation_errors.append(
-                        f"Template {i+1} ({template.title}): "
-                        f"Type '{template.type}' not registered"
+                # Check if template type is registered in dynamic definitions.
+                # If missing, fall back to template_types catalog so export
+                # remains functional in partially migrated environments.
+                definition = None
+                if await registry.exists(template.type):
+                    definition = await registry.get(template.type)
+                else:
+                    fallback_exists = await self._exists_in_template_type_catalog(
+                        template.type
                     )
-                    continue
-                
-                # Get template definition
-                definition = await registry.get(template.type)
+                    if not fallback_exists:
+                        validation_errors.append(
+                            f"Template {i+1} ({template.title}): "
+                            f"Type '{template.type}' not registered"
+                        )
+                        continue
+                    logger.warning(
+                        "Template '%s' validated via template_types fallback; "
+                        "template_definitions row is missing",
+                        template.type,
+                    )
                 
                 # Validate data exists
                 if not hasattr(template, 'data') or not template.data:
@@ -1797,13 +2096,14 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                     )
                     continue
                 
-                # Validate required fields from definition
-                for field in definition.field_schema:
-                    if field.required and field.name not in template_data:
-                        validation_errors.append(
-                            f"Template {i+1} ({template.title}): "
-                            f"Missing required field '{field.name}'"
-                        )
+                # Validate required fields from definition (when available).
+                if definition:
+                    for field in definition.field_schema:
+                        if field.required and field.name not in template_data:
+                            validation_errors.append(
+                                f"Template {i+1} ({template.title}): "
+                                f"Missing required field '{field.name}'"
+                            )
                         
             except Exception as e:
                 validation_errors.append(
@@ -1841,7 +2141,10 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             return {}
         
         # Get template definition from registry
-        definition = await registry.get(template_type)
+        try:
+            definition = await registry.get(template_type)
+        except Exception:
+            definition = None
         if not definition:
             logger.warning(
                 f"No template definition found for type '{template_type}', "

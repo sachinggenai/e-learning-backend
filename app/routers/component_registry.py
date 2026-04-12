@@ -10,6 +10,7 @@ Endpoints:
 from __future__ import annotations
 import hashlib
 import json
+import logging
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
@@ -17,6 +18,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import get_session
 from app.repositories.component_type_repo import ComponentTypeRepository
+
+logger = logging.getLogger(__name__)
+
+
+def _internal_error(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=500,
+        detail={
+            "detail": message,
+            "errors": [
+                {
+                    "code": code,
+                    "field": "server",
+                    "message": message,
+                }
+            ],
+        },
+    )
 
 
 def _compute_etag(data: dict) -> str:
@@ -61,41 +80,59 @@ async def list_component_types(
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
 ):
-    repo = ComponentTypeRepository(session)
-    items, total = await repo.list(
-        category=category,
-        scoring_enabled=scoringEnabled,
-        is_active=isActive,
-        page=page,
-        limit=limit,
-    )
-    return {
-        "items": [ct.to_dict() for ct in items],
-        "total": total,
-        "page": page,
-        "limit": limit,
-        "schemaVersion": COMPONENT_SCHEMA_VERSION,
-    }
+    try:
+        repo = ComponentTypeRepository(session)
+        items, total = await repo.list(
+            category=category,
+            scoring_enabled=scoringEnabled,
+            is_active=isActive,
+            page=page,
+            limit=limit,
+        )
+        return {
+            "items": [ct.to_dict() for ct in items],
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "schemaVersion": COMPONENT_SCHEMA_VERSION,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to list component types: %s", exc, exc_info=True)
+        raise _internal_error(
+            "COMPONENT_REGISTRY_LIST_FAILED",
+            "Failed to list component types",
+        )
 
 
 @router.get("/categories")
 async def list_categories(session: AsyncSession = Depends(get_session)):
-    repo = ComponentTypeRepository(session)
-    raw = await repo.get_categories()
-    categories = []
-    for item in raw:
-        cat_id = item["categoryId"]
-        meta = CATEGORY_META.get(cat_id, {})
-        categories.append({
-            "categoryId": cat_id,
-            "displayName": meta.get("displayName", cat_id),
-            "description": meta.get("description", ""),
-            "icon": meta.get("icon", "component"),
-            "componentCount": item["componentCount"],
-            "sortOrder": meta.get("sortOrder", 99),
-        })
-    categories.sort(key=lambda c: c["sortOrder"])
-    return {"categories": categories}
+    try:
+        repo = ComponentTypeRepository(session)
+        raw = await repo.get_categories()
+        categories = []
+        for item in raw:
+            cat_id = item["categoryId"]
+            meta = CATEGORY_META.get(cat_id, {})
+            categories.append({
+                "categoryId": cat_id,
+                "displayName": meta.get("displayName", cat_id),
+                "description": meta.get("description", ""),
+                "icon": meta.get("icon", "component"),
+                "componentCount": item["componentCount"],
+                "sortOrder": meta.get("sortOrder", 99),
+            })
+        categories.sort(key=lambda c: c["sortOrder"])
+        return {"categories": categories}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to list component categories: %s", exc, exc_info=True)
+        raise _internal_error(
+            "COMPONENT_REGISTRY_CATEGORIES_FAILED",
+            "Failed to list component categories",
+        )
 
 
 @router.get("/categories/{categoryId}")

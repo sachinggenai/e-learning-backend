@@ -30,16 +30,47 @@ from app.routers import (
 logger = logging.getLogger(__name__)
 
 
+def _verify_critical_contracts() -> None:
+    """Fail fast in logs when critical model/repository contracts drift."""
+    from app.models.persisted_course import TemplateDefinition
+
+    required_fields = (
+        "template_type",
+        "schema_signature",
+        "render_template_html",
+        "schema_json",
+    )
+    missing = [name for name in required_fields if not hasattr(TemplateDefinition, name)]
+    if missing:
+        raise RuntimeError(
+            "TemplateDefinition contract mismatch; missing fields: "
+            + ", ".join(missing)
+        )
+
+
 def _get_allowed_origins() -> List[str]:
-    """Parse CORS origins from env or default to permissive wildcard."""
-    raw = os.getenv("CORS_ORIGINS")
-    if raw:
-        origins = [o.strip() for o in raw.split(",") if o.strip()]
-        return origins or ["*"]
-    return ["*"]
+    """Parse CORS origins from env var."""
+    raw = os.getenv("CORS_ORIGINS", "")
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+def _get_origin_regex() -> str | None:
+    """Return a regex matching all local dev origins when no explicit list given."""
+    if os.getenv("CORS_ORIGINS"):
+        return None  # explicit list takes precedence
+    # Matches any scheme/host/port on localhost or a private LAN IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    return (
+        r"https?://(localhost"
+        r"|127\.0\.0\.1"
+        r"|192\.168\.\d{1,3}\.\d{1,3}"
+        r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+        r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+        r")(:\d+)?"
+    )
 
 
 _ALLOWED_ORIGINS = _get_allowed_origins()
+_ORIGIN_REGEX = _get_origin_regex()
 
 
 @asynccontextmanager
@@ -69,6 +100,9 @@ async def lifespan(app: FastAPI):
         async with SessionLocal() as session:
             count = await seed_component_types(session)
             logger.info("Seeded %d component types", count)
+
+        # Validate critical in-process contracts at startup.
+        _verify_critical_contracts()
     except Exception:
         logger.exception("Error during startup seeding — continuing anyway")
 
@@ -88,7 +122,8 @@ app = FastAPI(
 # Enable CORS for frontend access and tests expecting CORS headers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_ALLOWED_ORIGINS,
+    allow_origins=_ALLOWED_ORIGINS if _ALLOWED_ORIGINS else [],
+    allow_origin_regex=_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -102,6 +137,7 @@ async def validation_exception_handler(request, exc):
         loc = err.get("loc", [])
         field = ".".join(str(p) for p in loc if p not in ("body",)) if loc else "body"
         errors.append({
+            "code": "REQUEST_VALIDATION_ERROR",
             "field": field or "body",
             "message": err.get("msg", "Validation error"),
         })
@@ -113,16 +149,6 @@ async def validation_exception_handler(request, exc):
         },
     )
 
-
-@app.middleware("http")
-async def ensure_cors_header(request, call_next):
-    """Add a permissive CORS header when Starlette does not set one."""
-    response = await call_next(request)
-    if "access-control-allow-origin" not in response.headers:
-        response.headers["access-control-allow-origin"] = (
-            "*" if "*" in _ALLOWED_ORIGINS else ",".join(_ALLOWED_ORIGINS)
-        )
-    return response
 
 # Namespace all routes under /api/v1
 api_router = APIRouter(prefix="/api/v1")
