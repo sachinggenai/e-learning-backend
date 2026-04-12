@@ -136,7 +136,8 @@ class TestExportEndpoints:
             
             assert response.status_code == 500
             data = response.json()
-            assert "Export failed" in data["detail"]
+            assert data["detail"]["code"] == "INTERNAL_ERROR"
+            assert data["detail"]["message"] == "Export failed"
 
     @patch("app.routers.export.scorm_service.validate_for_export", new_callable=AsyncMock, return_value={"valid": True, "warnings": []})
     @patch("app.routers.export.scorm_service.estimate_package_size", return_value={"estimated_bytes": 1024})
@@ -302,7 +303,9 @@ class TestExportEndpoints:
         )
 
         assert response.status_code == 404
-        assert "missing-course" in response.json()["detail"]
+        detail = response.json()["detail"]
+        assert detail["code"] == "NOT_FOUND"
+        assert "missing-course" in detail["message"]
 
     def test_export_persisted_course_rejects_missing_video_url(
         self,
@@ -341,7 +344,9 @@ class TestExportEndpoints:
         )
 
         assert response.status_code == 422
-        assert "missing videoUrl" in str(response.json()["detail"])
+        detail = response.json()["detail"]
+        assert detail["code"] == "VALIDATION_ERROR"
+        assert "missing videoUrl" in str(detail)
 
     def test_export_persisted_course_rejects_missing_mcq_questions(
         self,
@@ -380,7 +385,9 @@ class TestExportEndpoints:
         )
 
         assert response.status_code == 422
-        assert "missing MCQ questions" in str(response.json()["detail"])
+        detail = response.json()["detail"]
+        assert detail["code"] == "VALIDATION_ERROR"
+        assert "missing MCQ questions" in str(detail)
 
     @patch("app.routers.export.scorm_service.generate_scorm_package", new_callable=AsyncMock, return_value=_make_scorm_zip("xss-test-001", "Normal Title"))
     def test_export_course_security_validation(self, mock_gen, test_client: TestClient):

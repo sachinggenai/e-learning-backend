@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from ..models.course import Course, CourseExportRequest
 from ..services.scorm_export import SCORMExportService
 from ..utils.validation import validate_course_json
-from ..utils.error_envelope import build_error
+from ..utils.error_envelope import build_error, api_http_exception
 import json
 import os
 import hashlib
@@ -107,12 +107,15 @@ async def export_course(
                     "Template order validation failed (non-sequential or "
                     "duplicates)"
                 )
-                raise HTTPException(
+                raise api_http_exception(
                     status_code=400,
-                    detail=(
+                    code="VALIDATION_ERROR",
+                    field="templates.order",
+                    message=(
                         "Template orders must form a zero-based contiguous "
                         "sequence"
                     ),
+                    details={"expected": expected, "actual": sorted(orders)},
                 )
 
         # Collect simple pre-export warnings (placeholder logic for BE-EXP-001)
@@ -177,24 +180,32 @@ async def export_course(
         
     except json.JSONDecodeError as e:
         logger.error("Invalid JSON in course data: %s", e)
-        raise HTTPException(
+        raise api_http_exception(
             status_code=400,
-            detail="Invalid course JSON format",
+            code="INVALID_JSON",
+            field="course",
+            message="Invalid course JSON format",
+            details={"error": str(e)},
         )
     
     except ValueError as e:
         logger.error("Course validation error: %s", e)
-        raise HTTPException(
+        raise api_http_exception(
             status_code=422,
-            detail=f"Invalid course data: {str(e)}",
+            code="VALIDATION_ERROR",
+            field="course",
+            message=f"Invalid course data: {str(e)}",
         )
     
     except Exception as e:
         error_id = uuid.uuid4().hex[:12]
         logger.error("SCORM export failed [error_id=%s]: %s", error_id, e, exc_info=True)
-        raise HTTPException(
+        raise api_http_exception(
             status_code=500,
-            detail="Export failed",
+            code="INTERNAL_ERROR",
+            field="course",
+            message="Export failed",
+            details={"errorId": error_id},
         )
 
  
@@ -248,14 +259,12 @@ async def validate_course_for_export(
     except Exception as e:
         error_id = uuid.uuid4().hex[:12]
         logger.error("Validation failed [error_id=%s]: %s", error_id, e, exc_info=True)
-        raise HTTPException(
+        raise api_http_exception(
             status_code=422,
-            detail=_error_payload(
-                code="EXPORT_VALIDATION_FAILED",
-                message="Validation failed",
-                field="course",
-                hint=f"Reference error_id={error_id}",
-            ),
+            code="VALIDATION_ERROR",
+            field="course",
+            message="Validation failed",
+            details={"errorId": error_id},
         )
 
  
@@ -658,7 +667,13 @@ async def export_persisted_course(
     try:
         course_record = await repo.get_by_course_id(courseId)
     except CourseNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Course '{courseId}' not found in database")
+        raise api_http_exception(
+            status_code=404,
+            code="NOT_FOUND",
+            field="courseId",
+            message=f"Course '{courseId}' not found in database",
+            details={"courseId": courseId},
+        )
 
     # Resolve format: query param > request body > default
     effective_format: str = format or (body.format if body else "scorm_1_2")
@@ -702,7 +717,13 @@ async def export_persisted_course(
             # Page/component path — apply structured validation
             validation_errors = _validate_course_for_export(courseId, db_pages, comp_map)
             if validation_errors:
-                raise HTTPException(status_code=422, detail=validation_errors)
+                raise api_http_exception(
+                    status_code=422,
+                    code="VALIDATION_ERROR",
+                    field="course",
+                    message="Course is not exportable",
+                    details={"errors": validation_errors},
+                )
 
             course_data["templates"] = []
             for pg in db_pages:
@@ -783,12 +804,10 @@ async def export_persisted_course(
             exc,
             exc_info=True,
         )
-        raise HTTPException(
+        raise api_http_exception(
             status_code=500,
-            detail=_error_payload(
-                code="PERSISTED_EXPORT_FAILED",
-                message="Internal export failure",
-                field="course",
-                hint=f"Reference error_id={error_id}",
-            ),
+            code="INTERNAL_ERROR",
+            field="course",
+            message="Internal export failure",
+            details={"errorId": error_id},
         )
