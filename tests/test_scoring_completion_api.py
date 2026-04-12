@@ -167,6 +167,52 @@ def test_calculate_score_returns_zero_for_incorrect_answer(
     )
 
 
+def test_calculate_score_missing_course_returns_not_found_envelope(
+    test_client: TestClient,
+):
+    response = test_client.post(
+        "/api/v1/courses/missing-course/scoring/calculate",
+        json={"answers": [], "attemptNumber": 1},
+    )
+
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail["code"] == "NOT_FOUND"
+    assert detail["field"] == "courseId"
+    assert "missing-course" in detail["message"]
+
+
+def test_calculate_score_unknown_component_returns_validation_envelope(
+    test_client: TestClient,
+):
+    course_id, _, _ = _create_course_with_mcq_component(test_client)
+
+    response = test_client.post(
+        f"/api/v1/courses/{course_id}/scoring/calculate",
+        json={
+            "answers": [
+                {
+                    "componentId": "missing-component",
+                    "componentType": "mcq",
+                    "responses": [
+                        {
+                            "questionId": "q1",
+                            "selectedOptionIds": ["paris"],
+                        }
+                    ],
+                }
+            ],
+            "attemptNumber": 1,
+        },
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "VALIDATION_ERROR"
+    assert detail["field"] == "answers[].componentId"
+    assert detail["details"]["componentId"] == "missing-component"
+
+
 def test_page_completion_submission_updates_read_models(
     test_client: TestClient,
 ):
@@ -206,6 +252,27 @@ def test_page_completion_submission_updates_read_models(
     assert course_response.status_code == 200
     assert course_response.json()["status"] == "completed"
     assert course_response.json()["overallProgress"] == 100.0
+
+
+def test_get_page_completion_missing_page_returns_not_found_envelope(
+    test_client: TestClient,
+):
+    course_id, _, _ = _create_course_with_completion_component(
+        test_client,
+        component_type="content-text",
+        component_data={"content": "Read this"},
+        completion_criteria={"type": "interaction"},
+    )
+
+    response = test_client.get(
+        f"/api/v1/courses/{course_id}/pages/missing-page/completion"
+    )
+
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail["code"] == "NOT_FOUND"
+    assert detail["field"] == "pageId"
+    assert detail["details"]["courseId"] == course_id
 
 
 def test_interaction_score_updates_completion_threshold(
@@ -261,3 +328,23 @@ def test_interaction_score_updates_completion_threshold(
     assert page_response.status_code == 200
     assert page_response.json()["completed"] is True
     assert page_response.json()["components"][0]["completed"] is True
+
+
+def test_record_interaction_missing_course_returns_not_found_envelope(
+    test_client: TestClient,
+):
+    response = test_client.post(
+        "/api/v1/courses/missing-course/interactions",
+        json={
+            "pageId": "page-1",
+            "componentId": "component-1",
+            "interactionType": "click",
+            "completed": False,
+        },
+    )
+
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail["code"] == "NOT_FOUND"
+    assert detail["field"] == "courseId"
+    assert "missing-course" in detail["message"]

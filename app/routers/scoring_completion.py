@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.config import get_session
 from app.models.interaction_event import InteractionEventRecord
 from app.repositories.scoring_repo import ScoringRepository
-from app.repositories.course_repo import CourseRepository
+from app.repositories.course_repo import CourseRepository, CourseNotFoundError
 from app.repositories.interaction_event_repo import InteractionEventRepository
 from app.repositories.page_component_repo import (
     PageRepository,
@@ -76,6 +76,22 @@ class InteractionEventDTO(BaseModel):
 
 
 router = APIRouter(tags=["Scoring", "Completion"])
+
+
+async def _get_course_or_404(
+    course_id: str,
+    session: AsyncSession,
+):
+    course_repo = CourseRepository(session)
+    try:
+        return await course_repo.get_by_course_id(course_id)
+    except CourseNotFoundError:
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Course '{course_id}' not found",
+            field="courseId",
+        )
 
 
 def _extract_question_definitions(component_data: dict) -> dict[str, dict]:
@@ -258,15 +274,7 @@ async def get_scoring_config(
     courseId: str,
     session: AsyncSession = Depends(get_session),
 ):
-    course_repo = CourseRepository(session)
-    course = await course_repo.get_by_course_id(courseId)
-    if not course:
-        raise api_http_exception(
-            404,
-            "NOT_FOUND",
-            f"Course '{courseId}' not found",
-            field="courseId",
-        )
+    await _get_course_or_404(courseId, session)
 
     scoring_repo = ScoringRepository(session)
     record = await scoring_repo.get_by_course(courseId)
@@ -303,15 +311,7 @@ async def update_scoring_config(
     body: dict,
     session: AsyncSession = Depends(get_session),
 ):
-    course_repo = CourseRepository(session)
-    course = await course_repo.get_by_course_id(courseId)
-    if not course:
-        raise api_http_exception(
-            404,
-            "NOT_FOUND",
-            f"Course '{courseId}' not found",
-            field="courseId",
-        )
+    await _get_course_or_404(courseId, session)
 
     scoring_repo = ScoringRepository(session)
     kwargs = {}
@@ -331,15 +331,7 @@ async def validate_scoring_config(
     courseId: str,
     session: AsyncSession = Depends(get_session),
 ):
-    course_repo = CourseRepository(session)
-    course = await course_repo.get_by_course_id(courseId)
-    if not course:
-        raise api_http_exception(
-            404,
-            "NOT_FOUND",
-            f"Course '{courseId}' not found",
-            field="courseId",
-        )
+    await _get_course_or_404(courseId, session)
 
     scoring_repo = ScoringRepository(session)
     record = await scoring_repo.get_by_course(courseId)
@@ -393,15 +385,7 @@ async def calculate_score(
     body: ScoreCalculateDTO,
     session: AsyncSession = Depends(get_session),
 ):
-    course_repo = CourseRepository(session)
-    course = await course_repo.get_by_course_id(courseId)
-    if not course:
-        raise api_http_exception(
-            404,
-            "NOT_FOUND",
-            f"Course '{courseId}' not found",
-            field="courseId",
-        )
+    course = await _get_course_or_404(courseId, session)
 
     scoring_repo = ScoringRepository(session)
     record = await scoring_repo.get_by_course(courseId)
@@ -573,15 +557,7 @@ async def get_course_completion(
     courseId: str,
     session: AsyncSession = Depends(get_session),
 ):
-    course_repo = CourseRepository(session)
-    course = await course_repo.get_by_course_id(courseId)
-    if not course:
-        raise api_http_exception(
-            404,
-            "NOT_FOUND",
-            f"Course '{courseId}' not found",
-            field="courseId",
-        )
+    await _get_course_or_404(courseId, session)
 
     page_repo = PageRepository(session)
     pages = await page_repo.list_by_course(courseId)
@@ -738,15 +714,7 @@ async def record_interaction(
     body: InteractionEventDTO,
     session: AsyncSession = Depends(get_session),
 ):
-    course_repo = CourseRepository(session)
-    course = await course_repo.get_by_course_id(courseId)
-    if not course:
-        raise api_http_exception(
-            404,
-            "NOT_FOUND",
-            f"Course '{courseId}' not found",
-            field="courseId",
-        )
+    await _get_course_or_404(courseId, session)
 
     # Serialize data with Pydantic v1/v2 compat
     data_dict = None
@@ -785,15 +753,7 @@ async def list_interactions(
     session: AsyncSession = Depends(get_session),
 ):
     """List persisted interaction events for a course with optional filters."""
-    course_repo = CourseRepository(session)
-    course = await course_repo.get_by_course_id(courseId)
-    if not course:
-        raise api_http_exception(
-            404,
-            "NOT_FOUND",
-            f"Course '{courseId}' not found",
-            field="courseId",
-        )
+    await _get_course_or_404(courseId, session)
 
     repo = InteractionEventRepository(session)
     events = await repo.list_by_course(
