@@ -24,6 +24,7 @@ from app.repositories.page_component_repo import (
     PageRepository,
     ComponentRepository,
 )
+from app.utils.error_envelope import api_http_exception
 
 
 # ── DTOs ─────────────────────────────────────
@@ -260,7 +261,12 @@ async def get_scoring_config(
     course_repo = CourseRepository(session)
     course = await course_repo.get_by_course_id(courseId)
     if not course:
-        raise HTTPException(404, f"Course '{courseId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Course '{courseId}' not found",
+            field="courseId",
+        )
 
     scoring_repo = ScoringRepository(session)
     record = await scoring_repo.get_by_course(courseId)
@@ -300,7 +306,12 @@ async def update_scoring_config(
     course_repo = CourseRepository(session)
     course = await course_repo.get_by_course_id(courseId)
     if not course:
-        raise HTTPException(404, f"Course '{courseId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Course '{courseId}' not found",
+            field="courseId",
+        )
 
     scoring_repo = ScoringRepository(session)
     kwargs = {}
@@ -323,7 +334,12 @@ async def validate_scoring_config(
     course_repo = CourseRepository(session)
     course = await course_repo.get_by_course_id(courseId)
     if not course:
-        raise HTTPException(404, f"Course '{courseId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Course '{courseId}' not found",
+            field="courseId",
+        )
 
     scoring_repo = ScoringRepository(session)
     record = await scoring_repo.get_by_course(courseId)
@@ -380,7 +396,12 @@ async def calculate_score(
     course_repo = CourseRepository(session)
     course = await course_repo.get_by_course_id(courseId)
     if not course:
-        raise HTTPException(404, f"Course '{courseId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Course '{courseId}' not found",
+            field="courseId",
+        )
 
     scoring_repo = ScoringRepository(session)
     record = await scoring_repo.get_by_course(courseId)
@@ -405,20 +426,29 @@ async def calculate_score(
     for answer in body.answers:
         source_component = scorable_lookup.get(answer.componentId)
         if not source_component:
-            raise HTTPException(
+            raise api_http_exception(
                 422,
+                "VALIDATION_ERROR",
                 "Component "
                 f"'{answer.componentId}' not found for course "
                 f"'{courseId}'",
+                field="answers[].componentId",
+                details={
+                    "courseId": courseId,
+                    "componentId": answer.componentId,
+                },
             )
 
         question_lookup = _extract_question_definitions(
             source_component.get("data") or {}
         )
         if not question_lookup:
-            raise HTTPException(
+            raise api_http_exception(
                 422,
+                "VALIDATION_ERROR",
                 f"Component '{answer.componentId}' has no scorable questions",
+                field="answers[].responses",
+                details={"componentId": answer.componentId},
             )
 
         comp_config = cs_lookup.get(answer.componentId, {})
@@ -432,19 +462,31 @@ async def calculate_score(
         for resp in answer.responses:
             question = question_lookup.get(resp.questionId)
             if not question:
-                raise HTTPException(
+                raise api_http_exception(
                     422,
+                    "VALIDATION_ERROR",
                     "Question "
                     f"'{resp.questionId}' not found on component "
                     f"'{answer.componentId}'",
+                    field="answers[].responses[].questionId",
+                    details={
+                        "componentId": answer.componentId,
+                        "questionId": resp.questionId,
+                    },
                 )
 
             correct_option_ids = _get_correct_option_ids(question)
             if not correct_option_ids:
-                raise HTTPException(
+                raise api_http_exception(
                     422,
+                    "VALIDATION_ERROR",
                     "Question "
                     f"'{resp.questionId}' has no correct options configured",
+                    field="answers[].responses[].selectedOptionIds",
+                    details={
+                        "componentId": answer.componentId,
+                        "questionId": resp.questionId,
+                    },
                 )
 
             selected_option_ids = {
@@ -534,7 +576,12 @@ async def get_course_completion(
     course_repo = CourseRepository(session)
     course = await course_repo.get_by_course_id(courseId)
     if not course:
-        raise HTTPException(404, f"Course '{courseId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Course '{courseId}' not found",
+            field="courseId",
+        )
 
     page_repo = PageRepository(session)
     pages = await page_repo.list_by_course(courseId)
@@ -578,7 +625,13 @@ async def get_page_completion(
     page_repo = PageRepository(session)
     page = await page_repo.get_by_course_and_page(courseId, pageId)
     if not page:
-        raise HTTPException(404, f"Page '{pageId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Page '{pageId}' not found",
+            field="pageId",
+            details={"courseId": courseId},
+        )
 
     latest_events = await _latest_events_by_component(
         courseId,
@@ -598,7 +651,13 @@ async def record_page_completion(
     page_repo = PageRepository(session)
     page = await page_repo.get_by_course_and_page(courseId, pageId)
     if not page:
-        raise HTTPException(404, f"Page '{pageId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Page '{pageId}' not found",
+            field="pageId",
+            details={"courseId": courseId},
+        )
 
     event_repo = InteractionEventRepository(session)
 
@@ -682,7 +741,12 @@ async def record_interaction(
     course_repo = CourseRepository(session)
     course = await course_repo.get_by_course_id(courseId)
     if not course:
-        raise HTTPException(404, f"Course '{courseId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Course '{courseId}' not found",
+            field="courseId",
+        )
 
     # Serialize data with Pydantic v1/v2 compat
     data_dict = None
@@ -724,7 +788,12 @@ async def list_interactions(
     course_repo = CourseRepository(session)
     course = await course_repo.get_by_course_id(courseId)
     if not course:
-        raise HTTPException(404, f"Course '{courseId}' not found")
+        raise api_http_exception(
+            404,
+            "NOT_FOUND",
+            f"Course '{courseId}' not found",
+            field="courseId",
+        )
 
     repo = InteractionEventRepository(session)
     events = await repo.list_by_course(

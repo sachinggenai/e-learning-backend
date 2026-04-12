@@ -333,4 +333,4 @@ async def test_export_tabs_preserves_structured_data_and_player_support(test_app
         assert html_candidates, "No index.html found in export"
         html_content = zf.read(html_candidates[0]).decode("utf-8")
         assert "renderTabs" in html_content
-        assert "slide.type === 'tabs'" in html_content
+        assert "'tabs':" in html_content  # dispatch table entry: 'tabs': this.renderTabs

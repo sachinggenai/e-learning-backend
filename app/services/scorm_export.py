@@ -35,6 +35,7 @@ from ..repositories.template_type_repo import (
     TemplateTypeRepository,
     TemplateTypeNotFoundError,
 )
+from .asset_packager import AssetPackager, PackagedAsset
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +99,38 @@ class SCORMExportService:
 
     def __init__(self):
         self.scorm_version = "1.2"
+        self.export_contract_version = "2026-04-12.1"
         self.package_identifier = None
         self.media_resources = {}
         self.resource_dependencies = {}
+        self.packaged_assets: List[PackagedAsset] = []
+        self.asset_manifest: Dict[str, Any] = {}
+        # Current canonical runtime supports these slide/template types.
+        # Expand/remove this gate when frontend runtime is fully registry-driven.
+        self.runtime_supported_template_types = {
+            # Content / Presentation
+            "content-text", "content", "rich-text-editor", "content-media",
+            "content-image", "content-video", "transcript-caption",
+            "infographic", "quotation",
+            # Navigation / Layout
+            "tabs", "accordion", "stepper", "timeline",
+            "course-menu", "breadcrumb", "sidebar-navigation",
+            # Assessment
+            "mcq", "multiple-select", "true-false", "fill-in-blank",
+            "hotspot", "image-hotspots", "matching", "drag-and-drop",
+            # Knowledge Check
+            "key-takeaways", "summary-takeaways", "learning-objectives",
+            "flashcard", "quiz",
+            # Scenario
+            "scenario", "branching-scenario", "decision-tree", "role-play",
+            # Data & Analytics
+            "metric", "data-visualization", "progress-tracker",
+            "analytics-view", "heat-map",
+            # Interactive Tools
+            "code-snippet", "calculator", "form", "interactive-tool",
+            # Learning Path
+            "learning-roadmap", "module-overview", "course-map",
+        }
     
     async def generate_scorm_package(self, course: Course, include_assets: bool = True,
                                      theme_bundle: Optional[Dict[str, Any]] = None) -> BytesIO:
@@ -157,6 +187,16 @@ class SCORMExportService:
                 
                 # Generate package identifier
                 self.package_identifier = f"course_{course.courseId}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+                # Reset per-export state
+                self.packaged_assets = []
+                self.asset_manifest = {}
+
+                # Deterministic asset packaging is done before manifest generation
+                # so imsmanifest.xml references exported package paths, not source names.
+                if include_assets and course.assets:
+                    logger.info("Packaging assets deterministically")
+                    self.asset_manifest = await self._package_assets(package_dir, course.assets)
                 
                 # Create SCORM structure
                 logger.info("Creating SCORM manifest")
@@ -167,11 +207,9 @@ class SCORMExportService:
                 await self._create_content_html(package_dir, course, theme_bundle=theme_bundle)
                 logger.info("Creating SCORM wrapper")
                 await self._create_scorm_wrapper(package_dir, course)
-                
-                # Include assets if requested
-                if include_assets and course.assets:
-                    logger.info("Copying assets")
-                    await self._copy_assets(package_dir, course.assets)
+
+                # Remove stale legacy runtime files to keep one canonical runtime.
+                self._remove_legacy_runtime_files(package_dir)
                 
                 # Production hardening: Validate final package structure
                 await self._validate_package_structure(package_dir)
@@ -264,6 +302,7 @@ class SCORMExportService:
             <file href="scorm_wrapper.js"/>
             <file href="course_data.js"/>
             <file href="styles.css"/>
+            {'<file href="asset_manifest.json"/>' if self.asset_manifest else ''}
             {self._generate_asset_files_xml(course.assets) if course.assets else ""}
         </resource>
     </resources>
@@ -300,12 +339,17 @@ class SCORMExportService:
     def _generate_asset_files_xml(self, assets: List[Any]) -> str:
         """Generate file references for assets"""
         files_xml = ""
-        
+
+        if self.packaged_assets:
+            for packaged in sorted(self.packaged_assets, key=lambda a: a.package_path):
+                files_xml += f'\n            <file href="{packaged.package_path}"/>'
+            return files_xml
+
+        # Fallback for compatibility if assets were not pre-packaged.
         for asset in assets:
-            # Extract filename from path
             filename = os.path.basename(asset.path)
             files_xml += f'\n            <file href="assets/{filename}"/>'
-        
+
         return files_xml
     
     async def _create_course_data_js(
@@ -355,10 +399,14 @@ class SCORMExportService:
             # Create complete course object (not just array)
             course_data = {
                 'courseId': course.courseId,
+                'exportContractVersion': self.export_contract_version,
                 'title': self._sanitize_text(course.title),
                 'author': self._sanitize_text(course.author),
                 'version': course.version,
                 'language': course.language or 'en',
+                'supportedTemplateTypes': sorted(
+                    self.runtime_supported_template_types
+                ),
                 'templates': templates_data,
                 'totalSlides': len(templates_data),
                 'createdAt': (
@@ -597,7 +645,8 @@ class SCORMExportService:
             courseData: null,
             initialized: false,
             quizAnswers: {{}},
-            scormReady: false
+            scormReady: false,
+            scopedStyleEl: null
         }},
 
         // FIX: Promise-based initialization with timeout
@@ -697,15 +746,11 @@ class SCORMExportService:
 
                 var content = '';
                 try {{
-                    if (slide.type === 'content-text' || slide.type === 'content') {{
-                        content = this.renderContent(slide);
-                    }} else if (slide.type === 'tabs') {{
-                        content = this.renderTabs(slide);
-                    }} else if (slide.type === 'mcq') {{
-                        content = this.renderMCQ(slide, index);
+                    var renderer = this.getRenderer(slide.type);
+                    if (!renderer) {{
+                        content = this.renderUnknown(slide);
                     }} else {{
-                        content = '<div class="slide"><p>Unknown slide type: ' +
-                                 this.sanitize(slide.type || 'undefined') + '</p></div>';
+                        content = renderer.call(this, slide, index);
                     }}
                 }} catch (renderError) {{
                     console.error('Render error for slide', index, ':', renderError);
@@ -728,6 +773,8 @@ class SCORMExportService:
                     container.setAttribute('data-component', slide.id);
                 }}
 
+                this.applyScopedCustomCss(slide);
+
                 this.state.currentSlide = index;
 
                 // Mark as viewed and save progress (but don't mark as completed here)
@@ -746,11 +793,75 @@ class SCORMExportService:
             }}
         }},
 
+        getRenderer: function(type) {{
+            var registry = {{
+                // Content / Presentation
+                'content-text':          this.renderContent,
+                'content':               this.renderContent,
+                'rich-text-editor':      this.renderRichText,
+                'content-media':         this.renderImage,
+                'content-image':         this.renderImage,
+                'content-video':         this.renderVideo,
+                'transcript-caption':    this.renderContent,
+                'infographic':           this.renderImage,
+                'quotation':             this.renderQuotation,
+                // Navigation / Layout
+                'tabs':                  this.renderTabs,
+                'accordion':             this.renderAccordion,
+                'stepper':               this.renderStepper,
+                'timeline':              this.renderTimeline,
+                'course-menu':           this.renderModuleOverview,
+                'breadcrumb':            this.renderContent,
+                'sidebar-navigation':    this.renderModuleOverview,
+                // Assessment
+                'mcq':                   this.renderMCQ,
+                'multiple-select':       this.renderMultipleSelect,
+                'true-false':            this.renderTrueFalse,
+                'fill-in-blank':         this.renderFillInBlank,
+                'hotspot':               this.renderHotspot,
+                'image-hotspots':        this.renderHotspot,
+                'matching':              this.renderContent,
+                'drag-and-drop':         this.renderContent,
+                // Knowledge Check
+                'key-takeaways':         this.renderKeyTakeaways,
+                'summary-takeaways':     this.renderKeyTakeaways,
+                'learning-objectives':   this.renderLearningObjectives,
+                'flashcard':             this.renderFlashcard,
+                'quiz':                  this.renderMCQ,
+                // Scenario
+                'scenario':              this.renderScenario,
+                'branching-scenario':    this.renderScenario,
+                'decision-tree':         this.renderScenario,
+                'role-play':             this.renderScenario,
+                // Data & Analytics
+                'metric':                this.renderMetric,
+                'data-visualization':    this.renderDataTable,
+                'progress-tracker':      this.renderProgressTracker,
+                'analytics-view':        this.renderDataTable,
+                'heat-map':              this.renderDataTable,
+                // Interactive Tools
+                'code-snippet':          this.renderCodeSnippet,
+                'calculator':            this.renderContent,
+                'form':                  this.renderContent,
+                'interactive-tool':      this.renderContent,
+                // Learning Path
+                'learning-roadmap':      this.renderTimeline,
+                'module-overview':       this.renderModuleOverview,
+                'course-map':            this.renderModuleOverview,
+            }};
+            return registry[type] || null;
+        }},
+
+        renderUnknown: function(slide) {{
+            return '<div class="slide"><p>Unknown slide type: ' +
+                   this.sanitize(slide.type || 'undefined') + '</p></div>';
+        }},
+
         renderContent: function(slide) {{
             try {{
                 var data = slide.data || {{}};
                 var title = this.sanitize(slide.title || 'Untitled');
-                var body = this.sanitize(data.content || '');
+                var body = this.renderRichHTML(data.content || '');
                 return '<div class="template content-template">' +
                        '<h2 class="content-title">' + title + '</h2>' +
                        '<div class="content-body">' + body + '</div>' +
@@ -769,7 +880,7 @@ class SCORMExportService:
                 var tabs = Array.isArray(data.tabs) ? data.tabs : [];
 
                 if (tabs.length === 0) {{
-                    var fallbackBody = this.sanitize(data.content || '');
+                          var fallbackBody = this.renderRichHTML(data.content || '');
                     return '<div class="template tabs-template">' +
                            '<h2 class="content-title">' + title + '</h2>' +
                            '<div class="content-body">' + fallbackBody + '</div>' +
@@ -782,14 +893,17 @@ class SCORMExportService:
                     var tab = tabs[i] || {{}};
                     var tabId = this.sanitize(tab.id || ('tab-' + i));
                     var tabTitle = this.sanitize(tab.title || ('Tab ' + (i + 1)));
-                    var tabBody = this.sanitize(tab.body || '');
+                    var tabBody = this.renderRichHTML(tab.body || tab.content || '');
                     var activeClass = i === 0 ? ' active' : '';
-                    navHtml += '<button class="tabs-nav-btn' + activeClass + '" ' +
-                               'type="button" ' +
-                               'onclick="Player.activateTab(' + i + ')">' +
-                               tabTitle + '</button>';
+                                        navHtml += '<button class="tabs-nav-btn' + activeClass + '" ' +
+                                                             'type="button" role="tab" ' +
+                                                             'aria-selected="' + (i === 0 ? 'true' : 'false') + '" ' +
+                                                             'aria-controls="tabs-panel-' + tabId + '" ' +
+                                                             'onkeydown="Player.onActivationKey(event, \"Player.activateTab(' + i + ')\")" ' +
+                                                             'onclick="Player.activateTab(' + i + ')">' +
+                                                             tabTitle + '</button>';
                     panelHtml += '<div class="tabs-panel' + activeClass + '" ' +
-                                 'id="tabs-panel-' + tabId + '">' +
+                                                                 'id="tabs-panel-' + tabId + '" role="tabpanel">' +
                                  '<div class="content-body">' + tabBody + '</div>' +
                                  '</div>';
                 }}
@@ -806,6 +920,555 @@ class SCORMExportService:
             }}
         }},
 
+        renderAccordion: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Accordion');
+                var panels = Array.isArray(data.panels) ? data.panels : [];
+
+                if (panels.length === 0) {{
+                    var fallbackBody = this.renderRichHTML(data.content || '');
+                    return '<div class="template accordion-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<div class="content-body">' + fallbackBody + '</div>' +
+                           '</div>';
+                }}
+
+                var panelsHtml = '';
+                for (var i = 0; i < panels.length; i++) {{
+                    var panel = panels[i] || {{}};
+                    var panelTitle = this.sanitize(panel.title || ('Section ' + (i + 1)));
+                    var panelBody = this.renderRichHTML(panel.body || panel.content || '');
+                    var expanded = i === 0 ? 'true' : 'false';
+                    var openClass = i === 0 ? ' open' : '';
+
+                    panelsHtml += '<div class="accordion-item' + openClass + '">' +
+                                  '<button type="button" class="accordion-trigger" ' +
+                                  'aria-expanded="' + expanded + '" ' +
+                                  'onkeydown="Player.onActivationKey(event, \"Player.toggleAccordion(' + i + ')\")" ' +
+                                  'onclick="Player.toggleAccordion(' + i + ')">' +
+                                  panelTitle + '</button>' +
+                                  '<div class="accordion-panel">' +
+                                  '<div class="content-body">' + panelBody + '</div>' +
+                                  '</div>' +
+                                  '</div>';
+                }}
+
+                return '<div class="template accordion-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="accordion-list">' + panelsHtml + '</div>' +
+                       '</div>';
+            }} catch (error) {{
+                console.error('renderAccordion error:', error);
+                return '<div class="template error"><p>Accordion rendering failed</p></div>';
+            }}
+        }},
+
+        // ──────────────────────────────────────────────────────────────
+        // EXTENDED RENDERER REGISTRY
+        // ──────────────────────────────────────────────────────────────
+
+        renderRichText: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var body = this.renderRichHTML(data.htmlContent || data.content || '');
+                return '<div class="template rich-text-template">' +
+                       '<div class="content-body">' + body + '</div>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Rich text render failed</p></div>'; }}
+        }},
+
+        renderQuotation: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var quote = this.sanitize(data.quoteText || data.quote || '');
+                var author = this.sanitize(data.author || '');
+                var source = this.sanitize(data.source || '');
+                var attribution = author + (source ? ' — ' + source : '');
+                return '<div class="template quotation-template">' +
+                       '<figure role="figure">' +
+                       '<blockquote class="quotation-text">' + quote + '</blockquote>' +
+                       (attribution ? '<figcaption class="quotation-attribution">— ' + attribution + '</figcaption>' : '') +
+                       '</figure>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Quotation render failed</p></div>'; }}
+        }},
+
+        renderKeyTakeaways: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Key Takeaways');
+                var items = Array.isArray(data.takeaways) ? data.takeaways :
+                            Array.isArray(data.items) ? data.items : [];
+                var content = this.renderRichHTML(data.content || '');
+                var listHtml = items.map(function(item) {{
+                    var text = typeof item === 'string' ? item : (item.text || item.title || '');
+                    return '<li class="takeaway-item">' + this.sanitize(text) + '</li>';
+                }}.bind(this)).join('');
+                return '<div class="template takeaways-template" role="region" aria-label="' + title + '">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       (content ? '<div class="content-body">' + content + '</div>' : '') +
+                       (listHtml ? '<ul class="takeaways-list">' + listHtml + '</ul>' : '') +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Takeaways render failed</p></div>'; }}
+        }},
+
+        renderLearningObjectives: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Learning Objectives');
+                var objectives = Array.isArray(data.objectives) ? data.objectives : [];
+                var listHtml = objectives.map(function(obj, i) {{
+                    var text = typeof obj === 'string' ? obj : (obj.text || obj.title || obj.description || '');
+                    return '<li class="objective-item">' +
+                           '<span class="objective-number" aria-hidden="true">' + (i + 1) + '</span> ' +
+                           this.sanitize(text) + '</li>';
+                }}.bind(this)).join('');
+                return '<div class="template objectives-template" role="region" aria-label="' + title + '">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       (listHtml ? '<ol class="objectives-list">' + listHtml + '</ol>' :
+                        '<p class="content-body">' + this.renderRichHTML(data.content || '') + '</p>') +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Objectives render failed</p></div>'; }}
+        }},
+
+        renderImage: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || '');
+                var caption = this.sanitize(data.caption || data.altText || '');
+                var alt = this.sanitize(data.altText || data.caption || title || 'Course image');
+                var imgSrc = data.src || data.url || '';
+                if (!imgSrc && data.mediaAssetId) {{
+                    imgSrc = 'assets/' + this.sanitize(String(data.mediaAssetId));
+                }}
+                var imgHtml = imgSrc
+                    ? '<img src="' + this.sanitize(imgSrc) + '" alt="' + alt + '" class="content-image">'
+                    : '<div class="image-placeholder" role="img" aria-label="' + alt + '">[Image: ' + alt + ']</div>';
+                return '<div class="template image-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<figure class="image-figure">' +
+                       imgHtml +
+                       (caption ? '<figcaption class="image-caption">' + caption + '</figcaption>' : '') +
+                       '</figure>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Image render failed</p></div>'; }}
+        }},
+
+        renderVideo: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || '');
+                var caption = this.sanitize(data.caption || '');
+                var transcript = this.renderRichHTML(data.transcript || '');
+                var videoSrc = data.src || data.url || '';
+                if (!videoSrc && data.videoAssetId) {{
+                    videoSrc = 'assets/' + this.sanitize(String(data.videoAssetId));
+                }}
+                var videoHtml = videoSrc
+                    ? '<video src="' + this.sanitize(videoSrc) + '" controls class="content-video"' +
+                      (data.autoplay ? ' autoplay muted' : '') + '>' +
+                      'Your browser does not support video.</video>'
+                    : '<div class="video-placeholder" role="img" aria-label="Video">[Video placeholder]</div>';
+                return '<div class="template video-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<div class="video-container">' + videoHtml + '</div>' +
+                       (caption ? '<p class="video-caption">' + caption + '</p>' : '') +
+                       (transcript ? '<details class="video-transcript"><summary>Transcript</summary>' +
+                                     '<div class="transcript-body">' + transcript + '</div></details>' : '') +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Video render failed</p></div>'; }}
+        }},
+
+        renderCodeSnippet: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || '');
+                var code = data.code || '';
+                var lang = this.sanitize(data.language || 'text');
+                var escCode = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                return '<div class="template code-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<div class="code-container">' +
+                       '<div class="code-lang-badge">' + lang + '</div>' +
+                       '<pre class="code-block" tabindex="0"><code class="lang-' + lang + '">' +
+                       escCode + '</code></pre></div></div>';
+            }} catch (e) {{ return '<div class="template error"><p>Code snippet render failed</p></div>'; }}
+        }},
+
+        renderMultipleSelect: function(slide, idx) {{
+            try {{
+                if (!slide.data || !slide.data.questions || !slide.data.questions.length) {{
+                    return '<div class="template"><p>No questions available</p></div>';
+                }}
+                var question = slide.data.questions[0];
+                var safeQ = this.sanitize(question.question || 'Question');
+                var optionsHTML = '';
+                if (Array.isArray(question.options)) {{
+                    question.options.forEach(function(opt, i) {{
+                        var safeText = this.sanitize(opt.text || ('Option ' + (i + 1)));
+                        optionsHTML += '<label class="mcq-option">' +
+                                       '<input type="checkbox" name="multi_' + idx + '_' + i + '" value="' + i + '">' +
+                                       '<span class="option-text">' + safeText + '</span></label>';
+                    }}.bind(this));
+                }}
+                return '<div class="template mcq-template multiple-select-template">' +
+                       '<p class="mcq-hint">Select all that apply</p>' +
+                       '<h2 class="mcq-question">' + safeQ + '</h2>' +
+                       '<div class="mcq-options">' + optionsHTML + '</div>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Multiple select render failed</p></div>'; }}
+        }},
+
+        renderTrueFalse: function(slide, idx) {{
+            try {{
+                if (!slide.data || !slide.data.questions || !slide.data.questions.length) {{
+                    return '<div class="template"><p>No questions available</p></div>';
+                }}
+                var question = slide.data.questions[0];
+                var safeQ = this.sanitize(question.question || question.statement || 'Statement');
+                var answeredIndex = this.state.quizAnswers[idx];
+                var options = [
+                    {{'text': 'True', 'isCorrect': question.correctAnswer === true || question.correctAnswer === 'true'}},
+                    {{'text': 'False', 'isCorrect': question.correctAnswer === false || question.correctAnswer === 'false'}}
+                ];
+                var optHtml = '';
+                options.forEach(function(opt, i) {{
+                    var isSelected = answeredIndex === i;
+                    var selectedClass = isSelected ? ' selected' : '';
+                    optHtml += '<label class="mcq-option' + selectedClass + '">' +
+                               '<input type="radio" name="tf_' + idx + '" value="' + i + '"' +
+                               (isSelected ? ' checked' : '') +
+                               ' onchange="Player.selectAnswer(' + idx + ', ' + i + ')">' +
+                               '<span class="option-text">' + opt.text + '</span></label>';
+                }}.bind(this));
+                return '<div class="template mcq-template true-false-template">' +
+                       '<h2 class="mcq-question">' + safeQ + '</h2>' +
+                       '<div class="mcq-options">' + optHtml + '</div>' +
+                       '<div id="feedback-' + idx + '" class="mcq-feedback"></div>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>True/False render failed</p></div>'; }}
+        }},
+
+        renderFillInBlank: function(slide, idx) {{
+            try {{
+                var data = slide.data || {{}};
+                var question = this.sanitize(data.question || data.content || '');
+                return '<div class="template fill-blank-template">' +
+                       '<h2 class="content-title">' + this.sanitize(slide.title || 'Fill in the Blank') + '</h2>' +
+                       '<p class="mcq-question">' + question + '</p>' +
+                       '<div class="fill-blank-input">' +
+                       '<input type="text" class="blank-input" placeholder="Type your answer..." ' +
+                       'aria-label="Answer" id="fib-input-' + idx + '">' +
+                       '<button type="button" class="submit-btn" ' +
+                       'onclick="Player.checkFillBlank(' + idx + ')">' +
+                       'Check Answer</button></div>' +
+                       '<div id="feedback-' + idx + '" class="mcq-feedback"></div>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Fill-in-blank render failed</p></div>'; }}
+        }},
+
+        checkFillBlank: function(idx) {{
+            try {{
+                var input = document.getElementById('fib-input-' + idx);
+                var fb = document.getElementById('feedback-' + idx);
+                if (!input || !fb) return;
+                var slide = this.state.courseData.templates[idx];
+                var answers = (slide && slide.data && slide.data.correctAnswers) || [];
+                var val = (input.value || '').trim().toLowerCase();
+                var correct = answers.some(function(a) {{
+                    var s = typeof a === 'string' ? a : (a.text || '');
+                    var caseSensitive = slide.data && slide.data.caseSensitive;
+                    return caseSensitive ? s === input.value.trim() : s.toLowerCase() === val;
+                }});
+                fb.innerHTML = '<p class="' + (correct ? 'ok' : 'err') + '">' +
+                               (correct ? '✓ Correct!' : '✗ Incorrect') + '</p>';
+            }} catch (e) {{ console.error('checkFillBlank error:', e); }}
+        }},
+
+        renderFlashcard: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Flashcards');
+                var cards = Array.isArray(data.cards) ? data.cards : [];
+                if (cards.length === 0) {{
+                    return '<div class="template"><p>No flashcards available</p></div>';
+                }}
+                var cardsHtml = cards.map(function(card, i) {{
+                    var front = this.renderRichHTML(card.front || card.question || '');
+                    var back = this.renderRichHTML(card.back || card.answer || '');
+                    return '<div class="flashcard" id="fc-' + i + '" ' +
+                           'role="button" tabindex="0" aria-pressed="false" ' +
+                           'onclick="this.classList.toggle(\'flipped\'); this.setAttribute(\'aria-pressed\', this.classList.contains(\'flipped\').toString())" ' +
+                           'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){{event.preventDefault();this.click();}}">' +
+                           '<div class="flashcard-inner">' +
+                           '<div class="flashcard-front"><div class="fc-label">Question</div>' + front + '</div>' +
+                           '<div class="flashcard-back"><div class="fc-label">Answer</div>' + back + '</div>' +
+                           '</div></div>';
+                }}.bind(this)).join('');
+                return '<div class="template flashcard-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<p class="fc-hint">Click or press Enter to flip each card</p>' +
+                       '<div class="flashcards-grid">' + cardsHtml + '</div>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Flashcard render failed</p></div>'; }}
+        }},
+
+        renderStepper: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Steps');
+                var steps = Array.isArray(data.steps) ? data.steps : [];
+                if (steps.length === 0) {{
+                    return '<div class="template content-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<div class="content-body">' + this.renderRichHTML(data.content || '') + '</div></div>';
+                }}
+                var stepsHtml = steps.map(function(step, i) {{
+                    var stepTitle = this.sanitize(step.title || step.label || ('Step ' + (i + 1)));
+                    var stepBody = this.renderRichHTML(step.content || step.description || '');
+                    return '<li class="stepper-item" role="listitem">' +
+                           '<div class="stepper-number" aria-hidden="true">' + (i + 1) + '</div>' +
+                           '<div class="stepper-content">' +
+                           '<h3 class="stepper-title">' + stepTitle + '</h3>' +
+                           (stepBody ? '<div class="stepper-body">' + stepBody + '</div>' : '') +
+                           '</div></li>';
+                }}.bind(this)).join('');
+                return '<div class="template stepper-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<ol class="stepper-list" role="list">' + stepsHtml + '</ol>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Stepper render failed</p></div>'; }}
+        }},
+
+        renderTimeline: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Timeline');
+                var events = Array.isArray(data.events) ? data.events :
+                             Array.isArray(data.items) ? data.items : [];
+                if (events.length === 0) {{
+                    return '<div class="template content-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<div class="content-body">' + this.renderRichHTML(data.content || '') + '</div></div>';
+                }}
+                var eventsHtml = events.map(function(evt) {{
+                    var label = this.sanitize(evt.date || evt.label || evt.time || '');
+                    var evtTitle = this.sanitize(evt.title || evt.name || '');
+                    var desc = this.renderRichHTML(evt.description || evt.content || '');
+                    return '<li class="timeline-event" role="listitem">' +
+                           (label ? '<div class="timeline-label">' + label + '</div>' : '') +
+                           '<div class="timeline-dot" aria-hidden="true"></div>' +
+                           '<div class="timeline-content">' +
+                           (evtTitle ? '<h3 class="timeline-title">' + evtTitle + '</h3>' : '') +
+                           (desc ? '<div class="timeline-body">' + desc + '</div>' : '') +
+                           '</div></li>';
+                }}.bind(this)).join('');
+                return '<div class="template timeline-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<ul class="timeline-list" role="list">' + eventsHtml + '</ul>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Timeline render failed</p></div>'; }}
+        }},
+
+        renderMetric: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || '');
+                var metrics = Array.isArray(data.metrics) ? data.metrics :
+                              [{{value: data.value, label: data.label, unit: data.unit, trend: data.trend}}];
+                var metricsHtml = metrics.filter(function(m) {{ return m && m.label; }}).map(function(m) {{
+                    var val = this.sanitize(String(m.value || '0'));
+                    var unit = this.sanitize(m.unit || '');
+                    var lbl = this.sanitize(m.label || '');
+                    var trend = m.trend ? ' (' + this.sanitize(String(m.trend)) + ')' : '';
+                    return '<div class="metric-card" role="figure" aria-label="' + lbl + '">' +
+                           '<div class="metric-value">' + val + (unit ? '<span class="metric-unit">' + unit + '</span>' : '') + '</div>' +
+                           '<div class="metric-label">' + lbl + trend + '</div>' +
+                           '</div>';
+                }}.bind(this)).join('');
+                return '<div class="template metric-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<div class="metrics-grid">' + metricsHtml + '</div>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Metric render failed</p></div>'; }}
+        }},
+
+        renderProgressTracker: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || data.label || 'Progress');
+                var pct = Math.min(100, Math.max(0, Number(data.progress) || 0));
+                var total = Number(data.total) || 100;
+                var current = Number(data.current || data.progress) || 0;
+                var label = this.sanitize(data.label || title);
+                return '<div class="template progress-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="prog-container" role="progressbar" ' +
+                       'aria-valuenow="' + current + '" aria-valuemin="0" aria-valuemax="' + total + '" ' +
+                       'aria-label="' + label + '">' +
+                       '<div class="prog-bar"><div class="prog-fill" style="width:' + pct + '%"></div></div>' +
+                       '<div class="prog-label">' + pct + '%' + (data.label ? ' — ' + label : '') + '</div>' +
+                       '</div></div>';
+            }} catch (e) {{ return '<div class="template error"><p>Progress tracker render failed</p></div>'; }}
+        }},
+
+        renderScenario: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Scenario');
+                var text = this.renderRichHTML(data.scenarioText || data.content || '');
+                var options = Array.isArray(data.options) ? data.options : [];
+                var optHtml = options.map(function(opt, i) {{
+                    var optText = typeof opt === 'string' ? opt : (opt.text || opt.label || '');
+                    var feedback = typeof opt === 'object' ? (opt.feedback || '') : '';
+                    return '<li class="scenario-option">' +
+                           '<button type="button" class="scenario-btn" ' +
+                           'onclick="Player.showScenarioFeedback(this, \'' + this.sanitize(feedback) + '\')">' +
+                           this.sanitize(optText) + '</button>' +
+                           '</li>';
+                }}.bind(this)).join('');
+                return '<div class="template scenario-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="scenario-text">' + text + '</div>' +
+                       (optHtml ? '<ul class="scenario-options" role="list">' + optHtml + '</ul>' : '') +
+                       '<div class="scenario-feedback" role="status" aria-live="polite"></div>' +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Scenario render failed</p></div>'; }}
+        }},
+
+        showScenarioFeedback: function(btn, feedback) {{
+            try {{
+                if (!btn) return;
+                var container = btn.closest('.scenario-template') || btn.parentElement;
+                if (!container) return;
+                var fb = container.querySelector('.scenario-feedback');
+                if (fb && feedback) {{
+                    fb.innerHTML = '<p class="scenario-fb-text">' + this.sanitize(feedback) + '</p>';
+                }}
+                var allBtns = container.querySelectorAll('.scenario-btn');
+                allBtns.forEach(function(b) {{ b.setAttribute('aria-pressed', 'false'); }});
+                btn.setAttribute('aria-pressed', 'true');
+            }} catch (e) {{ console.error('showScenarioFeedback error:', e); }}
+        }},
+
+        renderDataTable: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || '');
+                var rows = Array.isArray(data.rows) ? data.rows :
+                           (Array.isArray(data.data) ? data.data : []);
+                var headers = Array.isArray(data.headers) ? data.headers :
+                              (Array.isArray(data.columns) ? data.columns : []);
+                if (rows.length === 0) {{
+                    return '<div class="template content-template">' +
+                           (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                           '<div class="content-body">' + this.renderRichHTML(data.content || '[Chart/Data]') + '</div>' +
+                           '</div>';
+                }}
+                var theadHtml = '';
+                if (headers.length > 0) {{
+                    theadHtml = '<thead><tr>' +
+                        headers.map(function(h) {{ return '<th scope="col">' + this.sanitize(String(h)) + '</th>'; }}.bind(this)).join('') +
+                        '</tr></thead>';
+                }}
+                var tbodyHtml = '<tbody>' + rows.map(function(row) {{
+                    var cells = Array.isArray(row) ? row : Object.values(row || {{}});
+                    return '<tr>' + cells.map(function(c) {{
+                        return '<td>' + this.sanitize(String(c == null ? '' : c)) + '</td>';
+                    }}.bind(this)).join('') + '</tr>';
+                }}.bind(this)).join('') + '</tbody>';
+                return '<div class="template datatable-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<div class="table-container" role="region" aria-label="Data table" tabindex="0">' +
+                       '<table class="data-table">' + theadHtml + tbodyHtml + '</table>' +
+                       '</div></div>';
+            }} catch (e) {{ return '<div class="template error"><p>Data visualization render failed</p></div>'; }}
+        }},
+
+        renderHotspot: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || '');
+                var hotspots = Array.isArray(data.hotspots) ? data.hotspots : [];
+                var imgSrc = data.src || data.url || '';
+                if (!imgSrc && data.imageAssetId) {{
+                    imgSrc = 'assets/' + this.sanitize(String(data.imageAssetId));
+                }}
+                var hsList = hotspots.map(function(hs) {{
+                    var label = this.sanitize(hs.label || hs.title || 'Hotspot');
+                    var desc = this.renderRichHTML(hs.description || hs.content || '');
+                    return '<li class="hotspot-item"><strong>' + label + '</strong>' +
+                           (desc ? ': <span>' + desc + '</span>' : '') + '</li>';
+                }}.bind(this)).join('');
+                return '<div class="template hotspot-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       (imgSrc ? '<figure class="hotspot-image-figure"><img src="' + this.sanitize(imgSrc) +
+                                 '" alt="' + (this.sanitize(data.altText || title || 'Interactive image')) + '" class="content-image"></figure>' : '') +
+                       (hsList ? '<ul class="hotspot-list" role="list">' + hsList + '</ul>' : '') +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Hotspot render failed</p></div>'; }}
+        }},
+
+        renderModuleOverview: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Module Overview');
+                var desc = this.renderRichHTML(data.description || data.content || '');
+                var modules = Array.isArray(data.modules) ? data.modules : [];
+                var modHtml = modules.map(function(mod) {{
+                    var modTitle = this.sanitize(mod.title || mod.name || '');
+                    var modDesc = this.sanitize(mod.description || '');
+                    return '<li class="module-item" role="listitem">' +
+                           '<div class="module-title">' + modTitle + '</div>' +
+                           (modDesc ? '<div class="module-desc">' + modDesc + '</div>' : '') +
+                           '</li>';
+                }}.bind(this)).join('');
+                return '<div class="template module-overview-template" role="region" aria-label="' + title + '">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       (desc ? '<div class="content-body">' + desc + '</div>' : '') +
+                       (modHtml ? '<ul class="modules-list" role="list">' + modHtml + '</ul>' : '') +
+                       '</div>';
+            }} catch (e) {{ return '<div class="template error"><p>Module overview render failed</p></div>'; }}
+        }},
+
+        // ──────────────────────────────────────────────────────────────
+
+        toggleAccordion: function(panelIndex) {{
+            try {{
+                var container = document.getElementById('slide-container');
+                if (!container) return;
+                var items = container.querySelectorAll('.accordion-item');
+                items.forEach(function(item, idx) {{
+                    var trigger = item.querySelector('.accordion-trigger');
+                    var shouldOpen = idx === panelIndex ? !item.classList.contains('open') : false;
+                    if (shouldOpen) {{
+                        item.classList.add('open');
+                    }} else {{
+                        item.classList.remove('open');
+                    }}
+                    if (trigger) {{
+                        trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+                    }}
+                }});
+            }} catch (error) {{
+                console.error('toggleAccordion error:', error);
+            }}
+        }},
+
+        onActivationKey: function(event, callbackExpr) {{
+            if (!event) return;
+            var key = event.key || '';
+            if (key === 'Enter' || key === ' ') {{
+                event.preventDefault();
+                try {{
+                    eval(callbackExpr);
+                }} catch (error) {{
+                    console.error('onActivationKey eval error:', error);
+                }}
+            }}
+        }},
+
         activateTab: function(tabIndex) {{
             try {{
                 var container = document.getElementById('slide-container');
@@ -817,8 +1480,10 @@ class SCORMExportService:
                 navBtns.forEach(function(btn, idx) {{
                     if (idx === tabIndex) {{
                         btn.classList.add('active');
+                        btn.setAttribute('aria-selected', 'true');
                     }} else {{
                         btn.classList.remove('active');
+                        btn.setAttribute('aria-selected', 'false');
                     }}
                 }});
 
@@ -981,6 +1646,101 @@ class SCORMExportService:
             var div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }},
+
+        renderRichHTML: function(value) {{
+            if (!value) return '';
+            var raw = String(value);
+            var parser = new DOMParser();
+            var doc = parser.parseFromString('<div>' + raw + '</div>', 'text/html');
+            var root = doc.body.firstElementChild;
+            if (!root) return this.sanitize(raw);
+
+            var blocked = root.querySelectorAll('script,style,iframe,object,embed,link,meta');
+            blocked.forEach(function(node) {{ node.remove(); }});
+
+            var all = root.querySelectorAll('*');
+            all.forEach(function(node) {{
+                var attrs = Array.from(node.attributes || []);
+                attrs.forEach(function(attr) {{
+                    var name = String(attr.name || '').toLowerCase();
+                    var val = String(attr.value || '');
+                    if (name.startsWith('on')) {{
+                        node.removeAttribute(attr.name);
+                        return;
+                    }}
+                    if ((name === 'href' || name === 'src') && /^\s*javascript:/i.test(val)) {{
+                        node.removeAttribute(attr.name);
+                    }}
+                }});
+            }});
+
+            return root.innerHTML;
+        }},
+
+        applyScopedCustomCss: function(slide) {{
+            try {{
+                if (this.state.scopedStyleEl && this.state.scopedStyleEl.parentNode) {{
+                    this.state.scopedStyleEl.parentNode.removeChild(this.state.scopedStyleEl);
+                    this.state.scopedStyleEl = null;
+                }}
+
+                var cssText = '';
+                if (slide && typeof slide.customCss === 'string') {{
+                    cssText = slide.customCss;
+                }} else if (slide && slide.data && typeof slide.data.customCss === 'string') {{
+                    cssText = slide.data.customCss;
+                }}
+
+                if (!cssText || !slide || !slide.id) return;
+
+                var scopedCss = this.scopeCssToComponent(cssText, slide.id);
+                if (!scopedCss) return;
+
+                var styleEl = document.createElement('style');
+                styleEl.type = 'text/css';
+                styleEl.setAttribute('data-runtime-scoped-css', slide.id);
+                styleEl.appendChild(document.createTextNode(scopedCss));
+                document.head.appendChild(styleEl);
+                this.state.scopedStyleEl = styleEl;
+            }} catch (error) {{
+                console.error('applyScopedCustomCss error:', error);
+            }}
+        }},
+
+        scopeCssToComponent: function(cssText, componentId) {{
+            try {{
+                var raw = String(cssText || '');
+                if (!raw.trim()) return '';
+
+                var safeComponentId = String(componentId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+                if (!safeComponentId) return '';
+
+                var scope = '[data-component="' + safeComponentId + '"]';
+                var blocks = raw.split('}}');
+                var out = [];
+
+                for (var i = 0; i < blocks.length; i++) {{
+                    var block = blocks[i].trim();
+                    if (!block) continue;
+                    var parts = block.split('{{');
+                    if (parts.length < 2) continue;
+                    var selector = parts[0].trim();
+                    var body = parts.slice(1).join('{{').trim();
+                    if (!selector || !body) continue;
+
+                    if (selector.charAt(0) === '@') {{
+                        out.push(selector + '{{' + body + '}}');
+                    }} else {{
+                        out.push(scope + ' ' + selector + ' {{' + body + '}}');
+                    }}
+                }}
+
+                return out.join('\n');
+            }} catch (error) {{
+                console.error('scopeCssToComponent error:', error);
+                return '';
+            }}
         }},
 
         updateNavigation: function() {{
@@ -1212,6 +1972,161 @@ class SCORMExportService:
 .tabs-panel { display: none; border: 1px solid var(--theme-border, #e2e8f0);
     background: var(--theme-background, #fff); border-radius: 8px; padding: 1rem; }
 .tabs-panel.active { display: block; }
+.accordion-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px;
+    margin: 2rem 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.accordion-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.accordion-item { border: 1px solid var(--theme-border, #e2e8f0); border-radius: 8px;
+    background: var(--theme-surface, #f8f9fa); overflow: hidden; }
+.accordion-trigger { width: 100%; text-align: left; padding: 0.9rem 1rem;
+    border: none; background: transparent; color: var(--theme-text, #212121);
+    font-weight: 600; cursor: pointer; }
+.accordion-item.open .accordion-trigger { color: var(--theme-primary, #667eea); }
+.accordion-panel { display: none; padding: 0 1rem 1rem 1rem; }
+.accordion-item.open .accordion-panel { display: block; }
+
+/* === Extended renderer styles === */
+/* Quotation */
+.quotation-template { padding: 2rem; background: var(--theme-surface, #f8f9fa); border-radius: 12px; }
+.quotation-text { font-size: 1.4rem; font-style: italic; color: var(--theme-text, #212121);
+    border-left: 4px solid var(--theme-primary, #667eea); padding-left: 1.5rem; margin: 0 0 1rem 0; }
+.quotation-attribution { color: var(--theme-text-secondary, #4a5568); font-weight: 600; }
+/* Takeaways / Key Points */
+.takeaways-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.takeaways-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.takeaway-item { padding: 0.75rem 1rem; background: var(--theme-surface, #f0f9ff);
+    border-left: 4px solid var(--theme-accent, #38bdf8); border-radius: 0 8px 8px 0;
+    color: var(--theme-text, #212121); }
+/* Learning Objectives */
+.objectives-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.objectives-list { list-style: none; padding: 0; counter-reset: obj-counter; display: flex; flex-direction: column; gap: 0.75rem; }
+.objective-item { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem;
+    background: var(--theme-surface, #f8f9fa); border-radius: 8px; }
+.objective-number { min-width: 2rem; min-height: 2rem; display: flex; align-items: center; justify-content: center;
+    background: var(--theme-primary, #667eea); color: white; border-radius: 50%; font-weight: 700; font-size: 0.9rem; }
+/* Images and video */
+.image-template, .video-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.image-figure, .video-container { margin: 0 0 1rem 0; }
+.content-image { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0 auto; }
+.image-caption, .video-caption { color: var(--theme-text-secondary, #4a5568); text-align: center;
+    font-size: 0.9rem; margin-top: 0.5rem; }
+.content-video { max-width: 100%; border-radius: 8px; display: block; }
+.image-placeholder { background: var(--theme-surface, #f8f9fa); border: 2px dashed var(--theme-border, #e2e8f0);
+    min-height: 120px; display: flex; align-items: center; justify-content: center;
+    color: var(--theme-text-secondary, #4a5568); border-radius: 8px; padding: 2rem; }
+.video-placeholder { background: var(--theme-surface, #111); min-height: 200px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; color: #ccc; }
+.video-transcript { margin-top: 1rem; border: 1px solid var(--theme-border, #e2e8f0); border-radius: 8px; }
+.video-transcript summary { padding: 0.75rem; cursor: pointer; font-weight: 600; color: var(--theme-primary, #667eea); }
+.transcript-body { padding: 1rem; border-top: 1px solid var(--theme-border, #e2e8f0); }
+/* Code Snippet */
+.code-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.code-container { position: relative; margin-top: 0.5rem; }
+.code-lang-badge { position: absolute; top: 0.5rem; right: 0.75rem; font-size: 0.75rem;
+    color: var(--theme-text-secondary, #999); font-family: monospace; }
+.code-block { background: #1e1e1e; color: #d4d4d4; padding: 1.5rem 1rem; border-radius: 8px;
+    overflow-x: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.9rem;
+    line-height: 1.6; margin: 0; white-space: pre; }
+/* Stepper */
+.stepper-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.stepper-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.stepper-item { display: flex; gap: 1.25rem; align-items: flex-start; padding: 0 0 1.5rem 0;
+    position: relative; }
+.stepper-item:not(:last-child)::before { content: ''; position: absolute;
+    left: 1.1rem; top: 2.5rem; width: 2px; height: calc(100% - 2.5rem);
+    background: var(--theme-primary, #667eea); opacity: 0.3; }
+.stepper-number { min-width: 2.25rem; min-height: 2.25rem; display: flex; align-items: center;
+    justify-content: center; background: var(--theme-primary, #667eea); color: white;
+    border-radius: 50%; font-weight: 700; font-size: 0.9rem; flex-shrink: 0; }
+.stepper-content { flex: 1; }
+.stepper-title { margin: 0 0 0.5rem 0; font-size: 1.1rem; color: var(--theme-text, #212121); }
+.stepper-body { color: var(--theme-text-secondary, #4a5568); }
+/* Timeline */
+.timeline-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.timeline-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0; position: relative; }
+.timeline-list::before { content: ''; position: absolute; left: 5.5rem; top: 0; bottom: 0;
+    width: 2px; background: var(--theme-primary, #667eea); opacity: 0.2; }
+.timeline-event { display: flex; gap: 1rem; align-items: flex-start; padding: 0 0 1.5rem 0; }
+.timeline-label { min-width: 5rem; text-align: right; font-size: 0.85rem; font-weight: 600;
+    color: var(--theme-primary, #667eea); padding-top: 0.25rem; }
+.timeline-dot { min-width: 1rem; min-height: 1rem; background: var(--theme-primary, #667eea);
+    border-radius: 50%; border: 3px solid var(--theme-background, white);
+    box-shadow: 0 0 0 2px var(--theme-primary, #667eea); margin-top: 0.35rem; flex-shrink: 0; }
+.timeline-content { flex: 1; padding-bottom: 0.25rem; }
+.timeline-title { margin: 0 0 0.4rem 0; font-size: 1.05rem; }
+/* Metric / KPI */
+.metric-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.metrics-grid { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: 1rem; }
+.metric-card { flex: 1; min-width: 160px; padding: 1.5rem; text-align: center;
+    background: var(--theme-surface, #f8f9fa); border-radius: 12px;
+    border: 1px solid var(--theme-border, #e2e8f0); }
+.metric-value { font-size: 2.5rem; font-weight: 800; color: var(--theme-primary, #667eea); line-height: 1; }
+.metric-unit { font-size: 1.2rem; font-weight: 400; margin-left: 0.25rem; }
+.metric-label { margin-top: 0.5rem; color: var(--theme-text-secondary, #4a5568); font-size: 0.9rem; }
+/* Progress Tracker */
+.progress-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.prog-container { margin-top: 1rem; }
+.prog-bar { height: 1.25rem; background: var(--theme-surface, #e2e8f0); border-radius: 99px; overflow: hidden; }
+.prog-fill { height: 100%; background: var(--theme-success, #10b981); border-radius: 99px; transition: width 0.4s; }
+.prog-label { margin-top: 0.5rem; color: var(--theme-text-secondary, #4a5568); font-size: 0.9rem; }
+/* Flashcard */
+.flashcard-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.fc-hint { color: var(--theme-text-secondary, #4a5568); font-size: 0.9rem; margin-bottom: 1rem; }
+.flashcards-grid { display: flex; flex-wrap: wrap; gap: 1.25rem; }
+.flashcard { flex: 1; min-width: 220px; min-height: 160px; perspective: 1000px;
+    cursor: pointer; border-radius: 12px; }
+.flashcard-inner { width: 100%; height: 100%; position: relative; min-height: 160px;
+    transition: transform 0.5s; transform-style: preserve-3d; }
+.flashcard.flipped .flashcard-inner { transform: rotateY(180deg); }
+.flashcard-front, .flashcard-back { position: absolute; width: 100%; height: 100%;
+    backface-visibility: hidden; border-radius: 12px; padding: 1.5rem;
+    border: 1px solid var(--theme-border, #e2e8f0); display: flex; flex-direction: column; gap: 0.5rem; }
+.flashcard-front { background: var(--theme-surface, #f8f9fa); }
+.flashcard-back { background: var(--theme-primary, #667eea); color: white; transform: rotateY(180deg); }
+.fc-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.6; font-weight: 700; }
+/* Scenario */
+.scenario-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.scenario-text { color: var(--theme-text, #212121); line-height: 1.7; margin-bottom: 1.5rem; }
+.scenario-options { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.scenario-btn { width: 100%; text-align: left; padding: 0.9rem 1.25rem;
+    border: 2px solid var(--theme-border, #e2e8f0); border-radius: 8px; background: var(--theme-surface, #f8f9fa);
+    color: var(--theme-text, #212121); cursor: pointer; transition: all 0.2s; }
+.scenario-btn:hover, .scenario-btn[aria-pressed="true"] { border-color: var(--theme-primary, #667eea);
+    background: color-mix(in srgb, var(--theme-primary, #667eea) 10%, transparent); }
+.scenario-fb-text { padding: 0.75rem; background: var(--theme-surface, #f0f9ff);
+    border-radius: 8px; border-left: 4px solid var(--theme-primary, #667eea); }
+/* Multiple Select / True-False / Fill-in-Blank */
+.mcq-hint { color: var(--theme-primary, #667eea); font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; }
+.fill-blank-input { display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
+.blank-input { flex: 1; min-width: 200px; padding: 0.6rem 0.9rem;
+    border: 1px solid var(--theme-border, #e2e8f0); border-radius: 6px; font-size: 1rem; }
+.submit-btn { padding: 0.6rem 1.25rem; background: var(--theme-primary, #667eea); color: white;
+    border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; }
+.submit-btn:hover { opacity: 0.9; }
+/* Hotspot / Image with callouts */
+.hotspot-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.hotspot-image-figure { margin: 0 0 1rem 0; }
+.hotspot-list { list-style: disc; padding-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.hotspot-item { color: var(--theme-text, #212121); }
+/* Data Table */
+.datatable-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.table-container { overflow-x: auto; margin-top: 1rem; border-radius: 8px;
+    border: 1px solid var(--theme-border, #e2e8f0); }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.data-table th { background: var(--theme-surface, #f8f9fa); padding: 0.75rem 1rem;
+    text-align: left; font-weight: 600; border-bottom: 2px solid var(--theme-border, #e2e8f0);
+    color: var(--theme-text, #212121); }
+.data-table td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--theme-border, #e2e8f0);
+    color: var(--theme-text, #212121); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:nth-child(even) td { background: var(--theme-surface, #f8f9fa); }
+/* Module Overview */
+.module-overview-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.modules-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; }
+.module-item { padding: 1rem; background: var(--theme-surface, #f8f9fa);
+    border-radius: 8px; border: 1px solid var(--theme-border, #e2e8f0); }
+.module-title { font-weight: 600; color: var(--theme-text, #212121); }
+.module-desc { color: var(--theme-text-secondary, #4a5568); font-size: 0.9rem; margin-top: 0.35rem; }
+
 .player-controls { background: var(--theme-surface, #f8f9fa); padding: 1.5rem 2rem;
     display: flex; justify-content: space-between; align-items: center; }
 .nav-btn, .finish-btn { padding: 0.75rem 1.5rem; border: 2px solid var(--theme-primary, #667eea);
@@ -1224,23 +2139,23 @@ class SCORMExportService:
 .slide-counter { font-weight: 500; color: var(--theme-text-secondary, #4a5568); }
 .error { background: #fed7d7; color: var(--theme-error, #c53030); padding: 1rem; border-radius: 6px;
     border: 1px solid #feb2b2; }
-@media (max-width: 768px) {{
-    .player-header {{ padding: 1rem; }}
-    .player-header h1 {{ font-size: 1.5rem; }}
-    .player-content {{ padding: 1rem; }}
-    .mcq-template, .content-template {{ padding: 1rem; margin: 1rem 0; }}
-    .mcq-question {{ font-size: 1.3rem; }}
-    .content-title {{ font-size: 1.5rem; }}
-    .player-controls {{ padding: 1rem; flex-direction: column; gap: 1rem; }}
-    .nav-btn, .finish-btn {{ padding: 0.5rem 1rem; font-size: 0.9rem; }}
-}}
-@media (max-width: 480px) {{
-    .mcq-options {{ gap: 0.5rem; }}
-    .mcq-option {{ padding: 0.75rem; }}
-    .option-text {{ font-size: 1rem; }}
-    .progress-container {{ flex-direction: column; gap: 0.5rem; }}
-    .progress-text {{ min-width: auto; }}
-}}"""
+@media (max-width: 768px) {
+    .player-header { padding: 1rem; }
+    .player-header h1 { font-size: 1.5rem; }
+    .player-content { padding: 1rem; }
+    .mcq-template, .content-template, .tabs-template, .accordion-template { padding: 1rem; margin: 1rem 0; }
+    .mcq-question { font-size: 1.3rem; }
+    .content-title { font-size: 1.5rem; }
+    .player-controls { padding: 1rem; flex-direction: column; gap: 1rem; }
+    .nav-btn, .finish-btn { padding: 0.5rem 1rem; font-size: 0.9rem; }
+}
+@media (max-width: 480px) {
+    .mcq-options { gap: 0.5rem; }
+    .mcq-option { padding: 0.75rem; }
+    .option-text { font-size: 1rem; }
+    .progress-container { flex-direction: column; gap: 0.5rem; }
+    .progress-text { min-width: auto; }
+}"""
 
             # Prepend theme-generated CSS custom properties
             theme_css = self._generate_theme_css(theme_bundle)
@@ -1887,6 +2802,55 @@ console.log('✓ SCORM wrapper with Mock API loaded');
         except Exception as e:
             logger.error(f"Failed to copy assets: {e}")
             raise Exception(f"Asset copying failed: {str(e)}")
+
+    async def _package_assets(self, package_dir: Path, assets: List[Any]) -> Dict[str, Any]:
+        """Package assets deterministically and write asset_manifest.json."""
+        try:
+            if not package_dir or not package_dir.exists():
+                raise ValueError(f"Invalid package directory: {package_dir}")
+            if not assets:
+                return {}
+
+            packager = AssetPackager(self._resolve_asset_source_path)
+            self.packaged_assets = packager.package_assets(package_dir, assets)
+            manifest = packager.write_asset_manifest(package_dir, self.packaged_assets)
+
+            logger.info(
+                "✓ Packaged %s assets and wrote asset_manifest.json",
+                len(self.packaged_assets),
+            )
+            return manifest
+        except Exception as e:
+            logger.error(f"Failed to package assets deterministically: {e}")
+            raise Exception(f"Asset packaging failed: {str(e)}")
+
+    def _remove_legacy_runtime_files(self, package_dir: Path) -> None:
+        """Remove stale runtime artifacts so ZIP ships one canonical runtime set."""
+        legacy_files = [
+            "index_legacy.html",
+            "player.js",
+            "runtime.js",
+            "course_data_legacy.js",
+            "styles_legacy.css",
+            "styles_v2.css",
+            "course_data_v2.js",
+        ]
+
+        removed = 0
+        for filename in legacy_files:
+            candidate = package_dir / filename
+            if candidate.exists() and candidate.is_file():
+                candidate.unlink()
+                removed += 1
+
+        # Remove legacy runtime directory if present.
+        legacy_dir = package_dir / "runtime"
+        if legacy_dir.exists() and legacy_dir.is_dir():
+            shutil.rmtree(legacy_dir)
+            removed += 1
+
+        if removed:
+            logger.info("Removed %s stale runtime artifacts", removed)
     
     async def _validate_package_structure(self, package_dir: Path) -> None:
         """
@@ -2333,6 +3297,19 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             
             # Validate templates
             await self._validate_templates_for_scorm(course.templates)
+
+            # Runtime compatibility guard to prevent broken ZIP output.
+            runtime_errors = self._validate_runtime_supported_template_types(
+                course.templates
+            )
+            if runtime_errors:
+                return {
+                    "valid": False,
+                    "errors": runtime_errors,
+                    "warnings": [
+                        "Frontend registry-driven runtime not yet active for these template types"
+                    ],
+                }
             
             return {
                 "valid": True,
@@ -2347,3 +3324,18 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                 "errors": [f"Validation failed: {str(e)}"],
                 "warnings": []
             }
+
+    def _validate_runtime_supported_template_types(
+        self,
+        templates: List[Template],
+    ) -> List[str]:
+        """Ensure all templates are supported by the currently packaged runtime."""
+        errors: List[str] = []
+        for template in templates:
+            template_type = str(getattr(template, "type", "")).strip()
+            if template_type not in self.runtime_supported_template_types:
+                errors.append(
+                    f"Template '{getattr(template, 'id', 'unknown')}' type '{template_type}' "
+                    "is not supported by current export runtime"
+                )
+        return errors

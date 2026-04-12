@@ -560,3 +560,150 @@ async def test_export_zip_course_data_js_has_page_id(test_app):
         for tpl in templates:
             assert "pageId" in tpl, f"Template {tpl.get('id')} missing pageId field"
 
+
+# ===========================================================================
+# 7.  CSS snapshot tests: _generate_theme_css output shape verification
+# ===========================================================================
+
+class TestGenerateThemeCssSnapshots:
+    """Pure unit tests for the CSS output produced by _generate_theme_css."""
+
+    def setup_method(self):
+        self.svc = SCORMExportService()
+
+    def _gen(self, bundle):
+        return self.svc._generate_theme_css(bundle)
+
+    def test_empty_bundle_returns_empty_string(self):
+        assert self._gen(None) == ""
+        assert self._gen({}) == ""
+
+    def test_root_block_written_for_course_colors(self):
+        css = self._gen({"courseTheme": {"colors": {"primary": "#001122"}}})
+        assert ":root {" in css
+        assert "--theme-primary: #001122;" in css
+
+    def test_root_block_has_all_standard_colors(self):
+        colors = {
+            "primary": "#111111", "secondary": "#222222", "accent": "#333333",
+            "background": "#444444", "surface": "#555555", "text": "#666666",
+            "textSecondary": "#777777", "border": "#888888",
+            "success": "#009900", "warning": "#ffaa00",
+            "error": "#cc0000", "info": "#0088cc",
+        }
+        css = self._gen({"courseTheme": {"colors": colors}})
+        for var in ("--theme-primary", "--theme-secondary", "--theme-accent",
+                    "--theme-background", "--theme-surface", "--theme-text",
+                    "--theme-text-secondary", "--theme-border",
+                    "--theme-success", "--theme-warning", "--theme-error", "--theme-info"):
+            assert var in css, f"{var} missing from CSS output"
+
+    def test_invalid_color_not_written(self):
+        # rgb() is not allowed through _sanitize_color
+        css = self._gen({"courseTheme": {"colors": {"primary": "rgb(255,0,0)"}}})
+        assert "--theme-primary" not in css
+
+    def test_typography_font_family_written(self):
+        css = self._gen({"courseTheme": {"typography": {"fontFamily": "Arial, sans-serif"}}})
+        assert "--theme-font-family: Arial, sans-serif;" in css
+
+    def test_typography_font_size_written(self):
+        css = self._gen({"courseTheme": {"typography": {"baseFontSize": 16}}})
+        assert "--theme-base-font-size: 16px;" in css
+
+    def test_font_size_out_of_range_not_written(self):
+        css = self._gen({"courseTheme": {"typography": {"baseFontSize": 200}}})
+        assert "--theme-base-font-size" not in css
+
+    def test_page_override_scoped_to_data_page(self):
+        css = self._gen({
+            "courseTheme": {},
+            "pageOverrides": {"page-abc": {"colors": {"primary": "#aabbcc"}}},
+        })
+        assert '[data-page="page-abc"]' in css
+        assert "--theme-primary: #aabbcc;" in css
+
+    def test_component_override_scoped_to_data_component(self):
+        css = self._gen({
+            "courseTheme": {},
+            "componentOverrides": {"comp-xyz": {"colors": {"secondary": "#112233"}}},
+        })
+        assert '[data-component="comp-xyz"]' in css
+        assert "--theme-secondary: #112233;" in css
+
+    def test_page_id_sanitised_in_selector(self):
+        # IDs with special chars must be sanitised before going into CSS selector
+        css = self._gen({
+            "courseTheme": {},
+            "pageOverrides": {"evil<>id\"{}": {"colors": {"primary": "#ffffff"}}},
+        })
+        # Raw injection characters must be stripped - only [a-zA-Z0-9_-] allowed
+        assert "<" not in css
+        assert ">" not in css
+        assert "{}" not in css
+        # Sanitised result keeps alphanumeric portion
+        assert "evilid" in css
+
+    def test_no_page_or_component_overrides_when_empty(self):
+        css = self._gen({"courseTheme": {"colors": {"primary": "#000000"}}})
+        assert "data-page" not in css
+        assert "data-component" not in css
+
+
+# ===========================================================================
+# 8.  CSS snapshot tests: exported styles.css contains all renderer classes
+# ===========================================================================
+
+@pytest.mark.asyncio
+async def test_styles_css_contains_extended_renderer_classes(test_app):
+    """
+    The exported styles.css must include CSS classes for every renderer
+    added in the extended registry expansion.
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        cid = "style-snap-001"
+        r = await client.post("/api/v1/courses", json={
+            "courseId": cid, "title": "Style Snapshot", "description": None, "data": {},
+        })
+        assert r.status_code == 201, r.text
+
+        rp = await client.post(
+            f"/api/v1/courses/{cid}/pages", json={"title": "S1", "order": 0}
+        )
+        assert rp.status_code in (200, 201), rp.text
+        pid = rp.json()["pageId"]
+        await client.post(
+            f"/api/v1/courses/{cid}/pages/{pid}/components",
+            json={"componentType": "content-text", "order": 0, "data": {"text": "hi"}},
+        )
+
+        with patch(_PATCH_TARGET, new=_noop_validate):
+            resp = await client.post(f"/api/v1/export/scorm/{cid}")
+        assert resp.status_code == 200, resp.text
+
+        zf = zipfile.ZipFile(io.BytesIO(resp.content))
+        css_files = [n for n in zf.namelist() if n.endswith("styles.css")]
+        assert css_files
+        css = zf.read(css_files[0]).decode("utf-8")
+
+        expected_classes = [
+            ".quotation-template", ".quotation-text", ".quotation-attribution",
+            ".takeaways-template", ".takeaways-list", ".takeaway-item",
+            ".objectives-template", ".objectives-list", ".objective-item",
+            ".image-template", ".content-image", ".video-template",
+            ".code-template", ".code-block",
+            ".stepper-template", ".stepper-list", ".stepper-item",
+            ".timeline-template", ".timeline-list", ".timeline-event",
+            ".metric-template", ".metric-value", ".metrics-grid",
+            ".progress-template", ".prog-bar", ".prog-fill",
+            ".flashcard-template", ".flashcard-front", ".flashcard-back",
+            ".scenario-template", ".scenario-options", ".scenario-btn",
+            ".datatable-template", ".data-table",
+            ".hotspot-template", ".hotspot-list",
+            ".module-overview-template", ".modules-list",
+        ]
+        missing = [cls for cls in expected_classes if cls not in css]
+        assert not missing, f"CSS classes missing from styles.css: {missing}"
+

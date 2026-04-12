@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from ..models.course import Course, CourseExportRequest
 from ..services.scorm_export import SCORMExportService
 from ..utils.validation import validate_course_json
+from ..utils.error_envelope import build_error
 import json
 import os
 import hashlib
@@ -50,19 +51,15 @@ class ExportValidationError422(BaseModel):
 
 
 def _error_payload(code: str, message: str, field: str = "request", hint: Optional[str] = None) -> dict:
-    payload: dict = {
-        "detail": message,
-        "errors": [
-            {
-                "code": code,
-                "field": field,
-                "message": message,
-            }
-        ],
-    }
+    details = {}
     if hint:
-        payload["errors"][0]["hint"] = hint
-    return payload
+        details["hint"] = hint
+    return build_error(
+        code=code,
+        message=message,
+        field=field,
+        details=details,
+    )
 
 @router.post("/export", summary="Export Course as SCORM Package")
 async def export_course(
@@ -746,9 +743,19 @@ async def export_persisted_course(
     except HTTPException:
         raise
     except PersistedCourseExportValidationError as exc:
-        raise HTTPException(status_code=422, detail=[
-            _export_error("EXPORT_VALIDATION_ERROR", "course", str(exc))
-        ])
+        raise HTTPException(
+            status_code=422,
+            detail=build_error(
+                code="VALIDATION_ERROR",
+                field="course",
+                message=str(exc),
+                details={
+                    "errors": [
+                        _export_error("EXPORT_VALIDATION_ERROR", "course", str(exc))
+                    ]
+                },
+            ),
+        )
     except PydanticValidationError as exc:
         errors = [
             _export_error(
@@ -758,7 +765,15 @@ async def export_persisted_course(
             )
             for e in exc.errors()
         ]
-        raise HTTPException(status_code=422, detail=errors)
+        raise HTTPException(
+            status_code=422,
+            detail=build_error(
+                code="VALIDATION_ERROR",
+                field="course",
+                message="Schema validation failed",
+                details={"errors": errors},
+            ),
+        )
     except Exception as exc:
         error_id = uuid.uuid4().hex[:12]
         logger.error(
