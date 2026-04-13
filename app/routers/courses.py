@@ -281,7 +281,6 @@ async def upsert_course(
     payload: CourseCreate,
     repo: CourseRepository = Depends(_get_repo),
     session: AsyncSession = Depends(get_session),
-    response: "Response" = None,  # type: ignore[assignment]
 ):
     """
     Idempotent upsert.  Creates the course if it does not exist yet,
@@ -290,7 +289,6 @@ async def upsert_course(
     HTTP 201 is returned on creation, HTTP 200 on update.
     Eliminates the noisy PATCH-then-fallback-create pattern.
     """
-    from fastapi import Response as FastAPIResponse
     from fastapi.responses import JSONResponse
 
     record, created = await repo.upsert(

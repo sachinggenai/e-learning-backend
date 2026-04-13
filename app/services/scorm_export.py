@@ -895,13 +895,12 @@ class SCORMExportService:
                     var tabTitle = this.sanitize(tab.title || ('Tab ' + (i + 1)));
                     var tabBody = this.renderRichHTML(tab.body || tab.content || '');
                     var activeClass = i === 0 ? ' active' : '';
-                                        navHtml += '<button class="tabs-nav-btn' + activeClass + '" ' +
-                                                             'type="button" role="tab" ' +
-                                                             'aria-selected="' + (i === 0 ? 'true' : 'false') + '" ' +
-                                                             'aria-controls="tabs-panel-' + tabId + '" ' +
-                                                             'onkeydown="Player.onActivationKey(event, \"Player.activateTab(' + i + ')\")" ' +
-                                                             'onclick="Player.activateTab(' + i + ')">' +
-                                                             tabTitle + '</button>';
+                    navHtml += '<button class="tabs-nav-btn' + activeClass + '" ' +
+                               'type="button" role="tab" ' +
+                               'aria-selected="' + (i === 0 ? 'true' : 'false') + '" ' +
+                               'aria-controls="tabs-panel-' + tabId + '" ' +
+                               'data-action="activate-tab" data-index="' + i + '">' +
+                               tabTitle + '</button>';
                     panelHtml += '<div class="tabs-panel' + activeClass + '" ' +
                                                                  'id="tabs-panel-' + tabId + '" role="tabpanel">' +
                                  '<div class="content-body">' + tabBody + '</div>' +
@@ -945,8 +944,7 @@ class SCORMExportService:
                     panelsHtml += '<div class="accordion-item' + openClass + '">' +
                                   '<button type="button" class="accordion-trigger" ' +
                                   'aria-expanded="' + expanded + '" ' +
-                                  'onkeydown="Player.onActivationKey(event, \"Player.toggleAccordion(' + i + ')\")" ' +
-                                  'onclick="Player.toggleAccordion(' + i + ')">' +
+                                  'data-action="toggle-accordion" data-index="' + i + '">' +
                                   panelTitle + '</button>' +
                                   '<div class="accordion-panel">' +
                                   '<div class="content-body">' + panelBody + '</div>' +
@@ -1139,7 +1137,7 @@ class SCORMExportService:
                     optHtml += '<label class="mcq-option' + selectedClass + '">' +
                                '<input type="radio" name="tf_' + idx + '" value="' + i + '"' +
                                (isSelected ? ' checked' : '') +
-                               ' onchange="Player.selectAnswer(' + idx + ', ' + i + ')">' +
+                               ' data-change-action="select-answer" data-slide-idx="' + idx + '" data-option-idx="' + i + '">' +
                                '<span class="option-text">' + opt.text + '</span></label>';
                 }}.bind(this));
                 return '<div class="template mcq-template true-false-template">' +
@@ -1161,7 +1159,7 @@ class SCORMExportService:
                        '<input type="text" class="blank-input" placeholder="Type your answer..." ' +
                        'aria-label="Answer" id="fib-input-' + idx + '">' +
                        '<button type="button" class="submit-btn" ' +
-                       'onclick="Player.checkFillBlank(' + idx + ')">' +
+                       'data-action="check-fill-blank" data-slide-idx="' + idx + '">' +
                        'Check Answer</button></div>' +
                        '<div id="feedback-' + idx + '" class="mcq-feedback"></div>' +
                        '</div>';
@@ -1197,10 +1195,9 @@ class SCORMExportService:
                 var cardsHtml = cards.map(function(card, i) {{
                     var front = this.renderRichHTML(card.front || card.question || '');
                     var back = this.renderRichHTML(card.back || card.answer || '');
-                    return '<div class="flashcard" id="fc-' + i + '" ' +
-                           'role="button" tabindex="0" aria-pressed="false" ' +
-                           'onclick="this.classList.toggle(\'flipped\'); this.setAttribute(\'aria-pressed\', this.classList.contains(\'flipped\').toString())" ' +
-                           'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){{event.preventDefault();this.click();}}">' +
+                          return '<div class="flashcard" id="fc-' + i + '" ' +
+                              'role="button" tabindex="0" aria-pressed="false" ' +
+                              'data-action="flip-card">' +
                            '<div class="flashcard-inner">' +
                            '<div class="flashcard-front"><div class="fc-label">Question</div>' + front + '</div>' +
                            '<div class="flashcard-back"><div class="fc-label">Answer</div>' + back + '</div>' +
@@ -1322,11 +1319,11 @@ class SCORMExportService:
                 var optHtml = options.map(function(opt, i) {{
                     var optText = typeof opt === 'string' ? opt : (opt.text || opt.label || '');
                     var feedback = typeof opt === 'object' ? (opt.feedback || '') : '';
-                    return '<li class="scenario-option">' +
-                           '<button type="button" class="scenario-btn" ' +
-                           'onclick="Player.showScenarioFeedback(this, \'' + this.sanitize(feedback) + '\')">' +
-                           this.sanitize(optText) + '</button>' +
-                           '</li>';
+                          return '<li class="scenario-option">' +
+                              '<button type="button" class="scenario-btn" data-action="show-scenario-feedback" ' +
+                              'data-feedback="' + this.sanitizeAttr(feedback) + '">' +
+                              this.sanitize(optText) + '</button>' +
+                              '</li>';
                 }}.bind(this)).join('');
                 return '<div class="template scenario-template">' +
                        '<h2 class="content-title">' + title + '</h2>' +
@@ -1456,16 +1453,34 @@ class SCORMExportService:
             }}
         }},
 
-        onActivationKey: function(event, callbackExpr) {{
-            if (!event) return;
-            var key = event.key || '';
-            if (key === 'Enter' || key === ' ') {{
-                event.preventDefault();
-                try {{
-                    eval(callbackExpr);
-                }} catch (error) {{
-                    console.error('onActivationKey eval error:', error);
-                }}
+        dispatchAction: function(el) {{
+            if (!el) return;
+            var action = el.getAttribute('data-action');
+            if (!action) return;
+
+            if (action === 'activate-tab') {{
+                this.activateTab(Number(el.getAttribute('data-index') || 0));
+                return;
+            }}
+
+            if (action === 'toggle-accordion') {{
+                this.toggleAccordion(Number(el.getAttribute('data-index') || 0));
+                return;
+            }}
+
+            if (action === 'check-fill-blank') {{
+                this.checkFillBlank(Number(el.getAttribute('data-slide-idx') || 0));
+                return;
+            }}
+
+            if (action === 'flip-card') {{
+                el.classList.toggle('flipped');
+                el.setAttribute('aria-pressed', el.classList.contains('flipped').toString());
+                return;
+            }}
+
+            if (action === 'show-scenario-feedback') {{
+                this.showScenarioFeedback(el, el.getAttribute('data-feedback') || '');
             }}
         }},
 
@@ -1530,8 +1545,8 @@ class SCORMExportService:
                                      '">' +
                                      '<input type="radio" name="answer_' + idx +
                                      '" value="' + i +
-                                     '" onchange="Player.selectAnswer(' +
-                                     idx + ', ' + i + ')"' + checked + '>' +
+                                     '" data-change-action="select-answer" data-slide-idx="' + idx +
+                                     '" data-option-idx="' + i + '"' + checked + '>' +
                                      '<span class="option-text">' + safeText +
                                      '</span>' +
                                      '</label>';
@@ -1648,6 +1663,12 @@ class SCORMExportService:
             return div.innerHTML;
         }},
 
+        sanitizeAttr: function(text) {{
+            return this.sanitize(text)
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }},
+
         renderRichHTML: function(value) {{
             if (!value) return '';
             var raw = String(value);
@@ -1736,7 +1757,7 @@ class SCORMExportService:
                     }}
                 }}
 
-                return out.join('\n');
+                return out.join('\\n');
             }} catch (error) {{
                 console.error('scopeCssToComponent error:', error);
                 return '';
@@ -1871,6 +1892,35 @@ class SCORMExportService:
             var nextBtn = document.getElementById('next-btn');
             var finishBtn = document.getElementById('finish-btn');
 
+            document.addEventListener('click', function(event) {{
+                var actionEl = event.target && event.target.closest
+                    ? event.target.closest('[data-action]')
+                    : null;
+                if (!actionEl) return;
+                Player.dispatchAction(actionEl);
+            }});
+
+            document.addEventListener('keydown', function(event) {{
+                var key = event && event.key ? event.key : '';
+                if (key !== 'Enter' && key !== ' ') return;
+                var actionEl = event.target && event.target.closest
+                    ? event.target.closest('[data-action]')
+                    : null;
+                if (!actionEl) return;
+                event.preventDefault();
+                Player.dispatchAction(actionEl);
+            }});
+
+            document.addEventListener('change', function(event) {{
+                var el = event.target;
+                if (!el || !el.getAttribute) return;
+                var action = el.getAttribute('data-change-action');
+                if (action !== 'select-answer') return;
+                var slideIdx = Number(el.getAttribute('data-slide-idx') || 0);
+                var optionIdx = Number(el.getAttribute('data-option-idx') || 0);
+                Player.selectAnswer(slideIdx, optionIdx);
+            }});
+
             if (prevBtn) {{
                 prevBtn.onclick = function() {{
                     if (Player.state.currentSlide > 0) {{
@@ -1912,6 +1962,8 @@ class SCORMExportService:
     </script>
 </body>
 </html>"""
+
+            self._assert_no_inline_event_handlers(html_content)
 
             html_path = package_dir / "index.html"
             with open(html_path, 'w', encoding='utf-8') as f:
@@ -2908,6 +2960,18 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                 .replace("'", "\\'")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r"))
+
+    def _assert_no_inline_event_handlers(self, html_content: str) -> None:
+        """Architecture guard: block inline JS event handlers in generated HTML."""
+        if not html_content:
+            return
+
+        # Inline on* handlers make quote nesting fragile and unsafe.
+        if re.search(r"\son[a-z]+\s*=", html_content, flags=re.IGNORECASE):
+            raise ValueError(
+                "Generated index.html contains inline event handlers. "
+                "Use data-action + delegated listeners instead."
+            )
     
     def _sanitize_text(self, text: Any) -> str:
         """
