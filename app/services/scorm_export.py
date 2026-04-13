@@ -97,6 +97,55 @@ def _ensure_dict(data: Any) -> Dict[str, Any]:
 class SCORMExportService:
     """Service for generating SCORM packages from course data"""
 
+    TEMPLATE_TYPE_ALIASES = {
+        # Pure aliases (no data transform required)
+        "video": "content-video",
+        "content_text": "content-text",
+        "quiz": "mcq",
+        "step-by-step": "stepper",
+        "flashcards": "flashcard",
+        "flip-cards": "flashcard",
+        "quiz-game": "quiz",
+        "video-slide": "content-video",
+        "text-with-media": "content-media",
+        "fill-blanks": "fill-in-blank",
+        "role-play-simulation": "role-play",
+        "knowledge-check": "quiz",
+        # Accordion-family (structural transform applied)
+        "click-reveal": "accordion",
+        "layered-content": "accordion",
+        "case-study": "accordion",
+        "code-of-conduct": "accordion",
+        "screen-reader-guide": "accordion",
+        "clickable-icons": "accordion",
+        # Tabs-family (structural transform applied)
+        "before-after": "tabs",
+        "dos-donts": "tabs",
+        "scenario-debate": "tabs",
+        # Stepper-family (structural transform applied)
+        "animated-explainer": "stepper",
+        "guided-practice": "stepper",
+        "software-simulation": "stepper",
+        # Timeline-family (structural transform applied)
+        "cycle-diagram": "timeline",
+        # Data-visualization-family (structural transform applied)
+        "comparison-table": "data-visualization",
+        "keyboard-nav-guide": "data-visualization",
+        "matrix-grid": "data-visualization",
+        "skill-gap-analysis": "data-visualization",
+        "skill-mastery-report": "data-visualization",
+        # Key-takeaways-family (structural transform applied)
+        "audit-checklist": "key-takeaways",
+        "quick-tips": "key-takeaways",
+        # Flashcard-family (structural transform applied)
+        "microlearning-cards": "flashcard",
+        # Module-overview-family (structural transform applied)
+        "recommendation-card": "module-overview",
+        # Scenario-family (structural transform applied)
+        "scenario-question": "scenario",
+        "regulatory-scenario": "scenario",
+    }
+
     def __init__(self):
         self.scorm_version = "1.2"
         self.export_contract_version = "2026-04-12.1"
@@ -131,7 +180,398 @@ class SCORMExportService:
             # Learning Path
             "learning-roadmap", "module-overview", "course-map",
         }
-    
+
+    def _template_type_candidates(self, type_key: str) -> List[str]:
+        """Return normalized candidates for a template type identifier."""
+        raw = (type_key or "").strip()
+        if not raw:
+            return []
+
+        lower = raw.lower()
+        dash = lower.replace("_", "-")
+        under = lower.replace("-", "_")
+
+        alias_values = (
+            self.TEMPLATE_TYPE_ALIASES.get(lower),
+            self.TEMPLATE_TYPE_ALIASES.get(dash),
+            self.TEMPLATE_TYPE_ALIASES.get(under),
+        )
+
+        out: List[str] = []
+        for candidate in (raw, lower, dash, under, *alias_values):
+            if candidate and candidate not in out:
+                out.append(candidate)
+        return out
+
+    def _canonicalize_template_type(self, type_key: str) -> str:
+        """Map authoring template IDs to the runtime template IDs used in export."""
+        candidates = self._template_type_candidates(type_key)
+        for candidate in candidates:
+            if candidate in self.runtime_supported_template_types:
+                return candidate
+        return (type_key or "").strip().lower().replace("_", "-")
+
+    def _transform_template_data(
+        self,
+        authoring_type: str,
+        data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Remap authoring template data fields to the field shapes expected by
+        the SCORM runtime renderers.  Only types with a structural transform
+        registered in TEMPLATE_TYPE_ALIASES are handled here; everything else
+        is returned unchanged.  All transforms are purely additive/renames —
+        the original keys are preserved alongside the new ones so the runtime
+        can fall back gracefully if a source field is missing.
+        """
+        if not data:
+            return data or {}
+
+        t = (authoring_type or "").strip().lower().replace("_", "-")
+
+        # ── Accordion-family ───────────────────────────────────────────────
+        # Runtime expects: data.panels = [{title, body}]
+
+        if t in ("click-reveal", "layered-content"):
+            source_key = "items" if t == "click-reveal" else "layers"
+            items = data.get(source_key) or data.get("items") or data.get("sections") or []
+            panels = [
+                {
+                    "title": item.get("label") or item.get("title") or f"Section {i + 1}",
+                    "body": item.get("content") or item.get("body") or "",
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "panels": panels}
+
+        if t in ("case-study", "code-of-conduct"):
+            items = data.get("sections") or data.get("items") or []
+            panels = [
+                {
+                    "title": item.get("title") or item.get("heading") or f"Section {i + 1}",
+                    "body": item.get("content") or item.get("body") or "",
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "panels": panels}
+
+        if t == "screen-reader-guide":
+            items = data.get("sections") or data.get("items") or []
+            panels = [
+                {
+                    "title": item.get("heading") or item.get("title") or f"Section {i + 1}",
+                    "body": item.get("content") or item.get("body") or "",
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "panels": panels}
+
+        if t == "clickable-icons":
+            items = data.get("icons") or data.get("items") or []
+            panels = [
+                {
+                    "title": item.get("label") or item.get("title") or f"Item {i + 1}",
+                    "body": (
+                        item.get("content") or item.get("description")
+                        or item.get("body") or ""
+                    ),
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "panels": panels}
+
+        # ── Tabs-family ────────────────────────────────────────────────────
+        # Runtime expects: data.tabs = [{id, title, body}]
+
+        if t == "before-after":
+            tabs = [
+                {
+                    "id": "before",
+                    "title": data.get("beforeLabel") or "Before",
+                    "body": data.get("beforeContent") or data.get("before") or "",
+                },
+                {
+                    "id": "after",
+                    "title": data.get("afterLabel") or "After",
+                    "body": data.get("afterContent") or data.get("after") or "",
+                },
+            ]
+            return {**data, "tabs": tabs}
+
+        if t == "dos-donts":
+            def _items_to_html(items: Any) -> str:
+                if not items:
+                    return ""
+                if isinstance(items, list):
+                    li = "".join(
+                        f"<li>{item.get('text', item) if isinstance(item, dict) else item}</li>"
+                        for item in items
+                    )
+                    return f"<ul>{li}</ul>"
+                return str(items)
+
+            tabs = [
+                {
+                    "id": "dos",
+                    "title": "Do",
+                    "body": _items_to_html(data.get("dos") or []),
+                },
+                {
+                    "id": "donts",
+                    "title": "Don't",
+                    "body": _items_to_html(
+                        data.get("donts") or data.get("don'ts") or []
+                    ),
+                },
+            ]
+            return {**data, "tabs": tabs}
+
+        if t == "scenario-debate":
+            def _side(raw: Any, default_label: str):
+                if isinstance(raw, dict):
+                    label = raw.get("label") or raw.get("title") or default_label
+                    body = (
+                        raw.get("content") or raw.get("arguments")
+                        or raw.get("body") or ""
+                    )
+                else:
+                    label, body = default_label, str(raw or "")
+                return label, body
+
+            side_a_raw = data.get("sideA") or data.get("side_a") or {}
+            side_b_raw = data.get("sideB") or data.get("side_b") or {}
+            a_label, a_body = _side(side_a_raw, "Side A")
+            b_label, b_body = _side(side_b_raw, "Side B")
+            tabs = [
+                {"id": "side-a", "title": a_label, "body": a_body},
+                {"id": "side-b", "title": b_label, "body": b_body},
+            ]
+            return {**data, "tabs": tabs}
+
+        # ── Stepper-family ─────────────────────────────────────────────────
+        # Runtime expects: data.steps = [{title, description}]
+
+        if t == "animated-explainer":
+            items = (
+                data.get("frames") or data.get("steps")
+                or data.get("slides") or []
+            )
+            steps = [
+                {
+                    "title": item.get("title") or item.get("label") or f"Step {i + 1}",
+                    "description": (
+                        item.get("description") or item.get("content")
+                        or item.get("text") or ""
+                    ),
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "steps": steps}
+
+        if t == "guided-practice":
+            items = data.get("steps") or data.get("tasks") or []
+            steps = [
+                {
+                    "title": item.get("title") or item.get("label") or f"Step {i + 1}",
+                    "description": " ".join(
+                        filter(None, [
+                            item.get("instruction") or item.get("content") or "",
+                            ("Hint: " + item["hint"]) if item.get("hint") else "",
+                        ])
+                    ),
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "steps": steps}
+
+        if t == "software-simulation":
+            items = (
+                data.get("phases") or data.get("steps")
+                or data.get("actions") or []
+            )
+            steps = [
+                {
+                    "title": (
+                        item.get("title") or item.get("type") or f"Step {i + 1}"
+                    ),
+                    "description": (
+                        item.get("content") or item.get("description")
+                        or item.get("instruction") or ""
+                    ),
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "steps": steps}
+
+        # ── Timeline-family ────────────────────────────────────────────────
+        # Runtime expects: data.events = [{label, title, description}]
+
+        if t == "cycle-diagram":
+            items = (
+                data.get("stages") or data.get("phases")
+                or data.get("steps") or []
+            )
+            events = [
+                {
+                    "label": item.get("label") or item.get("name") or f"Stage {i + 1}",
+                    "title": item.get("title") or item.get("label") or f"Stage {i + 1}",
+                    "description": item.get("description") or item.get("content") or "",
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "events": events}
+
+        # ── Key-takeaways-family ───────────────────────────────────────────
+        # Runtime expects: data.takeaways = [str | {text}]
+
+        if t == "audit-checklist":
+            items = data.get("items") or data.get("checks") or []
+            takeaways = [
+                (item.get("text") or item.get("label") or item.get("title") or str(item))
+                if isinstance(item, dict) else str(item)
+                for item in items
+            ]
+            return {**data, "takeaways": takeaways}
+
+        if t == "quick-tips":
+            items = data.get("tips") or data.get("items") or []
+            takeaways = [
+                (item.get("text") or item.get("tip") or item.get("title") or str(item))
+                if isinstance(item, dict) else str(item)
+                for item in items
+            ]
+            return {**data, "takeaways": takeaways}
+
+        # ── Data-visualization-family ──────────────────────────────────────
+        # Runtime expects: data.headers = [str], data.rows = [[str]]
+
+        if t == "comparison-table":
+            columns = data.get("columns") or []
+            headers = [
+                (col.get("header") or col.get("title") or col.get("label") or str(col))
+                if isinstance(col, dict) else str(col)
+                for col in columns
+            ]
+            source_rows = data.get("rows") or []
+            rows = [
+                list(
+                    row.get("cells") if isinstance(row, dict) and "cells" in row
+                    else (row.values() if isinstance(row, dict) else row)
+                )
+                for row in source_rows
+            ]
+            return {**data, "headers": headers, "rows": rows}
+
+        if t == "keyboard-nav-guide":
+            items = data.get("shortcuts") or data.get("bindings") or []
+            headers = ["Keys", "Action"]
+            rows = [
+                [
+                    item.get("keys") or item.get("key") or "",
+                    item.get("action") or item.get("description") or "",
+                ]
+                for item in items if isinstance(item, dict)
+            ]
+            return {**data, "headers": headers, "rows": rows}
+
+        if t == "matrix-grid":
+            row_headers = data.get("rowHeaders") or data.get("row_headers") or []
+            col_headers = (
+                data.get("columnHeaders") or data.get("col_headers")
+                or data.get("columns") or []
+            )
+            cells = data.get("cells") or []
+            headers = [""] + [str(h) for h in col_headers]
+            rows = []
+            for i, rh in enumerate(row_headers):
+                row_cells = cells[i] if i < len(cells) else []
+                rows.append(
+                    [str(rh)] + (list(row_cells) if isinstance(row_cells, list) else [str(row_cells)])
+                )
+            return {**data, "headers": headers, "rows": rows}
+
+        if t in ("skill-gap-analysis", "skill-mastery-report"):
+            items = data.get("skills") or data.get("items") or []
+            if not items:
+                return data
+            first = items[0] if isinstance(items[0], dict) else {}
+            headers = list(first.keys()) if isinstance(first, dict) else ["Skill"]
+            rows = [
+                [item.get(k, "") for k in headers] if isinstance(item, dict) else [str(item)]
+                for item in items
+            ]
+            return {**data, "headers": headers, "rows": rows}
+
+        # ── Flashcard-family ───────────────────────────────────────────────
+        # Runtime expects: data.cards = [{front, back}]
+
+        if t == "microlearning-cards":
+            items = data.get("cards") or data.get("slides") or []
+            cards = [
+                {
+                    "front": (
+                        item.get("title") or item.get("question")
+                        or item.get("front") or f"Card {i + 1}"
+                    ),
+                    "back": (
+                        item.get("body") or item.get("answer")
+                        or item.get("back") or item.get("description") or ""
+                    ),
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "cards": cards}
+
+        # ── Module-overview-family ─────────────────────────────────────────
+        # Runtime expects: data.modules = [{title, description}]
+
+        if t == "recommendation-card":
+            items = data.get("recommendations") or data.get("items") or []
+            modules = [
+                {
+                    "title": item.get("title") or item.get("name") or f"Item {i + 1}",
+                    "description": (
+                        item.get("description") or item.get("body")
+                        or item.get("summary") or ""
+                    ),
+                }
+                for i, item in enumerate(items) if isinstance(item, dict)
+            ]
+            return {**data, "modules": modules}
+
+        # ── Scenario-family ────────────────────────────────────────────────
+        # Runtime expects: data.scenarioText, data.options = [{text, feedback}]
+
+        if t == "scenario-question":
+            scenario_text = (
+                data.get("scenario") or data.get("scenarioText")
+                or data.get("content") or ""
+            )
+            question_text = data.get("question") or ""
+            combined = (
+                f"{scenario_text}\n\n{question_text}".strip()
+                if question_text else scenario_text
+            )
+            return {**data, "scenarioText": combined}
+
+        if t == "regulatory-scenario":
+            decisions = data.get("decisions") or []
+            options: List[Any] = []
+            scenario_text = (
+                data.get("scenarioText") or data.get("scenario")
+                or data.get("content") or ""
+            )
+            if decisions and isinstance(decisions[0], dict):
+                options = decisions[0].get("options") or []
+                if not scenario_text:
+                    scenario_text = (
+                        decisions[0].get("situation")
+                        or decisions[0].get("scenario") or ""
+                    )
+            return {**data, "scenarioText": scenario_text, "options": options}
+
+        return data
+
     async def generate_scorm_package(self, course: Course, include_assets: bool = True,
                                      theme_bundle: Optional[Dict[str, Any]] = None) -> BytesIO:
         """
@@ -381,9 +821,23 @@ class SCORMExportService:
                         template.data
                     )
                     
+                    runtime_template_type = self._canonicalize_template_type(
+                        template.type
+                    )
+
+                    # Apply structural data transform when authoring type maps
+                    # to a different runtime renderer (e.g. case-study → accordion)
+                    authoring_type = (
+                        (template.type or "").strip().lower().replace("_", "-")
+                    )
+                    if authoring_type != runtime_template_type:
+                        sanitized_data = self._transform_template_data(
+                            authoring_type, sanitized_data
+                        )
+
                     safe_template = {
                         'id': template.id,
-                        'type': template.type,
+                        'type': runtime_template_type,
                         'order': template.order,
                         'title': self._sanitize_text(template.title),
                         'data': sanitized_data,
@@ -2998,31 +3452,7 @@ console.log('✓ SCORM wrapper with Mock API loaded');
         Fallback presence check for environments where template_definitions
         are not seeded yet but template_types is populated.
         """
-        def _candidates(key: str) -> list[str]:
-            raw = (key or "").strip()
-            if not raw:
-                return []
-
-            lower = raw.lower()
-            dash = lower.replace("_", "-")
-            under = lower.replace("-", "_")
-
-            alias_map = {
-                "video": "content-video",
-                "content-video": "video",
-                "content_text": "content-text",
-                "content-text": "content_text",
-                "quiz": "mcq",
-                "mcq": "quiz",
-            }
-
-            out: list[str] = []
-            for candidate in (raw, lower, dash, under, alias_map.get(lower), alias_map.get(dash), alias_map.get(under)):
-                if candidate and candidate not in out:
-                    out.append(candidate)
-            return out
-
-        candidates = _candidates(type_key)
+        candidates = self._template_type_candidates(type_key)
 
         # Always accept built-in types defined by the course schema.
         if any(c in BUILTIN_TEMPLATE_TYPES for c in candidates):
@@ -3084,8 +3514,16 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                 # If missing, fall back to template_types catalog so export
                 # remains functional in partially migrated environments.
                 definition = None
+                canonical_template_type = self._canonicalize_template_type(
+                    template.type
+                )
+
                 if await registry.exists(template.type):
                     definition = await registry.get(template.type)
+                elif canonical_template_type != template.type and await registry.exists(
+                    canonical_template_type
+                ):
+                    definition = await registry.get(canonical_template_type)
                 else:
                     fallback_exists = await self._exists_in_template_type_catalog(
                         template.type
@@ -3173,6 +3611,15 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             definition = await registry.get(template_type)
         except Exception:
             definition = None
+        if not definition:
+            canonical_template_type = self._canonicalize_template_type(
+                template_type
+            )
+            if canonical_template_type != template_type:
+                try:
+                    definition = await registry.get(canonical_template_type)
+                except Exception:
+                    definition = None
         if not definition:
             logger.warning(
                 f"No template definition found for type '{template_type}', "
@@ -3397,7 +3844,10 @@ console.log('✓ SCORM wrapper with Mock API loaded');
         errors: List[str] = []
         for template in templates:
             template_type = str(getattr(template, "type", "")).strip()
-            if template_type not in self.runtime_supported_template_types:
+            runtime_template_type = self._canonicalize_template_type(
+                template_type
+            )
+            if runtime_template_type not in self.runtime_supported_template_types:
                 errors.append(
                     f"Template '{getattr(template, 'id', 'unknown')}' type '{template_type}' "
                     "is not supported by current export runtime"
