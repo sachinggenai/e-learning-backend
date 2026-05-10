@@ -528,6 +528,44 @@ def _map_template_record(template_record) -> dict:
         if isinstance(panels, list):
             mapped_data["panels"] = panels
 
+    if normalized_type in ("content-media", "text-with-media"):
+        # Preserve all text-with-media fields from the template payload.
+        # body — canonical rich-text field (preferred over content)
+        body = None
+        if isinstance(raw_content, dict):
+            body = raw_content.get("body")
+        if body is None:
+            body = template_payload.get("body")
+        if body:
+            mapped_data["body"] = body
+
+        # mediaUrl — absolute URL to the media asset
+        media_url = None
+        if isinstance(raw_content, dict):
+            media_url = raw_content.get("mediaUrl") or raw_content.get("imageUrl")
+        if not media_url:
+            media_url = template_payload.get("mediaUrl") or template_payload.get("imageUrl")
+        if media_url:
+            mapped_data["mediaUrl"] = media_url
+
+        # mediaType — "image" | "video"
+        media_type = None
+        if isinstance(raw_content, dict):
+            media_type = raw_content.get("mediaType")
+        if media_type is None:
+            media_type = template_payload.get("mediaType")
+        if media_type:
+            mapped_data["mediaType"] = media_type
+
+        # mediaPosition — "left" | "right" | "top" | "bottom"
+        media_position = None
+        if isinstance(raw_content, dict):
+            media_position = raw_content.get("mediaPosition")
+        if media_position is None:
+            media_position = template_payload.get("mediaPosition")
+        if media_position:
+            mapped_data["mediaPosition"] = media_position
+
     return {
         "id": template_record.template_uid,
         "type": normalized_type,
