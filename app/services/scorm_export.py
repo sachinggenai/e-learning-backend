@@ -570,6 +570,53 @@ class SCORMExportService:
                     )
             return {**data, "scenarioText": scenario_text, "options": options}
 
+        # ── Text-with-media ────────────────────────────────────────────────
+        # Runtime expects: data.body (HTML), data.mediaUrl, data.mediaType,
+        #                  data.mediaPosition
+
+        if t in ("text-with-media", "content-media"):
+            import re as _re
+            _url_re = _re.compile(r'^https?://', _re.IGNORECASE)
+
+            # Resolve body (rich HTML text) — prefer explicit body field;
+            # fall back to content only when it is NOT a bare URL.
+            raw_body = (
+                data.get("body")
+                or data.get("text")
+                or data.get("description")
+                or ""
+            )
+            raw_content = data.get("content") or ""
+            if not raw_body and raw_content and not _url_re.match(str(raw_content).strip()):
+                raw_body = raw_content
+
+            # Resolve media URL — prefer explicit mediaUrl / imageUrl / videoUrl;
+            # fall back to content when it looks like a URL.
+            raw_media = (
+                data.get("mediaUrl")
+                or data.get("imageUrl")
+                or data.get("videoUrl")
+                or data.get("src")
+                or data.get("url")
+                or ""
+            )
+            if not raw_media and raw_content and _url_re.match(str(raw_content).strip()):
+                raw_media = raw_content
+
+            media_type = (
+                data.get("mediaType")
+                or ("video" if data.get("videoUrl") else "image")
+            )
+            media_position = data.get("mediaPosition") or data.get("layout") or "right"
+
+            return {
+                **data,
+                "body": raw_body,
+                "mediaUrl": raw_media,
+                "mediaType": media_type,
+                "mediaPosition": media_position,
+            }
+
         return data
 
     async def generate_scorm_package(self, course: Course, include_assets: bool = True,
@@ -1253,7 +1300,7 @@ class SCORMExportService:
                 'content-text':          this.renderContent,
                 'content':               this.renderContent,
                 'rich-text-editor':      this.renderRichText,
-                'content-media':         this.renderImage,
+                'content-media':         this.renderTextWithMedia,
                 'content-image':         this.renderImage,
                 'content-video':         this.renderVideo,
                 'transcript-caption':    this.renderContent,
@@ -1482,6 +1529,54 @@ class SCORMExportService:
                         '<p class="content-body">' + this.renderRichHTML(data.content || '') + '</p>') +
                        '</div>';
             }} catch (e) {{ return '<div class="template error"><p>Objectives render failed</p></div>'; }}
+        }},
+
+        renderTextWithMedia: function(slide) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || '');
+                var body = this.renderRichHTML(data.body || data.content || '');
+                var mediaUrl = data.mediaUrl || '';
+                var mediaType = (data.mediaType || 'image').toLowerCase();
+                var position = (data.mediaPosition || 'right').toLowerCase();
+
+                var mediaHtml = '';
+                if (mediaUrl && (mediaType === 'image' || mediaType === 'video')) {{
+                    if (mediaType === 'video') {{
+                        mediaHtml = '<div class="twm-media">' +
+                            '<video src="' + this.sanitize(mediaUrl) + '" controls class="content-video"></video>' +
+                            '</div>';
+                    }} else {{
+                        mediaHtml = '<div class="twm-media">' +
+                            '<img src="' + this.sanitize(mediaUrl) + '" alt="' + this.sanitize(slide.title || '') + '" class="content-image">' +
+                            '</div>';
+                    }}
+                }}
+
+                var textHtml = body ? '<div class="twm-text content-body">' + body + '</div>' : '';
+
+                var layoutClass = 'twm-layout-' + position;
+                var innerHtml;
+                if (!mediaHtml) {{
+                    innerHtml = textHtml;
+                }} else if (position === 'top') {{
+                    innerHtml = mediaHtml + textHtml;
+                }} else if (position === 'bottom') {{
+                    innerHtml = textHtml + mediaHtml;
+                }} else if (position === 'left') {{
+                    innerHtml = '<div class="twm-row ' + layoutClass + '">' + mediaHtml + textHtml + '</div>';
+                }} else {{
+                    innerHtml = '<div class="twm-row ' + layoutClass + '">' + textHtml + mediaHtml + '</div>';
+                }}
+
+                return '<div class="template text-with-media-template">' +
+                    (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                    innerHtml +
+                    '</div>';
+            }} catch (e) {{
+                console.error('renderTextWithMedia error:', e);
+                return '<div class="template error"><p>Text with media render failed</p></div>';
+            }}
         }},
 
         renderImage: function(slide) {{
@@ -2511,6 +2606,13 @@ class SCORMExportService:
     background: var(--theme-primary, #667eea); color: white; border-radius: 50%; font-weight: 700; font-size: 0.9rem; }
 /* Images and video */
 .image-template, .video-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.text-with-media-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.twm-row { display: flex; gap: 2rem; align-items: flex-start; }
+.twm-layout-left .twm-media, .twm-layout-right .twm-media { flex: 0 0 45%; }
+.twm-layout-left .twm-text, .twm-layout-right .twm-text { flex: 1; }
+.twm-media img, .twm-media video { width: 100%; height: auto; border-radius: 8px; display: block; }
+.twm-text { line-height: 1.7; }
+@media (max-width: 640px) { .twm-row { flex-direction: column; } }
 .image-figure, .video-container { margin: 0 0 1rem 0; }
 .content-image { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0 auto; }
 .image-caption, .video-caption { color: var(--theme-text-secondary, #4a5568); text-align: center;
@@ -3625,12 +3727,18 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                 f"No template definition found for type '{template_type}', "
                 f"using basic sanitization"
             )
-            # Fallback: convert to dict and sanitize text fields only
+            # Fallback: convert to dict and sanitize fields by content type
             data_dict = _ensure_dict(data) if not isinstance(data, dict) else data
-            return {
-                k: self._sanitize_text(str(v)) if isinstance(v, str) else v
-                for k, v in data_dict.items()
-            }
+            result = {}
+            for k, v in data_dict.items():
+                if isinstance(v, str):
+                    if self._looks_like_html(v):
+                        result[k] = self._sanitize_html_content(v)
+                    else:
+                        result[k] = self._sanitize_text(v)
+                else:
+                    result[k] = v
+            return result
         
         # Convert data to dict if needed
         data_dict = _ensure_dict(data) if not isinstance(data, dict) else data
@@ -3683,19 +3791,23 @@ console.log('✓ SCORM wrapper with Mock API loaded');
             # Define allowed tags and their allowed attributes
             allowed_tags = {
                 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-                'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'span', 'div',
+                'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'span', 'div', 'section',
                 'table', 'thead', 'tbody', 'tr', 'th', 'td',
                 'img', 'a', 'hr'
             }
             
+            # Attributes always blocked regardless of tag
+            blocked_attrs = {'on', 'onclick', 'onload', 'onerror', 'onmouseover',
+                             'onfocus', 'onblur', 'onchange', 'onsubmit'}
+            # Attributes always allowed on any tag
+            safe_attrs_any = {'class', 'id', 'title', 'style'}
+            # Extra per-tag allowances
             allowed_attributes = {
-                'img': ['src', 'alt', 'title', 'width', 'height'],
-                'a': ['href', 'title'],
-                'span': ['class', 'style'],
-                'div': ['class', 'style'],
-                'th': ['colspan', 'rowspan'],
-                'td': ['colspan', 'rowspan'],
-                'table': ['border', 'cellpadding', 'cellspacing']
+                'img': ['src', 'alt', 'title', 'width', 'height', 'class', 'style'],
+                'a': ['href', 'title', 'class', 'style'],
+                'th': ['colspan', 'rowspan', 'class', 'style'],
+                'td': ['colspan', 'rowspan', 'class', 'style'],
+                'table': ['border', 'cellpadding', 'cellspacing', 'class', 'style']
             }
             
             # Remove dangerous tags and attributes
@@ -3705,20 +3817,22 @@ console.log('✓ SCORM wrapper with Mock API loaded');
                     tag.decompose()
                     continue
                 
-                # Remove event handlers (attributes starting with 'on')
+                # Remove dangerous attributes
                 for attr in list(tag.attrs.keys()):
-                    if attr.startswith('on') or attr in ['onclick', 'onload', 'onerror']:
+                    attr_lower = attr.lower()
+                    if attr_lower.startswith('on') or attr_lower in blocked_attrs:
                         del tag[attr]
                         continue
-                    
-                    # Check if attribute is allowed for this tag
-                    if tag.name in allowed_attributes:
-                        if attr not in allowed_attributes[tag.name]:
+                    # Block javascript: / vbscript: in href/src
+                    if attr_lower in ('href', 'src'):
+                        val = str(tag.get(attr, ''))
+                        if re.search(r'(javascript|vbscript|data):', val, re.IGNORECASE):
                             del tag[attr]
-                    else:
-                        # For tags not in allowed_attributes, only keep basic attrs
-                        if attr not in ['class', 'id', 'title']:
-                            del tag[attr]
+                            continue
+                    # Allow safe_attrs_any on all tags; per-tag extras handled above
+                    extra = allowed_attributes.get(tag.name, [])
+                    if attr_lower not in safe_attrs_any and attr_lower not in extra:
+                        del tag[attr]
                 
                 # Remove tags that are not in allowed list
                 if tag.name not in allowed_tags:

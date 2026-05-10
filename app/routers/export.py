@@ -369,14 +369,19 @@ def _component_data_with_content(comp_type: str, data: dict) -> dict:
     Synthesizes a plain-text fallback for rich component types that don't carry
     a top-level 'content' field (e.g. tabs, accordion).
     The SCORM service uses the full 'data' dict for rendering; 'content' is
-    only needed to pass Pydantic's TemplateData.content = str Field(...).
+    only needed to pass Pydantic's TemplateData.content validation.
     """
     if "content" in data:
         return data
 
     out = dict(data)
 
-    if comp_type == "tabs":
+    if comp_type in ("text-with-media", "content-media"):
+        # Preserve all text-with-media fields as-is; synthesize a
+        # plain-text content fallback from body without overwriting mediaUrl.
+        out["content"] = data.get("body") or comp_type
+
+    elif comp_type == "tabs":
         tabs = data.get("tabs") or []
         out["content"] = " ".join(
             f"{t.get('title', '')} {t.get('body', '')}" for t in tabs
@@ -389,9 +394,12 @@ def _component_data_with_content(comp_type: str, data: dict) -> dict:
         ).strip() or comp_type
 
     else:
-        # Generic fallback: first string value found, or the type name
+        # Generic fallback: first non-URL string value found, or the type name
+        import re as _re
+        _url_pat = _re.compile(r'^https?://', _re.IGNORECASE)
         out["content"] = next(
-            (str(v) for v in data.values() if isinstance(v, str) and v),
+            (str(v) for v in data.values()
+             if isinstance(v, str) and v and not _url_pat.match(v)),
             comp_type,
         )
 

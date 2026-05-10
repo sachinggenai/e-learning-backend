@@ -106,12 +106,20 @@ else:
 
     class TemplateData(BaseModel):
         """Template Data Model - flexible structure for different template types"""
-        content: str = Field(..., description="Main content text")
+        class Config:
+            extra = "allow"
+
+        content: Optional[str] = Field(None, description="Main content text")
         subtitle: Optional[str] = Field(None, description="Optional subtitle")
         videoUrl: Optional[str] = Field(None, description="Video URL for content-video templates")
         questions: Optional[List[Question]] = Field(None, description="Questions for MCQ templates")
         tabs: Optional[List[dict]] = Field(None, description="Tabs data for tabs templates")
         panels: Optional[List[dict]] = Field(None, description="Panel data for accordion templates")
+        # text-with-media fields
+        body: Optional[str] = Field(None, description="Rich text body for text-with-media")
+        mediaUrl: Optional[str] = Field(None, description="Media URL for text-with-media")
+        mediaType: Optional[str] = Field(None, description="Media type: image | video | none")
+        mediaPosition: Optional[str] = Field(None, description="Media position: left | right | top | bottom")
 
     class Template(BaseModel):
         """Course Template/Slide Model"""
