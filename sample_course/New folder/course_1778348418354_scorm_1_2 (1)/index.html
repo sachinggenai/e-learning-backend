@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>ff</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="scorm-player">
+        <header class="player-header">
+            <h1 id="course-title">ff</h1>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <span id="progress-text" class="progress-text">0%</span>
+            </div>
+        </header>
+
+        <main class="player-content">
+            <div id="slide-container" class="slide-container">
+                <div class="loading"><p>Loading...</p></div>
+            </div>
+        </main>
+
+        <footer class="player-controls">
+            <button id="prev-btn" class="nav-btn" disabled>← Prev</button>
+            <span id="slide-counter">1 of 2</span>
+            <button id="next-btn" class="nav-btn">Next →</button>
+            <button id="finish-btn" class="finish-btn" style="display:none;">
+                Finish
+            </button>
+        </footer>
+    </div>
+
+    <!-- Scripts in correct order with defer -->
+    <script src="scorm_wrapper.js" defer></script>
+    <script src="course_data.js" defer></script>
+
+    <script defer>
+    // ============================================
+    // PRODUCTION-GRADE PLAYER INITIALIZATION
+    // ============================================
+
+    var Player = {
+        state: {
+            currentSlide: 0,
+            totalSlides: 2,
+            courseData: null,
+            initialized: false,
+            quizAnswers: {},
+            scormReady: false,
+            scopedStyleEl: null
+        },
+
+        // FIX: Promise-based initialization with timeout
+        init: async function() {
+            console.log('Player: Starting initialization...');
+
+            try {
+                // Wait for courseData with 5-second timeout
+                await this.waitForCourseData(5000);
+
+                // Validate courseData structure
+                if (!this.validateCourseData()) {
+                    throw new Error('Invalid course data structure');
+                }
+
+                // Initialize SCORM and restore progress
+                this.state.scormReady = SCORM.initialize();
+                var savedSlide = SCORM.restoreProgress(this.state.totalSlides);
+                this.state.currentSlide = Math.min(savedSlide, this.state.totalSlides - 1);
+
+                // DEBUG: Check objectives after initialization
+                console.log('DEBUG: Checking objectives after initialization...');
+                var objectivesAfterInit = SCORM.getAllObjectivesStatus(this.state.totalSlides);
+                console.log('DEBUG: Objectives after init:', objectivesAfterInit);
+
+                // Load first slide
+                this.loadSlide(this.state.currentSlide);
+                this.updateNavigation();
+                this.updateProgress();
+
+                this.state.initialized = true;
+                console.log('✓ Player initialized successfully');
+                return true;
+
+            } catch (error) {
+                console.error('❌ Player initialization failed:', error);
+                this.showError('Failed to load course: ' + error.message);
+                return false;
+            }
+        },
+
+        // FIX: Wait for courseData to be available
+        waitForCourseData: function(timeoutMs) {
+            return new Promise((resolve, reject) => {
+                var startTime = Date.now();
+
+                var checkData = () => {
+                    if (typeof courseData !== 'undefined' && courseData.templates) {
+                        console.log('✓ courseData ready, slides:', courseData.templates.length);
+                        resolve();
+                    } else if (Date.now() - startTime > timeoutMs) {
+                        reject(new Error('Timeout waiting for course data'));
+                    } else {
+                        setTimeout(checkData, 100);  // Check every 100ms
+                    }
+                };
+
+                checkData();
+            });
+        },
+
+        // FIX: Comprehensive data validation
+        validateCourseData: function() {
+            if (!courseData || typeof courseData !== 'object') {
+                console.error('courseData is not an object:', courseData);
+                return false;
+            }
+
+            if (!courseData.templates || !Array.isArray(courseData.templates)) {
+                console.error('courseData.templates missing or not array:', courseData.templates);
+                return false;
+            }
+
+            if (courseData.templates.length === 0) {
+                console.error('No templates in courseData');
+                return false;
+            }
+
+            this.state.totalSlides = courseData.templates.length;
+            this.state.courseData = courseData;
+            return true;
+        },
+
+        // FIX: Error boundaries in loadSlide
+        loadSlide: function(index) {
+            try {
+                console.log('Loading slide:', index + 1, 'of', this.state.totalSlides);
+
+                if (index < 0 || index >= this.state.totalSlides) {
+                    throw new Error('Invalid slide index: ' + index);
+                }
+
+                var slide = this.state.courseData.templates[index];
+                if (!slide) {
+                    throw new Error('Slide ' + index + ' not found in course data');
+                }
+
+                var content = '';
+                try {
+                    var renderer = this.getRenderer(slide.type);
+                    if (!renderer) {
+                        content = this.renderUnknown(slide);
+                    } else {
+                        content = renderer.call(this, slide, index);
+                    }
+                } catch (renderError) {
+                    console.error('Render error for slide', index, ':', renderError);
+                    content = '<div class="slide error"><p>Failed to render slide: ' +
+                             this.sanitize(renderError.message) + '</p></div>';
+                }
+
+                var container = document.getElementById('slide-container');
+                if (!container) {
+                    throw new Error('Slide container element not found');
+                }
+
+                container.innerHTML = content;
+
+                // Apply scoping data attributes for theme override CSS
+                if (slide.pageId) {
+                    container.setAttribute('data-page', slide.pageId);
+                }
+                if (slide.id) {
+                    container.setAttribute('data-component', slide.id);
+                }
+
+                this.applyScopedCustomCss(slide);
+
+                this.state.currentSlide = index;
+
+                // Mark as viewed and save progress (but don't mark as completed here)
+                if (this.state.scormReady) {
+                    SCORM.saveProgress(index, this.state.totalSlides);
+                }
+
+                this.updateNavigation();
+                this.updateProgress();
+
+                console.log('✓ Slide loaded successfully');
+
+            } catch (error) {
+                console.error('❌ loadSlide failed:', error);
+                this.showError('Error loading slide: ' + error.message);
+            }
+        },
+
+        getRenderer: function(type) {
+            var registry = {
+                // Content / Presentation
+                'content-text':          this.renderContent,
+                'content':               this.renderContent,
+                'rich-text-editor':      this.renderRichText,
+                'content-media':         this.renderImage,
+                'content-image':         this.renderImage,
+                'content-video':         this.renderVideo,
+                'transcript-caption':    this.renderContent,
+                'infographic':           this.renderImage,
+                'quotation':             this.renderQuotation,
+                // Navigation / Layout
+                'tabs':                  this.renderTabs,
+                'accordion':             this.renderAccordion,
+                'stepper':               this.renderStepper,
+                'timeline':              this.renderTimeline,
+                'course-menu':           this.renderModuleOverview,
+                'breadcrumb':            this.renderContent,
+                'sidebar-navigation':    this.renderModuleOverview,
+                // Assessment
+                'mcq':                   this.renderMCQ,
+                'multiple-select':       this.renderMultipleSelect,
+                'true-false':            this.renderTrueFalse,
+                'fill-in-blank':         this.renderFillInBlank,
+                'hotspot':               this.renderHotspot,
+                'image-hotspots':        this.renderHotspot,
+                'matching':              this.renderContent,
+                'drag-and-drop':         this.renderContent,
+                // Knowledge Check
+                'key-takeaways':         this.renderKeyTakeaways,
+                'summary-takeaways':     this.renderKeyTakeaways,
+                'learning-objectives':   this.renderLearningObjectives,
+                'flashcard':             this.renderFlashcard,
+                'quiz':                  this.renderMCQ,
+                // Scenario
+                'scenario':              this.renderScenario,
+                'branching-scenario':    this.renderScenario,
+                'decision-tree':         this.renderScenario,
+                'role-play':             this.renderScenario,
+                // Data & Analytics
+                'metric':                this.renderMetric,
+                'data-visualization':    this.renderDataTable,
+                'progress-tracker':      this.renderProgressTracker,
+                'analytics-view':        this.renderDataTable,
+                'heat-map':              this.renderDataTable,
+                // Interactive Tools
+                'code-snippet':          this.renderCodeSnippet,
+                'calculator':            this.renderContent,
+                'form':                  this.renderContent,
+                'interactive-tool':      this.renderContent,
+                // Learning Path
+                'learning-roadmap':      this.renderTimeline,
+                'module-overview':       this.renderModuleOverview,
+                'course-map':            this.renderModuleOverview,
+            };
+            return registry[type] || null;
+        },
+
+        renderUnknown: function(slide) {
+            return '<div class="slide"><p>Unknown slide type: ' +
+                   this.sanitize(slide.type || 'undefined') + '</p></div>';
+        },
+
+        renderContent: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Untitled');
+                var body = this.renderRichHTML(data.content || '');
+                return '<div class="template content-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="content-body">' + body + '</div>' +
+                       '</div>';
+            } catch (error) {
+                console.error('renderContent error:', error);
+                return '<div class="template error">' +
+                       '<p>Content rendering failed</p></div>';
+            }
+        },
+
+        renderTabs: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Tabs');
+                var tabs = Array.isArray(data.tabs) ? data.tabs : [];
+
+                if (tabs.length === 0) {
+                          var fallbackBody = this.renderRichHTML(data.content || '');
+                    return '<div class="template tabs-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<div class="content-body">' + fallbackBody + '</div>' +
+                           '</div>';
+                }
+
+                var navHtml = '';
+                var panelHtml = '';
+                for (var i = 0; i < tabs.length; i++) {
+                    var tab = tabs[i] || {};
+                    var tabId = this.sanitize(tab.id || ('tab-' + i));
+                    var tabTitle = this.sanitize(tab.title || ('Tab ' + (i + 1)));
+                    var tabBody = this.renderRichHTML(tab.body || tab.content || '');
+                    var activeClass = i === 0 ? ' active' : '';
+                    navHtml += '<button class="tabs-nav-btn' + activeClass + '" ' +
+                               'type="button" role="tab" ' +
+                               'aria-selected="' + (i === 0 ? 'true' : 'false') + '" ' +
+                               'aria-controls="tabs-panel-' + tabId + '" ' +
+                               'data-action="activate-tab" data-index="' + i + '">' +
+                               tabTitle + '</button>';
+                    panelHtml += '<div class="tabs-panel' + activeClass + '" ' +
+                                                                 'id="tabs-panel-' + tabId + '" role="tabpanel">' +
+                                 '<div class="content-body">' + tabBody + '</div>' +
+                                 '</div>';
+                }
+
+                return '<div class="template tabs-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="tabs-nav">' + navHtml + '</div>' +
+                       '<div class="tabs-panels">' + panelHtml + '</div>' +
+                       '</div>';
+            } catch (error) {
+                console.error('renderTabs error:', error);
+                return '<div class="template error">' +
+                       '<p>Tabs rendering failed</p></div>';
+            }
+        },
+
+        renderAccordion: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Accordion');
+                var panels = Array.isArray(data.panels) ? data.panels : [];
+
+                if (panels.length === 0) {
+                    var fallbackBody = this.renderRichHTML(data.content || '');
+                    return '<div class="template accordion-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<div class="content-body">' + fallbackBody + '</div>' +
+                           '</div>';
+                }
+
+                var panelsHtml = '';
+                for (var i = 0; i < panels.length; i++) {
+                    var panel = panels[i] || {};
+                    var panelTitle = this.sanitize(panel.title || ('Section ' + (i + 1)));
+                    var panelBody = this.renderRichHTML(panel.body || panel.content || '');
+                    var expanded = i === 0 ? 'true' : 'false';
+                    var openClass = i === 0 ? ' open' : '';
+
+                    panelsHtml += '<div class="accordion-item' + openClass + '">' +
+                                  '<button type="button" class="accordion-trigger" ' +
+                                  'aria-expanded="' + expanded + '" ' +
+                                  'data-action="toggle-accordion" data-index="' + i + '">' +
+                                  panelTitle + '</button>' +
+                                  '<div class="accordion-panel">' +
+                                  '<div class="content-body">' + panelBody + '</div>' +
+                                  '</div>' +
+                                  '</div>';
+                }
+
+                return '<div class="template accordion-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="accordion-list">' + panelsHtml + '</div>' +
+                       '</div>';
+            } catch (error) {
+                console.error('renderAccordion error:', error);
+                return '<div class="template error"><p>Accordion rendering failed</p></div>';
+            }
+        },
+
+        // ──────────────────────────────────────────────────────────────
+        // EXTENDED RENDERER REGISTRY
+        // ──────────────────────────────────────────────────────────────
+
+        renderRichText: function(slide) {
+            try {
+                var data = slide.data || {};
+                var body = this.renderRichHTML(data.htmlContent || data.content || '');
+                return '<div class="template rich-text-template">' +
+                       '<div class="content-body">' + body + '</div>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Rich text render failed</p></div>'; }
+        },
+
+        renderQuotation: function(slide) {
+            try {
+                var data = slide.data || {};
+                var quote = this.sanitize(data.quoteText || data.quote || '');
+                var author = this.sanitize(data.author || '');
+                var source = this.sanitize(data.source || '');
+                var attribution = author + (source ? ' — ' + source : '');
+                return '<div class="template quotation-template">' +
+                       '<figure role="figure">' +
+                       '<blockquote class="quotation-text">' + quote + '</blockquote>' +
+                       (attribution ? '<figcaption class="quotation-attribution">— ' + attribution + '</figcaption>' : '') +
+                       '</figure>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Quotation render failed</p></div>'; }
+        },
+
+        renderKeyTakeaways: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Key Takeaways');
+                var items = Array.isArray(data.takeaways) ? data.takeaways :
+                            Array.isArray(data.items) ? data.items : [];
+                var content = this.renderRichHTML(data.content || '');
+                var listHtml = items.map(function(item) {
+                    var text = typeof item === 'string' ? item : (item.text || item.title || '');
+                    return '<li class="takeaway-item">' + this.sanitize(text) + '</li>';
+                }.bind(this)).join('');
+                return '<div class="template takeaways-template" role="region" aria-label="' + title + '">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       (content ? '<div class="content-body">' + content + '</div>' : '') +
+                       (listHtml ? '<ul class="takeaways-list">' + listHtml + '</ul>' : '') +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Takeaways render failed</p></div>'; }
+        },
+
+        renderLearningObjectives: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Learning Objectives');
+                var objectives = Array.isArray(data.objectives) ? data.objectives : [];
+                var listHtml = objectives.map(function(obj, i) {
+                    var text = typeof obj === 'string' ? obj : (obj.text || obj.title || obj.description || '');
+                    return '<li class="objective-item">' +
+                           '<span class="objective-number" aria-hidden="true">' + (i + 1) + '</span> ' +
+                           this.sanitize(text) + '</li>';
+                }.bind(this)).join('');
+                return '<div class="template objectives-template" role="region" aria-label="' + title + '">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       (listHtml ? '<ol class="objectives-list">' + listHtml + '</ol>' :
+                        '<p class="content-body">' + this.renderRichHTML(data.content || '') + '</p>') +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Objectives render failed</p></div>'; }
+        },
+
+        renderImage: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || '');
+                var caption = this.sanitize(data.caption || data.altText || '');
+                var alt = this.sanitize(data.altText || data.caption || title || 'Course image');
+                var imgSrc = data.src || data.url || '';
+                if (!imgSrc && data.mediaAssetId) {
+                    imgSrc = 'assets/' + this.sanitize(String(data.mediaAssetId));
+                }
+                var imgHtml = imgSrc
+                    ? '<img src="' + this.sanitize(imgSrc) + '" alt="' + alt + '" class="content-image">'
+                    : '<div class="image-placeholder" role="img" aria-label="' + alt + '">[Image: ' + alt + ']</div>';
+                return '<div class="template image-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<figure class="image-figure">' +
+                       imgHtml +
+                       (caption ? '<figcaption class="image-caption">' + caption + '</figcaption>' : '') +
+                       '</figure>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Image render failed</p></div>'; }
+        },
+
+        renderVideo: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || '');
+                var caption = this.sanitize(data.caption || '');
+                var transcript = this.renderRichHTML(data.transcript || '');
+                var videoSrc = data.src || data.url || '';
+                if (!videoSrc && data.videoAssetId) {
+                    videoSrc = 'assets/' + this.sanitize(String(data.videoAssetId));
+                }
+                var videoHtml = videoSrc
+                    ? '<video src="' + this.sanitize(videoSrc) + '" controls class="content-video"' +
+                      (data.autoplay ? ' autoplay muted' : '') + '>' +
+                      'Your browser does not support video.</video>'
+                    : '<div class="video-placeholder" role="img" aria-label="Video">[Video placeholder]</div>';
+                return '<div class="template video-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<div class="video-container">' + videoHtml + '</div>' +
+                       (caption ? '<p class="video-caption">' + caption + '</p>' : '') +
+                       (transcript ? '<details class="video-transcript"><summary>Transcript</summary>' +
+                                     '<div class="transcript-body">' + transcript + '</div></details>' : '') +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Video render failed</p></div>'; }
+        },
+
+        renderCodeSnippet: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || '');
+                var code = data.code || '';
+                var lang = this.sanitize(data.language || 'text');
+                var escCode = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                return '<div class="template code-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<div class="code-container">' +
+                       '<div class="code-lang-badge">' + lang + '</div>' +
+                       '<pre class="code-block" tabindex="0"><code class="lang-' + lang + '">' +
+                       escCode + '</code></pre></div></div>';
+            } catch (e) { return '<div class="template error"><p>Code snippet render failed</p></div>'; }
+        },
+
+        renderMultipleSelect: function(slide, idx) {
+            try {
+                if (!slide.data || !slide.data.questions || !slide.data.questions.length) {
+                    return '<div class="template"><p>No questions available</p></div>';
+                }
+                var question = slide.data.questions[0];
+                var safeQ = this.sanitize(question.question || 'Question');
+                var optionsHTML = '';
+                if (Array.isArray(question.options)) {
+                    question.options.forEach(function(opt, i) {
+                        var safeText = this.sanitize(opt.text || ('Option ' + (i + 1)));
+                        optionsHTML += '<label class="mcq-option">' +
+                                       '<input type="checkbox" name="multi_' + idx + '_' + i + '" value="' + i + '">' +
+                                       '<span class="option-text">' + safeText + '</span></label>';
+                    }.bind(this));
+                }
+                return '<div class="template mcq-template multiple-select-template">' +
+                       '<p class="mcq-hint">Select all that apply</p>' +
+                       '<h2 class="mcq-question">' + safeQ + '</h2>' +
+                       '<div class="mcq-options">' + optionsHTML + '</div>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Multiple select render failed</p></div>'; }
+        },
+
+        renderTrueFalse: function(slide, idx) {
+            try {
+                if (!slide.data || !slide.data.questions || !slide.data.questions.length) {
+                    return '<div class="template"><p>No questions available</p></div>';
+                }
+                var question = slide.data.questions[0];
+                var safeQ = this.sanitize(question.question || question.statement || 'Statement');
+                var answeredIndex = this.state.quizAnswers[idx];
+                var options = [
+                    {'text': 'True', 'isCorrect': question.correctAnswer === true || question.correctAnswer === 'true'},
+                    {'text': 'False', 'isCorrect': question.correctAnswer === false || question.correctAnswer === 'false'}
+                ];
+                var optHtml = '';
+                options.forEach(function(opt, i) {
+                    var isSelected = answeredIndex === i;
+                    var selectedClass = isSelected ? ' selected' : '';
+                    optHtml += '<label class="mcq-option' + selectedClass + '">' +
+                               '<input type="radio" name="tf_' + idx + '" value="' + i + '"' +
+                               (isSelected ? ' checked' : '') +
+                               ' data-change-action="select-answer" data-slide-idx="' + idx + '" data-option-idx="' + i + '">' +
+                               '<span class="option-text">' + opt.text + '</span></label>';
+                }.bind(this));
+                return '<div class="template mcq-template true-false-template">' +
+                       '<h2 class="mcq-question">' + safeQ + '</h2>' +
+                       '<div class="mcq-options">' + optHtml + '</div>' +
+                       '<div id="feedback-' + idx + '" class="mcq-feedback"></div>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>True/False render failed</p></div>'; }
+        },
+
+        renderFillInBlank: function(slide, idx) {
+            try {
+                var data = slide.data || {};
+                var question = this.sanitize(data.question || data.content || '');
+                return '<div class="template fill-blank-template">' +
+                       '<h2 class="content-title">' + this.sanitize(slide.title || 'Fill in the Blank') + '</h2>' +
+                       '<p class="mcq-question">' + question + '</p>' +
+                       '<div class="fill-blank-input">' +
+                       '<input type="text" class="blank-input" placeholder="Type your answer..." ' +
+                       'aria-label="Answer" id="fib-input-' + idx + '">' +
+                       '<button type="button" class="submit-btn" ' +
+                       'data-action="check-fill-blank" data-slide-idx="' + idx + '">' +
+                       'Check Answer</button></div>' +
+                       '<div id="feedback-' + idx + '" class="mcq-feedback"></div>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Fill-in-blank render failed</p></div>'; }
+        },
+
+        checkFillBlank: function(idx) {
+            try {
+                var input = document.getElementById('fib-input-' + idx);
+                var fb = document.getElementById('feedback-' + idx);
+                if (!input || !fb) return;
+                var slide = this.state.courseData.templates[idx];
+                var answers = (slide && slide.data && slide.data.correctAnswers) || [];
+                var val = (input.value || '').trim().toLowerCase();
+                var correct = answers.some(function(a) {
+                    var s = typeof a === 'string' ? a : (a.text || '');
+                    var caseSensitive = slide.data && slide.data.caseSensitive;
+                    return caseSensitive ? s === input.value.trim() : s.toLowerCase() === val;
+                });
+                fb.innerHTML = '<p class="' + (correct ? 'ok' : 'err') + '">' +
+                               (correct ? '✓ Correct!' : '✗ Incorrect') + '</p>';
+            } catch (e) { console.error('checkFillBlank error:', e); }
+        },
+
+        renderFlashcard: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Flashcards');
+                var cards = Array.isArray(data.cards) ? data.cards : [];
+                if (cards.length === 0) {
+                    return '<div class="template"><p>No flashcards available</p></div>';
+                }
+                var cardsHtml = cards.map(function(card, i) {
+                    var front = this.renderRichHTML(card.front || card.question || '');
+                    var back = this.renderRichHTML(card.back || card.answer || '');
+                          return '<div class="flashcard" id="fc-' + i + '" ' +
+                              'role="button" tabindex="0" aria-pressed="false" ' +
+                              'data-action="flip-card">' +
+                           '<div class="flashcard-inner">' +
+                           '<div class="flashcard-front"><div class="fc-label">Question</div>' + front + '</div>' +
+                           '<div class="flashcard-back"><div class="fc-label">Answer</div>' + back + '</div>' +
+                           '</div></div>';
+                }.bind(this)).join('');
+                return '<div class="template flashcard-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<p class="fc-hint">Click or press Enter to flip each card</p>' +
+                       '<div class="flashcards-grid">' + cardsHtml + '</div>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Flashcard render failed</p></div>'; }
+        },
+
+        renderStepper: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Steps');
+                var steps = Array.isArray(data.steps) ? data.steps : [];
+                if (steps.length === 0) {
+                    return '<div class="template content-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<div class="content-body">' + this.renderRichHTML(data.content || '') + '</div></div>';
+                }
+                var stepsHtml = steps.map(function(step, i) {
+                    var stepTitle = this.sanitize(step.title || step.label || ('Step ' + (i + 1)));
+                    var stepBody = this.renderRichHTML(step.content || step.description || '');
+                    return '<li class="stepper-item" role="listitem">' +
+                           '<div class="stepper-number" aria-hidden="true">' + (i + 1) + '</div>' +
+                           '<div class="stepper-content">' +
+                           '<h3 class="stepper-title">' + stepTitle + '</h3>' +
+                           (stepBody ? '<div class="stepper-body">' + stepBody + '</div>' : '') +
+                           '</div></li>';
+                }.bind(this)).join('');
+                return '<div class="template stepper-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<ol class="stepper-list" role="list">' + stepsHtml + '</ol>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Stepper render failed</p></div>'; }
+        },
+
+        renderTimeline: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Timeline');
+                var events = Array.isArray(data.events) ? data.events :
+                             Array.isArray(data.items) ? data.items : [];
+                if (events.length === 0) {
+                    return '<div class="template content-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<div class="content-body">' + this.renderRichHTML(data.content || '') + '</div></div>';
+                }
+                var eventsHtml = events.map(function(evt) {
+                    var label = this.sanitize(evt.date || evt.label || evt.time || '');
+                    var evtTitle = this.sanitize(evt.title || evt.name || '');
+                    var desc = this.renderRichHTML(evt.description || evt.content || '');
+                    return '<li class="timeline-event" role="listitem">' +
+                           (label ? '<div class="timeline-label">' + label + '</div>' : '') +
+                           '<div class="timeline-dot" aria-hidden="true"></div>' +
+                           '<div class="timeline-content">' +
+                           (evtTitle ? '<h3 class="timeline-title">' + evtTitle + '</h3>' : '') +
+                           (desc ? '<div class="timeline-body">' + desc + '</div>' : '') +
+                           '</div></li>';
+                }.bind(this)).join('');
+                return '<div class="template timeline-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<ul class="timeline-list" role="list">' + eventsHtml + '</ul>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Timeline render failed</p></div>'; }
+        },
+
+        renderMetric: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || '');
+                var metrics = Array.isArray(data.metrics) ? data.metrics :
+                              [{value: data.value, label: data.label, unit: data.unit, trend: data.trend}];
+                var metricsHtml = metrics.filter(function(m) { return m && m.label; }).map(function(m) {
+                    var val = this.sanitize(String(m.value || '0'));
+                    var unit = this.sanitize(m.unit || '');
+                    var lbl = this.sanitize(m.label || '');
+                    var trend = m.trend ? ' (' + this.sanitize(String(m.trend)) + ')' : '';
+                    return '<div class="metric-card" role="figure" aria-label="' + lbl + '">' +
+                           '<div class="metric-value">' + val + (unit ? '<span class="metric-unit">' + unit + '</span>' : '') + '</div>' +
+                           '<div class="metric-label">' + lbl + trend + '</div>' +
+                           '</div>';
+                }.bind(this)).join('');
+                return '<div class="template metric-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<div class="metrics-grid">' + metricsHtml + '</div>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Metric render failed</p></div>'; }
+        },
+
+        renderProgressTracker: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || data.label || 'Progress');
+                var pct = Math.min(100, Math.max(0, Number(data.progress) || 0));
+                var total = Number(data.total) || 100;
+                var current = Number(data.current || data.progress) || 0;
+                var label = this.sanitize(data.label || title);
+                return '<div class="template progress-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="prog-container" role="progressbar" ' +
+                       'aria-valuenow="' + current + '" aria-valuemin="0" aria-valuemax="' + total + '" ' +
+                       'aria-label="' + label + '">' +
+                       '<div class="prog-bar"><div class="prog-fill" style="width:' + pct + '%"></div></div>' +
+                       '<div class="prog-label">' + pct + '%' + (data.label ? ' — ' + label : '') + '</div>' +
+                       '</div></div>';
+            } catch (e) { return '<div class="template error"><p>Progress tracker render failed</p></div>'; }
+        },
+
+        renderScenario: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Scenario');
+                var text = this.renderRichHTML(data.scenarioText || data.content || '');
+                var options = Array.isArray(data.options) ? data.options : [];
+                var optHtml = options.map(function(opt, i) {
+                    var optText = typeof opt === 'string' ? opt : (opt.text || opt.label || '');
+                    var feedback = typeof opt === 'object' ? (opt.feedback || '') : '';
+                          return '<li class="scenario-option">' +
+                              '<button type="button" class="scenario-btn" data-action="show-scenario-feedback" ' +
+                              'data-feedback="' + this.sanitizeAttr(feedback) + '">' +
+                              this.sanitize(optText) + '</button>' +
+                              '</li>';
+                }.bind(this)).join('');
+                return '<div class="template scenario-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       '<div class="scenario-text">' + text + '</div>' +
+                       (optHtml ? '<ul class="scenario-options" role="list">' + optHtml + '</ul>' : '') +
+                       '<div class="scenario-feedback" role="status" aria-live="polite"></div>' +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Scenario render failed</p></div>'; }
+        },
+
+        showScenarioFeedback: function(btn, feedback) {
+            try {
+                if (!btn) return;
+                var container = btn.closest('.scenario-template') || btn.parentElement;
+                if (!container) return;
+                var fb = container.querySelector('.scenario-feedback');
+                if (fb && feedback) {
+                    fb.innerHTML = '<p class="scenario-fb-text">' + this.sanitize(feedback) + '</p>';
+                }
+                var allBtns = container.querySelectorAll('.scenario-btn');
+                allBtns.forEach(function(b) { b.setAttribute('aria-pressed', 'false'); });
+                btn.setAttribute('aria-pressed', 'true');
+            } catch (e) { console.error('showScenarioFeedback error:', e); }
+        },
+
+        renderDataTable: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || '');
+                var rows = Array.isArray(data.rows) ? data.rows :
+                           (Array.isArray(data.data) ? data.data : []);
+                var headers = Array.isArray(data.headers) ? data.headers :
+                              (Array.isArray(data.columns) ? data.columns : []);
+                if (rows.length === 0) {
+                    return '<div class="template content-template">' +
+                           (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                           '<div class="content-body">' + this.renderRichHTML(data.content || '[Chart/Data]') + '</div>' +
+                           '</div>';
+                }
+                var theadHtml = '';
+                if (headers.length > 0) {
+                    theadHtml = '<thead><tr>' +
+                        headers.map(function(h) { return '<th scope="col">' + this.sanitize(String(h)) + '</th>'; }.bind(this)).join('') +
+                        '</tr></thead>';
+                }
+                var tbodyHtml = '<tbody>' + rows.map(function(row) {
+                    var cells = Array.isArray(row) ? row : Object.values(row || {});
+                    return '<tr>' + cells.map(function(c) {
+                        return '<td>' + this.sanitize(String(c == null ? '' : c)) + '</td>';
+                    }.bind(this)).join('') + '</tr>';
+                }.bind(this)).join('') + '</tbody>';
+                return '<div class="template datatable-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       '<div class="table-container" role="region" aria-label="Data table" tabindex="0">' +
+                       '<table class="data-table">' + theadHtml + tbodyHtml + '</table>' +
+                       '</div></div>';
+            } catch (e) { return '<div class="template error"><p>Data visualization render failed</p></div>'; }
+        },
+
+        renderHotspot: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || '');
+                var hotspots = Array.isArray(data.hotspots) ? data.hotspots : [];
+                var imgSrc = data.src || data.url || '';
+                if (!imgSrc && data.imageAssetId) {
+                    imgSrc = 'assets/' + this.sanitize(String(data.imageAssetId));
+                }
+                var hsList = hotspots.map(function(hs) {
+                    var label = this.sanitize(hs.label || hs.title || 'Hotspot');
+                    var desc = this.renderRichHTML(hs.description || hs.content || '');
+                    return '<li class="hotspot-item"><strong>' + label + '</strong>' +
+                           (desc ? ': <span>' + desc + '</span>' : '') + '</li>';
+                }.bind(this)).join('');
+                return '<div class="template hotspot-template">' +
+                       (title ? '<h2 class="content-title">' + title + '</h2>' : '') +
+                       (imgSrc ? '<figure class="hotspot-image-figure"><img src="' + this.sanitize(imgSrc) +
+                                 '" alt="' + (this.sanitize(data.altText || title || 'Interactive image')) + '" class="content-image"></figure>' : '') +
+                       (hsList ? '<ul class="hotspot-list" role="list">' + hsList + '</ul>' : '') +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Hotspot render failed</p></div>'; }
+        },
+
+        renderModuleOverview: function(slide) {
+            try {
+                var data = slide.data || {};
+                var title = this.sanitize(slide.title || 'Module Overview');
+                var desc = this.renderRichHTML(data.description || data.content || '');
+                var modules = Array.isArray(data.modules) ? data.modules : [];
+                var modHtml = modules.map(function(mod) {
+                    var modTitle = this.sanitize(mod.title || mod.name || '');
+                    var modDesc = this.sanitize(mod.description || '');
+                    return '<li class="module-item" role="listitem">' +
+                           '<div class="module-title">' + modTitle + '</div>' +
+                           (modDesc ? '<div class="module-desc">' + modDesc + '</div>' : '') +
+                           '</li>';
+                }.bind(this)).join('');
+                return '<div class="template module-overview-template" role="region" aria-label="' + title + '">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       (desc ? '<div class="content-body">' + desc + '</div>' : '') +
+                       (modHtml ? '<ul class="modules-list" role="list">' + modHtml + '</ul>' : '') +
+                       '</div>';
+            } catch (e) { return '<div class="template error"><p>Module overview render failed</p></div>'; }
+        },
+
+        // ──────────────────────────────────────────────────────────────
+
+        toggleAccordion: function(panelIndex) {
+            try {
+                var container = document.getElementById('slide-container');
+                if (!container) return;
+                var items = container.querySelectorAll('.accordion-item');
+                items.forEach(function(item, idx) {
+                    var trigger = item.querySelector('.accordion-trigger');
+                    var shouldOpen = idx === panelIndex ? !item.classList.contains('open') : false;
+                    if (shouldOpen) {
+                        item.classList.add('open');
+                    } else {
+                        item.classList.remove('open');
+                    }
+                    if (trigger) {
+                        trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+                    }
+                });
+            } catch (error) {
+                console.error('toggleAccordion error:', error);
+            }
+        },
+
+        dispatchAction: function(el) {
+            if (!el) return;
+            var action = el.getAttribute('data-action');
+            if (!action) return;
+
+            if (action === 'activate-tab') {
+                this.activateTab(Number(el.getAttribute('data-index') || 0));
+                return;
+            }
+
+            if (action === 'toggle-accordion') {
+                this.toggleAccordion(Number(el.getAttribute('data-index') || 0));
+                return;
+            }
+
+            if (action === 'check-fill-blank') {
+                this.checkFillBlank(Number(el.getAttribute('data-slide-idx') || 0));
+                return;
+            }
+
+            if (action === 'flip-card') {
+                el.classList.toggle('flipped');
+                el.setAttribute('aria-pressed', el.classList.contains('flipped').toString());
+                return;
+            }
+
+            if (action === 'show-scenario-feedback') {
+                this.showScenarioFeedback(el, el.getAttribute('data-feedback') || '');
+            }
+        },
+
+        activateTab: function(tabIndex) {
+            try {
+                var container = document.getElementById('slide-container');
+                if (!container) return;
+
+                var navBtns = container.querySelectorAll('.tabs-nav-btn');
+                var panels = container.querySelectorAll('.tabs-panel');
+
+                navBtns.forEach(function(btn, idx) {
+                    if (idx === tabIndex) {
+                        btn.classList.add('active');
+                        btn.setAttribute('aria-selected', 'true');
+                    } else {
+                        btn.classList.remove('active');
+                        btn.setAttribute('aria-selected', 'false');
+                    }
+                });
+
+                panels.forEach(function(panel, idx) {
+                    if (idx === tabIndex) {
+                        panel.classList.add('active');
+                    } else {
+                        panel.classList.remove('active');
+                    }
+                });
+            } catch (error) {
+                console.error('activateTab error:', error);
+            }
+        },
+
+        renderMCQ: function(slide, idx) {
+            try {
+                if (!slide.data || !slide.data.questions ||
+                    slide.data.questions.length === 0) {
+                    return '<div class="template"><p>No questions available</p></div>';
+                }
+
+                var question = slide.data.questions[0];
+                if (!question) {
+                    return '<div class="template"><p>Invalid question data</p></div>';
+                }
+
+                var safeQuestion = this.sanitize(question.question || 'Question');
+                var answeredIndex = this.state.quizAnswers[idx];
+
+                var optionsHTML = '';
+                if (question.options && Array.isArray(question.options)) {
+                    for (var i = 0; i < question.options.length; i++) {
+                        var option = question.options[i];
+                        if (!option) continue;
+
+                        var safeText = this.sanitize(option.text ||
+                                                   'Option ' + (i + 1));
+                        var isSelected = answeredIndex === i;
+                        var checked = isSelected ? ' checked' : '';
+                        var selectedClass = isSelected ? ' selected' : '';
+
+                        optionsHTML += '<label class="mcq-option' + selectedClass +
+                                     '">' +
+                                     '<input type="radio" name="answer_' + idx +
+                                     '" value="' + i +
+                                     '" data-change-action="select-answer" data-slide-idx="' + idx +
+                                     '" data-option-idx="' + i + '"' + checked + '>' +
+                                     '<span class="option-text">' + safeText +
+                                     '</span>' +
+                                     '</label>';
+                    }
+                }
+
+                return '<div class="template mcq-template">' +
+                       '<h2 class="mcq-question">' + safeQuestion + '</h2>' +
+                       '<div class="mcq-options">' + optionsHTML + '</div>' +
+                       '<div id="feedback-' + idx + '" class="mcq-feedback">' +
+                       '</div>' +
+                       '</div>';
+
+            } catch (error) {
+                console.error('❌ renderMCQ failed:', error);
+                return '<div class="template error">' +
+                       '<p>Failed to render question</p></div>';
+            }
+        },
+
+        selectAnswer: function(slideIdx, optIdx) {
+            try {
+                console.log('=== MCQ DEBUG: selectAnswer called ===');
+                console.log('Slide index:', slideIdx, 'Option index:', optIdx);
+                
+                var slide = this.state.courseData.templates[slideIdx];
+                if (!slide) {
+                    console.error('MCQ DEBUG: Slide not found at index', slideIdx);
+                    return;
+                }
+                console.log('Slide type:', slide.type, 'Title:', slide.title);
+                
+                if (!slide.data || !slide.data.questions) {
+                    console.error('MCQ DEBUG: Invalid slide data for slide', slideIdx, 'data:', slide.data);
+                    return;
+                }
+
+                var question = slide.data.questions[0];
+                if (!question) {
+                    console.error('MCQ DEBUG: No question found in slide', slideIdx);
+                    return;
+                }
+                console.log('Question text:', question.question);
+                
+                if (!question.options) {
+                    console.error('MCQ DEBUG: No options found for question in slide', slideIdx);
+                    return;
+                }
+                console.log('Total options:', question.options.length);
+
+                var option = question.options[optIdx];
+                if (!option) {
+                    console.error('MCQ DEBUG: Option not found at index', optIdx, 'for slide', slideIdx);
+                    return;
+                }
+                console.log('Selected option text:', option.text);
+                console.log('Raw option.isCorrect value:', option.isCorrect, 'Type:', typeof option.isCorrect);
+
+                // Robust boolean checking for isCorrect
+                var correct = false;
+                if (typeof option.isCorrect === 'boolean') {
+                    correct = option.isCorrect;
+                    console.log('MCQ DEBUG: isCorrect is boolean, value:', correct);
+                } else if (typeof option.isCorrect === 'string') {
+                    correct = option.isCorrect.toLowerCase() === 'true';
+                    console.log('MCQ DEBUG: isCorrect is string, converted to:', correct);
+                } else {
+                    console.warn('MCQ DEBUG: Unexpected isCorrect type:', typeof option.isCorrect, 'value:', option.isCorrect);
+                    correct = Boolean(option.isCorrect);
+                    console.log('MCQ DEBUG: Forced boolean conversion result:', correct);
+                }
+
+                console.log('MCQ DEBUG: Final correctness determination:', correct);
+                console.log('MCQ DEBUG: Recording answer in state...');
+                
+                this.state.quizAnswers[slideIdx] = optIdx;
+                console.log('MCQ DEBUG: Answer recorded in state.quizAnswers[' + slideIdx + '] =', optIdx);
+
+                // Record in SCORM
+                if (this.state.scormReady) {
+                    console.log('MCQ DEBUG: SCORM is ready, recording quiz answer...');
+                    SCORM.recordQuizAnswer(
+                        'q_' + slideIdx,
+                        optIdx,
+                        correct,
+                        question.options
+                    );
+                    console.log('MCQ DEBUG: SCORM recording completed');
+                } else {
+                    console.warn('MCQ DEBUG: SCORM not ready, skipping SCORM recording');
+                }
+
+                var fb = document.getElementById('feedback-' + slideIdx);
+                if (fb) {
+                    var feedbackText = correct ? '✓ Correct!' : '✗ Incorrect';
+                    fb.innerHTML = '<p class="' + (correct ? 'ok' : 'err') + '">' + feedbackText + '</p>';
+                    console.log('MCQ DEBUG: Updated feedback element for slide', slideIdx, 'to:', feedbackText);
+                } else {
+                    console.warn('MCQ DEBUG: Feedback element not found for slide', slideIdx);
+                }
+
+                console.log('=== MCQ DEBUG: selectAnswer completed successfully ===');
+
+            } catch (error) {
+                console.error('MCQ DEBUG: selectAnswer error:', error);
+                console.error('MCQ DEBUG: Error stack:', error.stack);
+            }
+        },
+
+        sanitize: function(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        },
+
+        sanitizeAttr: function(text) {
+            return this.sanitize(text)
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
+
+        renderRichHTML: function(value) {
+            if (!value) return '';
+            var raw = String(value);
+            var parser = new DOMParser();
+            var doc = parser.parseFromString('<div>' + raw + '</div>', 'text/html');
+            var root = doc.body.firstElementChild;
+            if (!root) return this.sanitize(raw);
+
+            var blocked = root.querySelectorAll('script,style,iframe,object,embed,link,meta');
+            blocked.forEach(function(node) { node.remove(); });
+
+            var all = root.querySelectorAll('*');
+            all.forEach(function(node) {
+                var attrs = Array.from(node.attributes || []);
+                attrs.forEach(function(attr) {
+                    var name = String(attr.name || '').toLowerCase();
+                    var val = String(attr.value || '');
+                    if (name.startsWith('on')) {
+                        node.removeAttribute(attr.name);
+                        return;
+                    }
+                    if ((name === 'href' || name === 'src') && /^\s*javascript:/i.test(val)) {
+                        node.removeAttribute(attr.name);
+                    }
+                });
+            });
+
+            return root.innerHTML;
+        },
+
+        applyScopedCustomCss: function(slide) {
+            try {
+                if (this.state.scopedStyleEl && this.state.scopedStyleEl.parentNode) {
+                    this.state.scopedStyleEl.parentNode.removeChild(this.state.scopedStyleEl);
+                    this.state.scopedStyleEl = null;
+                }
+
+                var cssText = '';
+                if (slide && typeof slide.customCss === 'string') {
+                    cssText = slide.customCss;
+                } else if (slide && slide.data && typeof slide.data.customCss === 'string') {
+                    cssText = slide.data.customCss;
+                }
+
+                if (!cssText || !slide || !slide.id) return;
+
+                var scopedCss = this.scopeCssToComponent(cssText, slide.id);
+                if (!scopedCss) return;
+
+                var styleEl = document.createElement('style');
+                styleEl.type = 'text/css';
+                styleEl.setAttribute('data-runtime-scoped-css', slide.id);
+                styleEl.appendChild(document.createTextNode(scopedCss));
+                document.head.appendChild(styleEl);
+                this.state.scopedStyleEl = styleEl;
+            } catch (error) {
+                console.error('applyScopedCustomCss error:', error);
+            }
+        },
+
+        scopeCssToComponent: function(cssText, componentId) {
+            try {
+                var raw = String(cssText || '');
+                if (!raw.trim()) return '';
+
+                var safeComponentId = String(componentId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+                if (!safeComponentId) return '';
+
+                var scope = '[data-component="' + safeComponentId + '"]';
+                var blocks = raw.split('}');
+                var out = [];
+
+                for (var i = 0; i < blocks.length; i++) {
+                    var block = blocks[i].trim();
+                    if (!block) continue;
+                    var parts = block.split('{');
+                    if (parts.length < 2) continue;
+                    var selector = parts[0].trim();
+                    var body = parts.slice(1).join('{').trim();
+                    if (!selector || !body) continue;
+
+                    if (selector.charAt(0) === '@') {
+                        out.push(selector + '{' + body + '}');
+                    } else {
+                        out.push(scope + ' ' + selector + ' {' + body + '}');
+                    }
+                }
+
+                return out.join('\n');
+            } catch (error) {
+                console.error('scopeCssToComponent error:', error);
+                return '';
+            }
+        },
+
+        updateNavigation: function() {
+            try {
+                var prev = document.getElementById('prev-btn');
+                var next = document.getElementById('next-btn');
+                var fin = document.getElementById('finish-btn');
+
+                if (prev) prev.disabled = this.state.currentSlide === 0;
+
+                if (this.state.currentSlide === this.state.totalSlides - 1) {
+                    if (next) next.style.display = 'none';
+                    if (fin) fin.style.display = 'inline-block';
+                } else {
+                    if (next) next.style.display = 'inline-block';
+                    if (fin) fin.style.display = 'none';
+                }
+
+                var cnt = document.getElementById('slide-counter');
+                if (cnt) {
+                    cnt.textContent = (this.state.currentSlide + 1) + ' of ' + this.state.totalSlides;
+                }
+
+            } catch (error) {
+                console.error('updateNavigation error:', error);
+            }
+        },
+
+        updateProgress: function() {
+            try {
+                var progressFill = document.getElementById('progress-fill');
+                var progressText = document.getElementById('progress-text');
+
+                if (!progressFill || !progressText) return;
+
+                var pct = Math.round(((this.state.currentSlide + 1) / this.state.totalSlides) * 100);
+                progressFill.style.width = pct + '%';
+                progressText.textContent = pct + '%';
+
+            } catch (error) {
+                console.error('updateProgress error:', error);
+            }
+        },
+
+        finishCourse: function() {
+            try {
+                console.log('=== COURSE COMPLETION DEBUG: finishCourse called ===');
+                
+                // 1. Validate all questions answered
+                var unanswered = [];
+                if (this.state.courseData && this.state.courseData.templates) {
+                    this.state.courseData.templates.forEach((t, i) => {
+                        if (t.type === 'mcq' && this.state.quizAnswers[i] === undefined) {
+                            unanswered.push(i + 1);
+                        }
+                    });
+                }
+                
+                if (unanswered.length > 0) {
+                    alert('Please answer all questions before finishing. Unanswered slides: ' + unanswered.join(', '));
+                    return;
+                }
+
+                // 2. Mark all slides as completed
+                console.log('Marking all slides as completed...');
+                for (var i = 0; i < this.state.totalSlides; i++) {
+                    if (this.state.scormReady) {
+                        SCORM.markSlideComplete(i, this.state.totalSlides);
+                    }
+                }
+                
+                // 3. Set Course Complete
+                if (this.state.scormReady) {
+                    console.log('Setting course status to completed...');
+                    SCORM.setCourseComplete();
+                    
+                    var score = SCORM.calculateScore();
+                    alert('Course Complete! Score: ' + score + '%');
+                    
+                    // 4. Terminate SCORM session
+                    console.log('Terminating SCORM session...');
+                    SCORM.terminate();
+                } else {
+                    alert('Course completed (local only)');
+                }
+                
+                // 5. Close Window
+                try {
+                    window.close();
+                    if (window.parent && window.parent !== window) {
+                        window.parent.close();
+                    }
+                    if (window.top && window.top !== window) {
+                        window.top.close();
+                    }
+                } catch (e) {
+                    console.warn('Could not close window:', e);
+                }
+                
+            } catch (error) {
+                console.error('COMPLETION DEBUG: finishCourse error:', error);
+                alert('Course completed (with errors)');
+            }
+        },
+
+        showError: function(msg) {
+            try {
+                var container = document.getElementById('slide-container');
+                if (container) {
+                    container.innerHTML = '<div class="error">' + this.sanitize(msg) + '</div>';
+                }
+            } catch (error) {
+                console.error('showError failed:', error);
+            }
+        }
+    };
+
+    // FIX: Async initialization on page load
+    window.addEventListener('load', async function() {
+        console.log('Page loaded, starting player initialization...');
+        await Player.init();
+    });
+
+    // FIX: Event handlers with error boundaries
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            var prevBtn = document.getElementById('prev-btn');
+            var nextBtn = document.getElementById('next-btn');
+            var finishBtn = document.getElementById('finish-btn');
+
+            document.addEventListener('click', function(event) {
+                var actionEl = event.target && event.target.closest
+                    ? event.target.closest('[data-action]')
+                    : null;
+                if (!actionEl) return;
+                Player.dispatchAction(actionEl);
+            });
+
+            document.addEventListener('keydown', function(event) {
+                var key = event && event.key ? event.key : '';
+                if (key !== 'Enter' && key !== ' ') return;
+                var actionEl = event.target && event.target.closest
+                    ? event.target.closest('[data-action]')
+                    : null;
+                if (!actionEl) return;
+                event.preventDefault();
+                Player.dispatchAction(actionEl);
+            });
+
+            document.addEventListener('change', function(event) {
+                var el = event.target;
+                if (!el || !el.getAttribute) return;
+                var action = el.getAttribute('data-change-action');
+                if (action !== 'select-answer') return;
+                var slideIdx = Number(el.getAttribute('data-slide-idx') || 0);
+                var optionIdx = Number(el.getAttribute('data-option-idx') || 0);
+                Player.selectAnswer(slideIdx, optionIdx);
+            });
+
+            if (prevBtn) {
+                prevBtn.onclick = function() {
+                    if (Player.state.currentSlide > 0) {
+                        Player.loadSlide(Player.state.currentSlide - 1);
+                    }
+                };
+            }
+
+            if (nextBtn) {
+                nextBtn.onclick = function() {
+                    console.log('DEBUG: Next button clicked, current slide:', Player.state.currentSlide);
+                    if (Player.state.currentSlide < Player.state.totalSlides - 1) {
+                        // Mark current slide as completed before navigating
+                        if (Player.state.scormReady) {
+                            console.log('DEBUG: SCORM ready, marking slide complete');
+                            console.log('DEBUG: Objectives before marking:', SCORM.getAllObjectivesStatus(Player.state.totalSlides));
+                            SCORM.markSlideComplete(Player.state.currentSlide, Player.state.totalSlides);
+                            console.log('Marked current slide', Player.state.currentSlide, 'as completed');
+                            console.log('DEBUG: Objectives after marking:', SCORM.getAllObjectivesStatus(Player.state.totalSlides));
+                        } else {
+                            console.log('DEBUG: SCORM not ready, skipping objective marking');
+                        }
+                        Player.loadSlide(Player.state.currentSlide + 1);
+                        console.log('DEBUG: Navigated to slide:', Player.state.currentSlide + 1);
+                    }
+                };
+            }
+
+            if (finishBtn) {
+                finishBtn.onclick = function() {
+                    Player.finishCourse();
+                };
+            }
+
+        } catch (error) {
+            console.error('Event handler setup failed:', error);
+        }
+    });
+    </script>
+</body>
+</html>
