@@ -10,6 +10,7 @@ from typing import List, Optional, Literal
 # Pydantic v1/v2 compatibility imports
 try:  # Prefer Pydantic v2 style APIs
     from pydantic import BaseModel, Field, field_validator, model_validator
+    from pydantic import ConfigDict
     PYDANTIC_V2 = True
 except ImportError:  # Fallback to Pydantic v1
     from pydantic import BaseModel, Field, validator  # type: ignore
@@ -52,12 +53,19 @@ if PYDANTIC_V2:
 
     class TemplateData(BaseModel):
         """Template Data Model - flexible structure for different template types"""
-        content: str = Field(..., description="Main content text")
+        model_config = ConfigDict(extra="allow")
+
+        content: Optional[str] = Field(None, description="Main content text")
         subtitle: Optional[str] = Field(None, description="Optional subtitle")
         videoUrl: Optional[str] = Field(None, description="Video URL for content-video templates")
         questions: Optional[List[Question]] = Field(None, description="Questions for MCQ templates")
         tabs: Optional[List[dict]] = Field(None, description="Tabs data for tabs templates")
         panels: Optional[List[dict]] = Field(None, description="Panel data for accordion templates")
+        # text-with-media / content-media fields
+        body: Optional[str] = Field(None, description="Rich text body for text-with-media")
+        mediaUrl: Optional[str] = Field(None, description="Media URL for text-with-media")
+        mediaType: Optional[str] = Field(None, description="Media type: image | video | none")
+        mediaPosition: Optional[str] = Field(None, description="Media position: left | right | top | bottom")
 
     class Template(BaseModel):
         """Course Template/Slide Model"""
