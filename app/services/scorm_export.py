@@ -2534,7 +2534,7 @@ class SCORMExportService:
     transition: width 0.3s; width: 0%; }
 .progress-text { min-width: 40px; }
 .player-content { flex: 1; padding: 2rem; }
-.template { max-width: 800px; margin: 0 auto; line-height: 1.6; }
+.template { max-width: 100%; margin: 0 auto; line-height: 1.6; }
 .template h2 { color: var(--theme-text, #333); font-size: 1.8rem;
     border-bottom: 3px solid var(--theme-primary, #667eea); }
 .mcq-template { background: var(--theme-surface, #f8f9fa); padding: 2rem; border-radius: 12px;
