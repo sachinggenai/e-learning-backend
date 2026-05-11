@@ -102,6 +102,8 @@ class SCORMExportService:
         "video": "content-video",
         "content_text": "content-text",
         "quiz": "mcq",
+        "multi-select": "multiple-select",
+        "final-assessment": "final-assessment",
         "step-by-step": "stepper",
         "flashcards": "flashcard",
         "flip-cards": "flashcard",
@@ -167,6 +169,7 @@ class SCORMExportService:
             # Assessment
             "mcq", "multiple-select", "true-false", "fill-in-blank",
             "hotspot", "image-hotspots", "matching", "drag-and-drop",
+            "final-assessment",
             # Knowledge Check
             "key-takeaways", "summary-takeaways", "learning-objectives",
             "flashcard", "quiz",
@@ -1146,6 +1149,7 @@ class SCORMExportService:
             courseData: null,
             initialized: false,
             quizAnswers: {{}},
+            finalAssessmentSubmissions: {{}},
             scormReady: false,
             scopedStyleEl: null
         }},
@@ -1319,6 +1323,7 @@ class SCORMExportService:
                 'multiple-select':       this.renderMultipleSelect,
                 'true-false':            this.renderTrueFalse,
                 'fill-in-blank':         this.renderFillInBlank,
+                'final-assessment':      this.renderFinalAssessment,
                 'hotspot':               this.renderHotspot,
                 'image-hotspots':        this.renderHotspot,
                 'matching':              this.renderContent,
@@ -1650,21 +1655,95 @@ class SCORMExportService:
                 }}
                 var question = slide.data.questions[0];
                 var safeQ = this.sanitize(question.question || 'Question');
+                var previousAnswers = this.state.quizAnswers[idx];
+                var hasSubmitted = Array.isArray(previousAnswers);
                 var optionsHTML = '';
                 if (Array.isArray(question.options)) {{
                     question.options.forEach(function(opt, i) {{
                         var safeText = this.sanitize(opt.text || ('Option ' + (i + 1)));
+                        var checked = hasSubmitted && previousAnswers.indexOf(i) >= 0;
                         optionsHTML += '<label class="mcq-option">' +
-                                       '<input type="checkbox" name="multi_' + idx + '_' + i + '" value="' + i + '">' +
+                                       '<input type="checkbox" name="multi_' + idx + '" value="' + i + '" data-slide-idx="' + idx + '" data-option-idx="' + i + '"' + (checked ? ' checked' : '') + (hasSubmitted ? ' disabled' : '') + '>' +
                                        '<span class="option-text">' + safeText + '</span></label>';
                     }}.bind(this));
                 }}
+
+                var feedbackHtml = '';
+                if (hasSubmitted) {{
+                    var expected = (question.options || []).reduce(function(acc, option, optionIdx) {{
+                        if (option && (option.isCorrect === true || option.isCorrect === 'true')) acc.push(optionIdx);
+                        return acc;
+                    }}, []);
+                    var normalizedSelected = previousAnswers.slice().sort().join(',');
+                    var normalizedExpected = expected.slice().sort().join(',');
+                    var correct = normalizedSelected === normalizedExpected;
+                    feedbackHtml = '<p class="' + (correct ? 'ok' : 'err') + '">' +
+                        (correct ? '✓ Correct!' : '✗ Incorrect') + '</p>';
+                }}
+
                 return '<div class="template mcq-template multiple-select-template">' +
                        '<p class="mcq-hint">Select all that apply</p>' +
                        '<h2 class="mcq-question">' + safeQ + '</h2>' +
                        '<div class="mcq-options">' + optionsHTML + '</div>' +
+                       '<button type="button" class="submit-btn" data-action="submit-multiple-select" data-slide-idx="' + idx + '"' + (hasSubmitted ? ' disabled' : '') + '>Submit Answer</button>' +
+                       '<div id="feedback-' + idx + '" class="mcq-feedback">' + feedbackHtml + '</div>' +
                        '</div>';
             }} catch (e) {{ return '<div class="template error"><p>Multiple select render failed</p></div>'; }}
+        }},
+
+        submitMultipleSelect: function(slideIdx) {{
+            try {{
+                var slide = this.state.courseData.templates[slideIdx];
+                if (!slide || !slide.data || !slide.data.questions || !slide.data.questions.length) {{
+                    return;
+                }}
+
+                var question = slide.data.questions[0];
+                var options = Array.isArray(question.options) ? question.options : [];
+                if (!options.length) return;
+
+                var selectedNodes = document.querySelectorAll('input[name="multi_' + slideIdx + '"]:checked');
+                var selected = [];
+                selectedNodes.forEach(function(node) {{
+                    selected.push(Number(node.value || 0));
+                }});
+
+                if (!selected.length) {{
+                    alert('Please select at least one option before submitting.');
+                    return;
+                }}
+
+                var expected = options.reduce(function(acc, option, optionIdx) {{
+                    if (option && (option.isCorrect === true || option.isCorrect === 'true')) acc.push(optionIdx);
+                    return acc;
+                }}, []);
+
+                var normalizedSelected = selected.slice().sort().join(',');
+                var normalizedExpected = expected.slice().sort().join(',');
+                var correct = normalizedSelected === normalizedExpected;
+
+                this.state.quizAnswers[slideIdx] = selected;
+
+                if (this.state.scormReady) {{
+                    SCORM.recordQuizAnswer('ms_' + slideIdx, normalizedSelected, correct, options);
+                }}
+
+                var feedback = document.getElementById('feedback-' + slideIdx);
+                if (feedback) {{
+                    feedback.innerHTML = '<p class="' + (correct ? 'ok' : 'err') + '">' +
+                        (correct ? '✓ Correct!' : '✗ Incorrect') + '</p>';
+                }}
+
+                var submitBtn = document.querySelector('button[data-action="submit-multiple-select"][data-slide-idx="' + slideIdx + '"]');
+                if (submitBtn) submitBtn.disabled = true;
+
+                var controls = document.querySelectorAll('input[name="multi_' + slideIdx + '"]');
+                controls.forEach(function(control) {{
+                    control.disabled = true;
+                }});
+            }} catch (error) {{
+                console.error('submitMultipleSelect error:', error);
+            }}
         }},
 
         renderTrueFalse: function(slide, idx) {{
@@ -1675,10 +1754,13 @@ class SCORMExportService:
                 var question = slide.data.questions[0];
                 var safeQ = this.sanitize(question.question || question.statement || 'Statement');
                 var answeredIndex = this.state.quizAnswers[idx];
-                var options = [
-                    {{'text': 'True', 'isCorrect': question.correctAnswer === true || question.correctAnswer === 'true'}},
-                    {{'text': 'False', 'isCorrect': question.correctAnswer === false || question.correctAnswer === 'false'}}
-                ];
+                var options = Array.isArray(question.options) ? question.options : [];
+                if (!options.length) {{
+                    options = [
+                        {{'text': 'True', 'isCorrect': question.correctAnswer === true || question.correctAnswer === 'true'}},
+                        {{'text': 'False', 'isCorrect': question.correctAnswer === false || question.correctAnswer === 'false'}}
+                    ];
+                }}
                 var optHtml = '';
                 options.forEach(function(opt, i) {{
                     var isSelected = answeredIndex === i;
@@ -1728,9 +1810,204 @@ class SCORMExportService:
                     var caseSensitive = slide.data && slide.data.caseSensitive;
                     return caseSensitive ? s === input.value.trim() : s.toLowerCase() === val;
                 }});
+                this.state.quizAnswers[idx] = val;
+
+                if (this.state.scormReady) {{
+                    SCORM.recordQuizAnswer('fib_' + idx, val, correct, []);
+                }}
+
                 fb.innerHTML = '<p class="' + (correct ? 'ok' : 'err') + '">' +
                                (correct ? '✓ Correct!' : '✗ Incorrect') + '</p>';
             }} catch (e) {{ console.error('checkFillBlank error:', e); }}
+        }},
+
+        renderFinalAssessment: function(slide, idx) {{
+            try {{
+                var data = slide.data || {{}};
+                var title = this.sanitize(slide.title || 'Final Assessment');
+                var intro = this.renderRichHTML(data.introText || data.content || '');
+                var questions = Array.isArray(data.questions) ? data.questions : [];
+                var submission = this.state.finalAssessmentSubmissions[idx];
+
+                if (!questions.length) {{
+                    return '<div class="template final-assessment-template">' +
+                           '<h2 class="content-title">' + title + '</h2>' +
+                           '<p>No questions configured for this final assessment.</p>' +
+                           '</div>';
+                }}
+
+                var questionsHtml = questions.map(function(question, qIdx) {{
+                    var qType = (question.type || 'mcq').toLowerCase();
+                    var qText = this.sanitize(question.question || ('Question ' + (qIdx + 1)));
+                    var response = submission && submission.answers ? submission.answers[qIdx] : null;
+                    var inputHtml = '';
+
+                    if (qType === 'fill-in-blank') {{
+                        var priorValue = response && response.raw ? String(response.raw) : '';
+                        inputHtml = '<input type="text" class="blank-input final-assessment-input" ' +
+                            'id="fa-input-' + idx + '-' + qIdx + '" ' +
+                            'value="' + this.sanitize(priorValue) + '" ' +
+                            'placeholder="Type your answer...">';
+                    }} else {{
+                        var options = Array.isArray(question.options) ? question.options : [];
+                        if (qType === 'true-false' && !options.length) {{
+                            options = [
+                                {{'id': 'true', 'text': 'True', 'isCorrect': question.correctAnswer === true || question.correctAnswer === 'true'}},
+                                {{'id': 'false', 'text': 'False', 'isCorrect': question.correctAnswer === false || question.correctAnswer === 'false'}},
+                            ];
+                        }}
+
+                        inputHtml = options.map(function(option, oIdx) {{
+                            var selected = response && response.selectedIndex === oIdx;
+                            return '<label class="mcq-option">' +
+                                '<input type="radio" name="fa-' + idx + '-' + qIdx + '" value="' + oIdx + '"' +
+                                (selected ? ' checked' : '') + '>' +
+                                '<span class="option-text">' + this.sanitize(option.text || ('Option ' + (oIdx + 1))) + '</span>' +
+                                '</label>';
+                        }}.bind(this)).join('');
+                    }}
+
+                    return '<section class="final-assessment-question" data-qidx="' + qIdx + '">' +
+                           '<h3 class="final-assessment-question-title">' + (qIdx + 1) + '. ' + qText + '</h3>' +
+                           '<div class="final-assessment-question-input">' + inputHtml + '</div>' +
+                           '</section>';
+                }}.bind(this)).join('');
+
+                var resultHtml = submission
+                    ? '<div id="fa-result-' + idx + '" class="final-assessment-result">' +
+                      '<p><strong>Score:</strong> ' + this.sanitize(String(submission.score)) + '% (' +
+                      this.sanitize(String(submission.correct)) + '/' + this.sanitize(String(submission.total)) + ')</p>' +
+                      '<p><strong>Passing Score:</strong> ' + this.sanitize(String(submission.passingScore)) + '%</p>' +
+                      '<p><strong>Status:</strong> ' + this.sanitize(submission.passed ? 'Passed' : 'Not Passed') + '</p>' +
+                      '</div>'
+                    : '<div id="fa-result-' + idx + '" class="final-assessment-result"></div>';
+
+                var disabled = submission ? ' disabled' : '';
+                return '<div class="template final-assessment-template">' +
+                       '<h2 class="content-title">' + title + '</h2>' +
+                       (intro ? '<div class="content-body">' + intro + '</div>' : '') +
+                       '<div class="final-assessment-questions">' + questionsHtml + '</div>' +
+                       '<button type="button" class="submit-btn final-assessment-submit" data-action="submit-final-assessment" data-slide-idx="' + idx + '"' + disabled + '>Submit Assessment</button>' +
+                       resultHtml +
+                       '</div>';
+            }} catch (e) {{
+                console.error('renderFinalAssessment error:', e);
+                return '<div class="template error"><p>Final assessment render failed</p></div>';
+            }}
+        }},
+
+        submitFinalAssessment: function(slideIdx) {{
+            try {{
+                var slide = this.state.courseData.templates[slideIdx];
+                if (!slide || !slide.data) return;
+
+                var questions = Array.isArray(slide.data.questions) ? slide.data.questions : [];
+                if (!questions.length) return;
+
+                var answers = {{}};
+                var correct = 0;
+                var total = questions.length;
+                var unanswered = [];
+
+                for (var qIdx = 0; qIdx < questions.length; qIdx++) {{
+                    var question = questions[qIdx] || {{}};
+                    var qType = (question.type || 'mcq').toLowerCase();
+                    var isCorrect = false;
+
+                    if (qType === 'fill-in-blank') {{
+                        var inputEl = document.getElementById('fa-input-' + slideIdx + '-' + qIdx);
+                        var raw = inputEl && inputEl.value ? String(inputEl.value).trim() : '';
+                        if (!raw) {{
+                            unanswered.push(qIdx + 1);
+                            continue;
+                        }}
+
+                        var accepted = Array.isArray(question.correctAnswers) ? question.correctAnswers : [];
+                        var normalizedRaw = raw.toLowerCase();
+                        isCorrect = accepted.some(function(answer) {{
+                            return String(answer || '').trim().toLowerCase() === normalizedRaw;
+                        }});
+
+                        answers[qIdx] = {{raw: raw, correct: isCorrect}};
+                        if (this.state.scormReady) {{
+                            SCORM.recordQuizAnswer('fa_' + slideIdx + '_' + qIdx, normalizedRaw, isCorrect, []);
+                        }}
+                    }} else {{
+                        var selected = document.querySelector('input[name="fa-' + slideIdx + '-' + qIdx + '"]:checked');
+                        if (!selected) {{
+                            unanswered.push(qIdx + 1);
+                            continue;
+                        }}
+
+                        var selectedIdx = Number(selected.value || 0);
+                        var options = Array.isArray(question.options) ? question.options : [];
+                        if (qType === 'true-false' && !options.length) {{
+                            options = [
+                                {{'id': 'true', 'text': 'True', 'isCorrect': question.correctAnswer === true || question.correctAnswer === 'true'}},
+                                {{'id': 'false', 'text': 'False', 'isCorrect': question.correctAnswer === false || question.correctAnswer === 'false'}},
+                            ];
+                        }}
+
+                        var option = options[selectedIdx] || {{}};
+                        isCorrect = option.isCorrect === true || option.isCorrect === 'true';
+                        answers[qIdx] = {{selectedIndex: selectedIdx, correct: isCorrect}};
+
+                        if (this.state.scormReady) {{
+                            SCORM.recordQuizAnswer('fa_' + slideIdx + '_' + qIdx, selectedIdx, isCorrect, options);
+                        }}
+                    }}
+
+                    if (isCorrect) correct++;
+                }}
+
+                if (unanswered.length) {{
+                    alert('Please answer all final assessment questions before submitting. Missing: ' + unanswered.join(', '));
+                    return;
+                }}
+
+                var score = Math.round((correct / total) * 100);
+                var passingScore = Number(slide.data.passingScore || 80);
+                var passed = score >= passingScore;
+
+                this.state.finalAssessmentSubmissions[slideIdx] = {{
+                    answers: answers,
+                    correct: correct,
+                    total: total,
+                    score: score,
+                    passingScore: passingScore,
+                    passed: passed,
+                }};
+
+                if (this.state.scormReady) {{
+                    SCORM.setValue('cmi.core.mastery_score', String(passingScore));
+                    SCORM.setValue('cmi.core.score.raw', String(score));
+                    SCORM.setValue('cmi.core.score.min', '0');
+                    SCORM.setValue('cmi.core.score.max', '100');
+                    SCORM.setValue('cmi.core.lesson_status', passed ? 'passed' : 'failed');
+                    SCORM.commit();
+                }}
+
+                var result = document.getElementById('fa-result-' + slideIdx);
+                if (result) {{
+                    result.innerHTML = '<p><strong>Score:</strong> ' + this.sanitize(String(score)) + '% (' +
+                        this.sanitize(String(correct)) + '/' + this.sanitize(String(total)) + ')</p>' +
+                        '<p><strong>Passing Score:</strong> ' + this.sanitize(String(passingScore)) + '%</p>' +
+                        '<p><strong>Status:</strong> ' + this.sanitize(passed ? 'Passed' : 'Not Passed') + '</p>';
+                }}
+
+                var submitBtn = document.querySelector('button[data-action="submit-final-assessment"][data-slide-idx="' + slideIdx + '"]');
+                if (submitBtn) submitBtn.disabled = true;
+
+                var container = document.getElementById('slide-container');
+                if (container) {{
+                    var controls = container.querySelectorAll('.final-assessment-template input');
+                    controls.forEach(function(control) {{
+                        control.disabled = true;
+                    }});
+                }}
+            }} catch (e) {{
+                console.error('submitFinalAssessment error:', e);
+            }}
         }},
 
         renderFlashcard: function(slide) {{
@@ -2017,8 +2294,23 @@ class SCORMExportService:
                 return;
             }}
 
+            if (action === 'submit-mcq') {{
+                this.submitMCQAnswer(Number(el.getAttribute('data-slide-idx') || 0));
+                return;
+            }}
+
+            if (action === 'submit-multiple-select') {{
+                this.submitMultipleSelect(Number(el.getAttribute('data-slide-idx') || 0));
+                return;
+            }}
+
             if (action === 'check-fill-blank') {{
                 this.checkFillBlank(Number(el.getAttribute('data-slide-idx') || 0));
+                return;
+            }}
+
+            if (action === 'submit-final-assessment') {{
+                this.submitFinalAssessment(Number(el.getAttribute('data-slide-idx') || 0));
                 return;
             }}
 
@@ -2077,6 +2369,7 @@ class SCORMExportService:
 
                 var safeQuestion = this.sanitize(question.question || 'Question');
                 var answeredIndex = this.state.quizAnswers[idx];
+                var hasSubmitted = typeof answeredIndex === 'number';
 
                 var optionsHTML = '';
                 if (question.options && Array.isArray(question.options)) {{
@@ -2094,18 +2387,27 @@ class SCORMExportService:
                                      '">' +
                                      '<input type="radio" name="answer_' + idx +
                                      '" value="' + i +
-                                     '" data-change-action="select-answer" data-slide-idx="' + idx +
-                                     '" data-option-idx="' + i + '"' + checked + '>' +
+                                     '"' + checked + (hasSubmitted ? ' disabled' : '') + '>' +
                                      '<span class="option-text">' + safeText +
                                      '</span>' +
                                      '</label>';
                     }}
                 }}
 
+                var feedbackHtml = '';
+                if (hasSubmitted && question.options && question.options[answeredIndex]) {{
+                    var selectedOption = question.options[answeredIndex];
+                    var wasCorrect = selectedOption && (selectedOption.isCorrect === true || selectedOption.isCorrect === 'true');
+                    feedbackHtml = '<p class="' + (wasCorrect ? 'ok' : 'err') + '">' +
+                        (wasCorrect ? '✓ Correct!' : '✗ Incorrect') + '</p>';
+                }}
+
                 return '<div class="template mcq-template">' +
                        '<h2 class="mcq-question">' + safeQuestion + '</h2>' +
                        '<div class="mcq-options">' + optionsHTML + '</div>' +
+                       '<button type="button" class="submit-btn" data-action="submit-mcq" data-slide-idx="' + idx + '"' + (hasSubmitted ? ' disabled' : '') + '>Submit Answer</button>' +
                        '<div id="feedback-' + idx + '" class="mcq-feedback">' +
+                       feedbackHtml +
                        '</div>' +
                        '</div>';
 
@@ -2113,6 +2415,53 @@ class SCORMExportService:
                 console.error('❌ renderMCQ failed:', error);
                 return '<div class="template error">' +
                        '<p>Failed to render question</p></div>';
+            }}
+        }},
+
+        submitMCQAnswer: function(slideIdx) {{
+            try {{
+                var slide = this.state.courseData.templates[slideIdx];
+                if (!slide || !slide.data || !slide.data.questions || !slide.data.questions.length) {{
+                    return;
+                }}
+
+                var question = slide.data.questions[0];
+                if (!question || !Array.isArray(question.options) || !question.options.length) {{
+                    return;
+                }}
+
+                var selected = document.querySelector('input[name="answer_' + slideIdx + '"]:checked');
+                if (!selected) {{
+                    alert('Please select an answer before submitting.');
+                    return;
+                }}
+
+                var optIdx = Number(selected.value || 0);
+                var option = question.options[optIdx];
+                if (!option) return;
+
+                var correct = option.isCorrect === true || option.isCorrect === 'true';
+                this.state.quizAnswers[slideIdx] = optIdx;
+
+                if (this.state.scormReady) {{
+                    SCORM.recordQuizAnswer('q_' + slideIdx, optIdx, correct, question.options);
+                }}
+
+                var fb = document.getElementById('feedback-' + slideIdx);
+                if (fb) {{
+                    fb.innerHTML = '<p class="' + (correct ? 'ok' : 'err') + '">' +
+                        (correct ? '✓ Correct!' : '✗ Incorrect') + '</p>';
+                }}
+
+                var submitBtn = document.querySelector('button[data-action="submit-mcq"][data-slide-idx="' + slideIdx + '"]');
+                if (submitBtn) submitBtn.disabled = true;
+
+                var radioInputs = document.querySelectorAll('input[name="answer_' + slideIdx + '"]');
+                radioInputs.forEach(function(input) {{
+                    input.disabled = true;
+                }});
+            }} catch (error) {{
+                console.error('submitMCQAnswer error:', error);
             }}
         }},
 
@@ -2140,13 +2489,21 @@ class SCORMExportService:
                 }}
                 console.log('Question text:', question.question);
                 
-                if (!question.options) {{
+                var questionOptions = Array.isArray(question.options) ? question.options : [];
+                if (slide.type === 'true-false' && !questionOptions.length) {{
+                    questionOptions = [
+                        {{'text': 'True', 'isCorrect': question.correctAnswer === true || question.correctAnswer === 'true'}},
+                        {{'text': 'False', 'isCorrect': question.correctAnswer === false || question.correctAnswer === 'false'}},
+                    ];
+                }}
+
+                if (!questionOptions.length) {{
                     console.error('MCQ DEBUG: No options found for question in slide', slideIdx);
                     return;
                 }}
-                console.log('Total options:', question.options.length);
+                console.log('Total options:', questionOptions.length);
 
-                var option = question.options[optIdx];
+                var option = questionOptions[optIdx];
                 if (!option) {{
                     console.error('MCQ DEBUG: Option not found at index', optIdx, 'for slide', slideIdx);
                     return;
@@ -2181,7 +2538,7 @@ class SCORMExportService:
                         'q_' + slideIdx,
                         optIdx,
                         correct,
-                        question.options
+                        questionOptions
                     );
                     console.log('MCQ DEBUG: SCORM recording completed');
                 }} else {{
@@ -2361,16 +2718,47 @@ class SCORMExportService:
                 
                 // 1. Validate all questions answered
                 var unanswered = [];
+                var failedFinalAssessments = [];
+                var hasFinalAssessment = false;
                 if (this.state.courseData && this.state.courseData.templates) {{
                     this.state.courseData.templates.forEach((t, i) => {{
-                        if (t.type === 'mcq' && this.state.quizAnswers[i] === undefined) {{
-                            unanswered.push(i + 1);
+                        if (t.type === 'mcq' || t.type === 'true-false') {{
+                            if (typeof this.state.quizAnswers[i] !== 'number') {{
+                                unanswered.push(i + 1);
+                            }}
+                        }}
+
+                        if (t.type === 'multiple-select') {{
+                            if (!Array.isArray(this.state.quizAnswers[i])) {{
+                                unanswered.push(i + 1);
+                            }}
+                        }}
+
+                        if (t.type === 'fill-in-blank') {{
+                            if (typeof this.state.quizAnswers[i] !== 'string' || !this.state.quizAnswers[i].trim()) {{
+                                unanswered.push(i + 1);
+                            }}
+                        }}
+
+                        if (t.type === 'final-assessment') {{
+                            hasFinalAssessment = true;
+                            var submission = this.state.finalAssessmentSubmissions[i];
+                            if (!submission) {{
+                                unanswered.push(i + 1);
+                            }} else if (!submission.passed) {{
+                                failedFinalAssessments.push(i + 1);
+                            }}
                         }}
                     }});
                 }}
                 
                 if (unanswered.length > 0) {{
                     alert('Please answer all questions before finishing. Unanswered slides: ' + unanswered.join(', '));
+                    return;
+                }}
+
+                if (failedFinalAssessments.length > 0) {{
+                    alert('Final assessment not passed on slides: ' + failedFinalAssessments.join(', ') + '. Please retake before finishing.');
                     return;
                 }}
 
@@ -2384,8 +2772,13 @@ class SCORMExportService:
                 
                 // 3. Set Course Complete
                 if (this.state.scormReady) {{
-                    console.log('Setting course status to completed...');
-                    SCORM.setCourseComplete();
+                    if (!hasFinalAssessment) {{
+                        console.log('Setting course status to completed...');
+                        SCORM.setCourseComplete();
+                    }} else {{
+                        console.log('Final assessment present, preserving submitted pass/fail SCORM status');
+                        SCORM.commit();
+                    }}
                     
                     var score = SCORM.calculateScore();
                     alert('Course Complete! Score: ' + score + '%');
@@ -2710,6 +3103,15 @@ class SCORMExportService:
 .submit-btn { padding: 0.6rem 1.25rem; background: var(--theme-primary, #667eea); color: white;
     border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; }
 .submit-btn:hover { opacity: 0.9; }
+.final-assessment-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
+.final-assessment-questions { display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem; }
+.final-assessment-question { border: 1px solid var(--theme-border, #e2e8f0); border-radius: 8px;
+    background: var(--theme-surface, #f8f9fa); padding: 1rem; }
+.final-assessment-question-title { margin: 0 0 0.75rem 0; color: var(--theme-text, #212121); }
+.final-assessment-question-input { display: flex; flex-direction: column; gap: 0.6rem; }
+.final-assessment-submit { margin-top: 1rem; }
+.final-assessment-result { margin-top: 1rem; padding: 0.9rem; border-radius: 8px;
+    background: var(--theme-surface, #f8f9fa); border: 1px solid var(--theme-border, #e2e8f0); }
 /* Hotspot / Image with callouts */
 .hotspot-template { background: var(--theme-background, white); padding: 2rem; border-radius: 12px; }
 .hotspot-image-figure { margin: 0 0 1rem 0; }

@@ -497,7 +497,16 @@ async def test_all_supported_types_validate_successfully(monkeypatch):
     service = _make_service()
     monkeypatch.setattr(service, "_validate_templates_for_scorm", _noop_validate)
 
-    supported_sample = list(service.runtime_supported_template_types)[:8]
+    supported_sample = [
+        "content-text",
+        "tabs",
+        "accordion",
+        "stepper",
+        "timeline",
+        "module-overview",
+        "quotation",
+        "code-snippet",
+    ]
     templates = [
         {
             "id": f"tpl-{i}", "type": t, "order": i, "title": t,

@@ -6,7 +6,7 @@ They follow the JSON Schema specification defined in /shared/schema/course.json
 and implement the Phase 1 requirements for data validation.
 """
 
-from typing import List, Optional, Literal
+from typing import Any, List, Optional, Literal, Union
 # Pydantic v1/v2 compatibility imports
 try:  # Prefer Pydantic v2 style APIs
     from pydantic import BaseModel, Field, field_validator, model_validator
@@ -51,6 +51,42 @@ if PYDANTIC_V2:
         content: str = Field(..., description="MCQ content/instructions")
         questions: List[Question] = Field(..., min_length=1, description="List of questions")
 
+    class FinalAssessmentQuestion(BaseModel):
+        """Final Assessment Question Model (mixed question formats)."""
+        id: str = Field(..., description="Question identifier")
+        type: Literal["mcq", "multiple-select", "true-false", "fill-in-blank"] = Field(..., description="Question interaction type")
+        question: str = Field(..., min_length=1, description="Question text")
+        options: Optional[List[QuestionOption]] = Field(None, min_length=2, description="Options for mcq/multiple-select/true-false questions")
+        correctAnswer: Optional[bool] = Field(None, description="Correct answer for true-false questions")
+        correctAnswers: Optional[List[str]] = Field(None, min_length=1, description="Accepted answers for fill-in-blank questions")
+        explanation: Optional[str] = Field(None, description="Optional explanation shown after submit")
+        points: float = Field(default=1, ge=0, description="Points allocated to this question")
+
+        @model_validator(mode='after')
+        def validate_question_shape(self):  # type: ignore[override]
+            if self.type in {"mcq", "multiple-select"}:
+                if not self.options:
+                    raise ValueError(f"{self.type} final-assessment questions require options")
+                if not any(opt.isCorrect for opt in self.options):
+                    raise ValueError(f"{self.type} final-assessment questions require at least one correct option")
+            if self.type == "true-false":
+                if self.correctAnswer is None:
+                    raise ValueError("True/False final-assessment questions require correctAnswer")
+            if self.type == "fill-in-blank":
+                if not self.correctAnswers:
+                    raise ValueError("Fill-in-blank final-assessment questions require correctAnswers")
+            return self
+
+    class FinalAssessmentData(BaseModel):
+        """Final Assessment Template Data Model."""
+        introText: Optional[str] = Field(None, description="Assessment introduction text")
+        passingScore: int = Field(default=80, ge=0, le=100, description="Passing score percentage")
+        maxAttempts: int = Field(default=1, ge=1, description="Maximum attempts allowed")
+        shuffleQuestions: bool = Field(default=False, description="Whether question order can be shuffled")
+        shuffleOptions: bool = Field(default=False, description="Whether option order can be shuffled")
+        showCorrectAnswers: bool = Field(default=True, description="Show correct answers after submission")
+        questions: List[FinalAssessmentQuestion] = Field(..., min_length=1, description="Assessment questions")
+
     class TemplateData(BaseModel):
         """Template Data Model - flexible structure for different template types"""
         model_config = ConfigDict(extra="allow")
@@ -58,7 +94,7 @@ if PYDANTIC_V2:
         content: Optional[str] = Field(None, description="Main content text")
         subtitle: Optional[str] = Field(None, description="Optional subtitle")
         videoUrl: Optional[str] = Field(None, description="Video URL for content-video templates")
-        questions: Optional[List[Question]] = Field(None, description="Questions for MCQ templates")
+        questions: Optional[Union[List[Question], List[dict[str, Any]]]] = Field(None, description="Questions for assessment templates")
         tabs: Optional[List[dict]] = Field(None, description="Tabs data for tabs templates")
         panels: Optional[List[dict]] = Field(None, description="Panel data for accordion templates")
         # text-with-media / content-media fields
@@ -83,6 +119,12 @@ if PYDANTIC_V2:
             if template_type == 'mcq':
                 if not data.questions or len(data.questions) == 0:
                     raise ValueError("MCQ templates must have at least one question")
+                for question in data.questions:
+                    if isinstance(question, Question):
+                        continue
+                    Question(**question)
+            if template_type == 'final-assessment':
+                FinalAssessmentData(**data.model_dump())
             if template_type == 'content-video':
                 if data.videoUrl and not data.videoUrl.startswith(('http://', 'https://')):
                     raise ValueError("Video URL must be a valid HTTP/HTTPS URL")
@@ -112,6 +154,46 @@ else:
         content: str = Field(..., description="MCQ content/instructions")
         questions: List[Question] = Field(..., min_items=1, description="List of questions")
 
+    class FinalAssessmentQuestion(BaseModel):
+        """Final Assessment Question Model (mixed question formats)."""
+        id: str = Field(..., description="Question identifier")
+        type: Literal["mcq", "multiple-select", "true-false", "fill-in-blank"] = Field(..., description="Question interaction type")
+        question: str = Field(..., min_length=1, description="Question text")
+        options: Optional[List[QuestionOption]] = Field(None, min_items=2, description="Options for mcq/multiple-select/true-false questions")
+        correctAnswer: Optional[bool] = Field(None, description="Correct answer for true-false questions")
+        correctAnswers: Optional[List[str]] = Field(None, min_items=1, description="Accepted answers for fill-in-blank questions")
+        explanation: Optional[str] = Field(None, description="Optional explanation shown after submit")
+        points: float = Field(default=1, ge=0, description="Points allocated to this question")
+
+        @validator('correctAnswers', always=True)
+        def validate_question_shape(cls, correct_answers, values):  # type: ignore[override]
+            question_type = values.get("type")
+            options = values.get("options")
+            correct_answer = values.get("correctAnswer")
+
+            if question_type in {"mcq", "multiple-select"}:
+                if not options:
+                    raise ValueError(f"{question_type} final-assessment questions require options")
+                if not any(opt.isCorrect for opt in options):
+                    raise ValueError(f"{question_type} final-assessment questions require at least one correct option")
+            if question_type == "true-false":
+                if correct_answer is None:
+                    raise ValueError("True/False final-assessment questions require correctAnswer")
+            if question_type == "fill-in-blank":
+                if not correct_answers:
+                    raise ValueError("Fill-in-blank final-assessment questions require correctAnswers")
+            return correct_answers
+
+    class FinalAssessmentData(BaseModel):
+        """Final Assessment Template Data Model."""
+        introText: Optional[str] = Field(None, description="Assessment introduction text")
+        passingScore: int = Field(default=80, ge=0, le=100, description="Passing score percentage")
+        maxAttempts: int = Field(default=1, ge=1, description="Maximum attempts allowed")
+        shuffleQuestions: bool = Field(default=False, description="Whether question order can be shuffled")
+        shuffleOptions: bool = Field(default=False, description="Whether option order can be shuffled")
+        showCorrectAnswers: bool = Field(default=True, description="Show correct answers after submission")
+        questions: List[FinalAssessmentQuestion] = Field(..., min_items=1, description="Assessment questions")
+
     class TemplateData(BaseModel):
         """Template Data Model - flexible structure for different template types"""
         class Config:
@@ -120,7 +202,7 @@ else:
         content: Optional[str] = Field(None, description="Main content text")
         subtitle: Optional[str] = Field(None, description="Optional subtitle")
         videoUrl: Optional[str] = Field(None, description="Video URL for content-video templates")
-        questions: Optional[List[Question]] = Field(None, description="Questions for MCQ templates")
+        questions: Optional[Union[List[Question], List[dict[str, Any]]]] = Field(None, description="Questions for assessment templates")
         tabs: Optional[List[dict]] = Field(None, description="Tabs data for tabs templates")
         panels: Optional[List[dict]] = Field(None, description="Panel data for accordion templates")
         # text-with-media fields
@@ -144,6 +226,12 @@ else:
             if template_type == 'mcq':
                 if not data.questions or len(data.questions) == 0:
                     raise ValueError("MCQ templates must have at least one question")
+                for question in data.questions:
+                    if isinstance(question, Question):
+                        continue
+                    Question(**question)
+            if template_type == 'final-assessment':
+                FinalAssessmentData(**data.dict())
             if template_type == 'content-video':
                 if data.videoUrl and not data.videoUrl.startswith(('http://', 'https://')):
                     raise ValueError("Video URL must be a valid HTTP/HTTPS URL")

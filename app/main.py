@@ -8,6 +8,7 @@ from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.openapi.utils import get_openapi
 
 from app.routers import (
     courses,
@@ -168,6 +169,46 @@ api_router.include_router(branching.router)
 api_router.include_router(social.router)
 api_router.include_router(analytics.router)
 app.include_router(api_router)
+
+
+def _schema_for_model(model):
+    """Build an OpenAPI schema fragment for a Pydantic model."""
+    if hasattr(model, "model_json_schema"):
+        return model.model_json_schema(ref_template="#/components/schemas/{model}")
+    return model.schema(ref_template="#/components/schemas/{model}")
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+    )
+
+    from app.models.course import (
+        FinalAssessmentData,
+        FinalAssessmentQuestion,
+        Question,
+        QuestionOption,
+    )
+
+    components = schema.setdefault("components", {}).setdefault("schemas", {})
+    for model in (
+        QuestionOption,
+        Question,
+        FinalAssessmentQuestion,
+        FinalAssessmentData,
+    ):
+        components.setdefault(model.__name__, _schema_for_model(model))
+
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 
 @app.get("/")

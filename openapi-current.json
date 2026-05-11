@@ -262,6 +262,67 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "Courses"
+        ],
+        "summary": "Upsert course (create if absent, update if present)",
+        "description": "Idempotent upsert.  Creates the course if it does not exist yet,\nupdates it if it does.  Returns the same shape as POST/PATCH.\n\nHTTP 201 is returned on creation, HTTP 200 on update.\nEliminates the noisy PATCH-then-fallback-create pattern.",
+        "operationId": "upsert_course_api_v1_courses__courseId__put",
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Courseid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Course updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseOut"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Course created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/courses/{courseId}/pages": {
@@ -288,7 +349,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageDTO"
+                  },
+                  "title": "Response List Pages Api V1 Courses  Courseid  Pages Get"
+                }
               }
             }
           },
@@ -337,7 +404,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageDTO"
+                }
               }
             }
           },
@@ -389,9 +458,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create Page From Template Api V1 Courses  Courseid  Pages From Template Post"
+                  "$ref": "#/components/schemas/PageFromTemplateResponse"
                 }
               }
             }
@@ -835,6 +902,9 @@
     },
     "/api/v1/export": {
       "post": {
+        "tags": [
+          "Export"
+        ],
         "summary": "Export Course as SCORM Package",
         "description": "Export course data as a SCORM-compliant ZIP package\n\nThis endpoint implements the Phase 1 dummy SCORM export functionality:\n1. Validates the input course JSON against the schema\n2. Generates a basic SCORM manifest (imsmanifest.xml)\n3. Creates a simple HTML player file\n4. Packages everything into a ZIP file\n5. Returns the ZIP as a streaming download\n\n**Implementation follows Phase 1 requirements:**\n- Uses FastAPI streaming response for efficient downloads\n- Validates course data using Pydantic models\n- Generates basic SCORM-compliant structure\n- Handles errors gracefully with appropriate HTTP status codes",
         "operationId": "export_course_api_v1_export_post",
@@ -872,6 +942,9 @@
     },
     "/api/v1/export/validate": {
       "post": {
+        "tags": [
+          "Export"
+        ],
         "summary": "Validate Course Data for Export",
         "description": "Validate course data without performing the actual export\n\nThis endpoint allows frontend to validate course data before export:\n- Checks JSON format and schema compliance\n- Validates template structure and content\n- Returns detailed validation results\n- Estimates export file size",
         "operationId": "validate_course_for_export_api_v1_export_validate_post",
@@ -909,6 +982,9 @@
     },
     "/api/v1/export/formats": {
       "get": {
+        "tags": [
+          "Export"
+        ],
         "summary": "Get Supported Export Formats",
         "description": "Get list of supported export formats\n\nCurrently supports SCORM 1.2 (dummy implementation for Phase 1)\nFuture phases will add more formats like SCORM 2004, xAPI, etc.",
         "operationId": "get_export_formats_api_v1_export_formats_get",
@@ -926,6 +1002,9 @@
     },
     "/api/v1/export/status/{exportId}": {
       "get": {
+        "tags": [
+          "Export"
+        ],
         "summary": "Get Export Status",
         "description": "Get status of an export operation\n\nPhase 1 implementation returns immediate status since exports are\nsynchronous.\nFuture phases may implement async export processing with job queues.",
         "operationId": "get_export_status_api_v1_export_status__exportId__get",
@@ -964,8 +1043,11 @@
     },
     "/api/v1/export/scorm/{courseId}": {
       "post": {
+        "tags": [
+          "Export"
+        ],
         "summary": "Export Persisted Course as SCORM Package",
-        "description": "Export a persisted course (by ID) as a SCORM package.",
+        "description": "Export a persisted course (by ID) as a SCORM ZIP package.\n\n- **200**: Binary ZIP stream with `Content-Disposition` filename header.\n- **404**: Course ID not found in the database.\n- **422**: Course exists but validation failed (no pages, empty pages, etc.).\n  Detail array contains machine-readable entries with `code`, `field`, `message`, optional `hint`.\n- **500**: Unexpected export failure.",
         "operationId": "export_persisted_course_api_v1_export_scorm__courseId__post",
         "parameters": [
           {
@@ -976,36 +1058,65 @@
               "type": "string",
               "title": "Courseid"
             }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "scorm_1_2",
+                    "scorm_2004"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "SCORM format version (query param overrides body)",
+              "title": "Format"
+            },
+            "description": "SCORM format version (query param overrides body)"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ScormExportRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ScormExportRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "SCORM ZIP archive",
             "content": {
               "application/json": {
                 "schema": {}
-              }
+              },
+              "application/zip": {}
             }
           },
+          "404": {
+            "description": "Course not found"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Course exists but is not exportable — structured detail array returned"
+          },
+          "500": {
+            "description": "Internal export failure"
           }
         }
       }
@@ -5441,7 +5552,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageDTO"
+                  },
+                  "title": "Response Reorder Pages Api V1 Courses  Courseid  Pages Reorder Post"
+                }
               }
             }
           },
@@ -5491,7 +5608,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageDTO"
+                }
               }
             }
           },
@@ -5549,7 +5668,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageDTO"
+                }
               }
             }
           },
@@ -5642,7 +5763,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComponentDTO"
+                  },
+                  "title": "Response List Components Api V1 Courses  Courseid  Pages  Pageid  Components Get"
+                }
               }
             }
           },
@@ -5700,7 +5827,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentDTO"
+                }
               }
             }
           },
@@ -5760,7 +5889,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComponentDTO"
+                  },
+                  "title": "Response Reorder Components Api V1 Courses  Courseid  Pages  Pageid  Components Reorder Post"
+                }
               }
             }
           },
@@ -5819,7 +5954,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentDTO"
+                }
               }
             }
           },
@@ -5886,7 +6023,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentDTO"
+                }
               }
             }
           },
@@ -6399,7 +6538,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ScoringConfigDTO"
+                }
               }
             }
           },
@@ -6450,7 +6591,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ScoringConfigDTO"
+                }
               }
             }
           },
@@ -6491,7 +6634,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ScoringValidationResultDTO"
+                }
               }
             }
           },
@@ -6542,7 +6687,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreCalculateResultDTO"
+                }
               }
             }
           },
@@ -6583,7 +6730,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CourseCompletionResultDTO"
+                }
               }
             }
           },
@@ -6633,7 +6782,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageCompletionResultDTO"
+                }
               }
             }
           },
@@ -6691,7 +6842,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PageCompletionResultDTO"
+                }
               }
             }
           },
@@ -6742,7 +6895,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/InteractionEventOutDTO"
+                }
               }
             }
           },
@@ -6850,7 +7005,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InteractionEventOutDTO"
+                  },
+                  "title": "Response List Interactions Api V1 Courses  Courseid  Interactions Get"
+                }
               }
             }
           },
@@ -8320,7 +8481,7 @@
           "Analytics"
         ],
         "summary": "Get Skill Mastery",
-        "description": "Skill mastery rollup \u2014 aggregated skill/tag performance.\n\nGroups components by their tags and computes mastery percentages\nbased on scoring component weights.",
+        "description": "Skill mastery rollup — aggregated skill/tag performance.\n\nGroups components by their tags and computes mastery percentages\nbased on scoring component weights.",
         "operationId": "get_skill_mastery_api_v1_courses__courseId__analytics_skills_get",
         "parameters": [
           {
@@ -9700,6 +9861,93 @@
         ],
         "title": "ComponentCreateDTO"
       },
+      "ComponentDTO": {
+        "properties": {
+          "componentId": {
+            "type": "string",
+            "title": "Componentid"
+          },
+          "componentType": {
+            "type": "string",
+            "title": "Componenttype"
+          },
+          "order": {
+            "type": "integer",
+            "title": "Order"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          },
+          "audioConfig": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audioconfig"
+          },
+          "completionCriteria": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completioncriteria"
+          },
+          "styling": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Styling"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "componentId",
+          "componentType",
+          "order",
+          "data"
+        ],
+        "title": "ComponentDTO"
+      },
       "ComponentStateDTO": {
         "properties": {
           "componentId": {
@@ -9945,6 +10193,73 @@
         "title": "ContentGenerationRequest",
         "description": "AI content generation request"
       },
+      "CourseCompletionPageDTO": {
+        "properties": {
+          "pageId": {
+            "type": "string",
+            "title": "Pageid"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "Strategy"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/PageCompletionComponentDTO"
+            },
+            "type": "array",
+            "title": "Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pageId",
+          "title",
+          "completed",
+          "strategy",
+          "components"
+        ],
+        "title": "CourseCompletionPageDTO"
+      },
+      "CourseCompletionResultDTO": {
+        "properties": {
+          "courseId": {
+            "type": "string",
+            "title": "Courseid"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "overallProgress": {
+            "type": "number",
+            "title": "Overallprogress"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/CourseCompletionPageDTO"
+            },
+            "type": "array",
+            "title": "Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "courseId",
+          "status",
+          "overallProgress",
+          "pages"
+        ],
+        "title": "CourseCompletionResultDTO"
+      },
       "CourseCreate": {
         "properties": {
           "courseId": {
@@ -9975,6 +10290,75 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Data"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "navigation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Navigation"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
+          },
+          "scoring": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring"
           }
         },
         "type": "object",
@@ -10040,6 +10424,87 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Data"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "navigation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Navigation"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
+          },
+          "scoring": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring"
+          },
+          "pages": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pages"
           }
         },
         "type": "object",
@@ -10133,6 +10598,75 @@
               }
             ],
             "title": "Status"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "navigation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Navigation"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
+          },
+          "scoring": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring"
           }
         },
         "type": "object",
@@ -11154,6 +11688,105 @@
         ],
         "title": "InteractionEventDTO"
       },
+      "InteractionEventOutDTO": {
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "title": "Eventid"
+          },
+          "courseId": {
+            "type": "string",
+            "title": "Courseid"
+          },
+          "pageId": {
+            "type": "string",
+            "title": "Pageid"
+          },
+          "componentId": {
+            "type": "string",
+            "title": "Componentid"
+          },
+          "learnerId": {
+            "type": "string",
+            "title": "Learnerid"
+          },
+          "interactionType": {
+            "type": "string",
+            "title": "Interactiontype"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "maxScore": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxscore"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "eventId",
+          "courseId",
+          "pageId",
+          "componentId",
+          "learnerId",
+          "interactionType",
+          "completed"
+        ],
+        "title": "InteractionEventOutDTO"
+      },
       "LMSIntegration": {
         "properties": {
           "integrationId": {
@@ -11498,6 +12131,40 @@
         "title": "PWAManifest",
         "description": "PWA manifest configuration for mobile optimization"
       },
+      "PageCompletionComponentDTO": {
+        "properties": {
+          "componentId": {
+            "type": "string",
+            "title": "Componentid"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          },
+          "completionType": {
+            "type": "string",
+            "title": "Completiontype"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "componentId",
+          "completed",
+          "completionType"
+        ],
+        "title": "PageCompletionComponentDTO"
+      },
       "PageCompletionEventDTO": {
         "properties": {
           "componentStates": {
@@ -11513,6 +12180,42 @@
           "componentStates"
         ],
         "title": "PageCompletionEventDTO"
+      },
+      "PageCompletionResultDTO": {
+        "properties": {
+          "pageId": {
+            "type": "string",
+            "title": "Pageid"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "completed": {
+            "type": "boolean",
+            "title": "Completed"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "Strategy"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/PageCompletionComponentDTO"
+            },
+            "type": "array",
+            "title": "Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pageId",
+          "title",
+          "completed",
+          "strategy",
+          "components"
+        ],
+        "title": "PageCompletionResultDTO"
       },
       "PageConfiguration": {
         "properties": {
@@ -11712,6 +12415,180 @@
           "title"
         ],
         "title": "PageCreateDTO"
+      },
+      "PageDTO": {
+        "properties": {
+          "pageId": {
+            "type": "string",
+            "title": "Pageid"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "order": {
+            "type": "integer",
+            "title": "Order"
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layout"
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme"
+          },
+          "pageCompletion": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pagecompletion"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedat"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ComponentDTO"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pageId",
+          "title",
+          "order"
+        ],
+        "title": "PageDTO"
+      },
+      "PageFromTemplatePage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "order_index": {
+            "type": "integer",
+            "title": "Order Index"
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layout"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "course_id",
+          "title",
+          "order_index"
+        ],
+        "title": "PageFromTemplatePage"
+      },
+      "PageFromTemplateResponse": {
+        "properties": {
+          "page": {
+            "$ref": "#/components/schemas/PageFromTemplatePage"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "message"
+        ],
+        "title": "PageFromTemplateResponse"
       },
       "PageUpdateDTO": {
         "properties": {
@@ -12436,10 +13313,255 @@
         ],
         "title": "ScoreCalculateDTO"
       },
+      "ScoreCalculateResultDTO": {
+        "properties": {
+          "totalScore": {
+            "type": "number",
+            "title": "Totalscore"
+          },
+          "maxScore": {
+            "type": "number",
+            "title": "Maxscore"
+          },
+          "percentage": {
+            "type": "number",
+            "title": "Percentage"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "passingScore": {
+            "type": "number",
+            "title": "Passingscore"
+          },
+          "componentResults": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreComponentResultDTO"
+            },
+            "type": "array",
+            "title": "Componentresults"
+          },
+          "attemptNumber": {
+            "type": "integer",
+            "title": "Attemptnumber"
+          },
+          "remainingAttempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remainingattempts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "totalScore",
+          "maxScore",
+          "percentage",
+          "passed",
+          "passingScore",
+          "componentResults",
+          "attemptNumber"
+        ],
+        "title": "ScoreCalculateResultDTO"
+      },
+      "ScoreComponentResultDTO": {
+        "properties": {
+          "componentId": {
+            "type": "string",
+            "title": "Componentid"
+          },
+          "componentType": {
+            "type": "string",
+            "title": "Componenttype"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "maxScore": {
+            "type": "number",
+            "title": "Maxscore"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight"
+          },
+          "weightedScore": {
+            "type": "number",
+            "title": "Weightedscore"
+          },
+          "questionResults": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreQuestionResultDTO"
+            },
+            "type": "array",
+            "title": "Questionresults"
+          }
+        },
+        "type": "object",
+        "required": [
+          "componentId",
+          "componentType",
+          "score",
+          "maxScore",
+          "weight",
+          "weightedScore",
+          "questionResults"
+        ],
+        "title": "ScoreComponentResultDTO"
+      },
+      "ScoreQuestionResultDTO": {
+        "properties": {
+          "questionId": {
+            "type": "string",
+            "title": "Questionid"
+          },
+          "correct": {
+            "type": "boolean",
+            "title": "Correct"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "maxScore": {
+            "type": "number",
+            "title": "Maxscore"
+          },
+          "partialCredit": {
+            "type": "boolean",
+            "title": "Partialcredit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "questionId",
+          "correct",
+          "score",
+          "maxScore",
+          "partialCredit"
+        ],
+        "title": "ScoreQuestionResultDTO"
+      },
+      "ScoringConfigDTO": {
+        "properties": {
+          "scoringId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoringid"
+          },
+          "courseId": {
+            "type": "string",
+            "title": "Courseid"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          },
+          "componentScores": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Componentscores"
+          },
+          "scormReporting": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scormreporting"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "courseId",
+          "config"
+        ],
+        "title": "ScoringConfigDTO"
+      },
+      "ScoringValidationResultDTO": {
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssueDTO"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssueDTO"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "valid",
+          "errors",
+          "warnings"
+        ],
+        "title": "ScoringValidationResultDTO"
+      },
       "ScormExportRequest": {
         "properties": {
           "format": {
             "type": "string",
+            "enum": [
+              "scorm_1_2",
+              "scorm_2004"
+            ],
             "title": "Format",
             "default": "scorm_1_2"
           },
@@ -14196,6 +15318,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
@@ -14205,6 +15334,24 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ValidationIssueDTO": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "message"
+        ],
+        "title": "ValidationIssueDTO"
       },
       "ValidationResponse": {
         "properties": {
@@ -14494,6 +15641,422 @@
           "level"
         ],
         "title": "ValidationError"
+      },
+      "QuestionOption": {
+        "description": "MCQ Question Option Model",
+        "properties": {
+          "id": {
+            "description": "Option identifier",
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "description": "Option text",
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "isCorrect": {
+            "default": false,
+            "description": "Whether this option is correct",
+            "title": "Iscorrect",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "QuestionOption",
+        "type": "object"
+      },
+      "Question": {
+        "$defs": {
+          "QuestionOption": {
+            "description": "MCQ Question Option Model",
+            "properties": {
+              "id": {
+                "description": "Option identifier",
+                "title": "Id",
+                "type": "string"
+              },
+              "text": {
+                "description": "Option text",
+                "minLength": 1,
+                "title": "Text",
+                "type": "string"
+              },
+              "isCorrect": {
+                "default": false,
+                "description": "Whether this option is correct",
+                "title": "Iscorrect",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "text"
+            ],
+            "title": "QuestionOption",
+            "type": "object"
+          }
+        },
+        "description": "MCQ Question Model",
+        "properties": {
+          "id": {
+            "description": "Question identifier",
+            "title": "Id",
+            "type": "string"
+          },
+          "question": {
+            "description": "Question text",
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "options": {
+            "description": "Answer options",
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            },
+            "maxItems": 6,
+            "minItems": 2,
+            "title": "Options",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "options"
+        ],
+        "title": "Question",
+        "type": "object"
+      },
+      "FinalAssessmentQuestion": {
+        "$defs": {
+          "QuestionOption": {
+            "description": "MCQ Question Option Model",
+            "properties": {
+              "id": {
+                "description": "Option identifier",
+                "title": "Id",
+                "type": "string"
+              },
+              "text": {
+                "description": "Option text",
+                "minLength": 1,
+                "title": "Text",
+                "type": "string"
+              },
+              "isCorrect": {
+                "default": false,
+                "description": "Whether this option is correct",
+                "title": "Iscorrect",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "text"
+            ],
+            "title": "QuestionOption",
+            "type": "object"
+          }
+        },
+        "description": "Final Assessment Question Model (mixed question formats).",
+        "properties": {
+          "id": {
+            "description": "Question identifier",
+            "title": "Id",
+            "type": "string"
+          },
+          "type": {
+            "description": "Question interaction type",
+            "enum": [
+              "mcq",
+              "true-false",
+              "fill-in-blank"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "question": {
+            "description": "Question text",
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/QuestionOption"
+                },
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Options for mcq/true-false questions",
+            "title": "Options"
+          },
+          "correctAnswer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Correct answer for true-false questions",
+            "title": "Correctanswer"
+          },
+          "correctAnswers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Accepted answers for fill-in-blank questions",
+            "title": "Correctanswers"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional explanation shown after submit",
+            "title": "Explanation"
+          },
+          "points": {
+            "default": 1,
+            "description": "Points allocated to this question",
+            "minimum": 0,
+            "title": "Points",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "question"
+        ],
+        "title": "FinalAssessmentQuestion",
+        "type": "object"
+      },
+      "FinalAssessmentData": {
+        "$defs": {
+          "FinalAssessmentQuestion": {
+            "description": "Final Assessment Question Model (mixed question formats).",
+            "properties": {
+              "id": {
+                "description": "Question identifier",
+                "title": "Id",
+                "type": "string"
+              },
+              "type": {
+                "description": "Question interaction type",
+                "enum": [
+                  "mcq",
+                  "true-false",
+                  "fill-in-blank"
+                ],
+                "title": "Type",
+                "type": "string"
+              },
+              "question": {
+                "description": "Question text",
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "options": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/components/schemas/QuestionOption"
+                    },
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Options for mcq/true-false questions",
+                "title": "Options"
+              },
+              "correctAnswer": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Correct answer for true-false questions",
+                "title": "Correctanswer"
+              },
+              "correctAnswers": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Accepted answers for fill-in-blank questions",
+                "title": "Correctanswers"
+              },
+              "explanation": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Optional explanation shown after submit",
+                "title": "Explanation"
+              },
+              "points": {
+                "default": 1,
+                "description": "Points allocated to this question",
+                "minimum": 0,
+                "title": "Points",
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "question"
+            ],
+            "title": "FinalAssessmentQuestion",
+            "type": "object"
+          },
+          "QuestionOption": {
+            "description": "MCQ Question Option Model",
+            "properties": {
+              "id": {
+                "description": "Option identifier",
+                "title": "Id",
+                "type": "string"
+              },
+              "text": {
+                "description": "Option text",
+                "minLength": 1,
+                "title": "Text",
+                "type": "string"
+              },
+              "isCorrect": {
+                "default": false,
+                "description": "Whether this option is correct",
+                "title": "Iscorrect",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "text"
+            ],
+            "title": "QuestionOption",
+            "type": "object"
+          }
+        },
+        "description": "Final Assessment Template Data Model.",
+        "properties": {
+          "introText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Assessment introduction text",
+            "title": "Introtext"
+          },
+          "passingScore": {
+            "default": 80,
+            "description": "Passing score percentage",
+            "maximum": 100,
+            "minimum": 0,
+            "title": "Passingscore",
+            "type": "integer"
+          },
+          "maxAttempts": {
+            "default": 1,
+            "description": "Maximum attempts allowed",
+            "minimum": 1,
+            "title": "Maxattempts",
+            "type": "integer"
+          },
+          "shuffleQuestions": {
+            "default": false,
+            "description": "Whether question order can be shuffled",
+            "title": "Shufflequestions",
+            "type": "boolean"
+          },
+          "shuffleOptions": {
+            "default": false,
+            "description": "Whether option order can be shuffled",
+            "title": "Shuffleoptions",
+            "type": "boolean"
+          },
+          "showCorrectAnswers": {
+            "default": true,
+            "description": "Show correct answers after submission",
+            "title": "Showcorrectanswers",
+            "type": "boolean"
+          },
+          "questions": {
+            "description": "Assessment questions",
+            "items": {
+              "$ref": "#/components/schemas/FinalAssessmentQuestion"
+            },
+            "minItems": 1,
+            "title": "Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "title": "FinalAssessmentData",
+        "type": "object"
       }
     }
   }

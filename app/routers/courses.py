@@ -25,6 +25,7 @@ from app.repositories.template_type_repo import (
     TemplateTypeRepository,
     TemplateTypeNotFoundError,
 )
+from app.routers.page_components import PageDTO as NestedPageDTO
 
 router = APIRouter(prefix="/courses", tags=["Courses"])
 
@@ -143,6 +144,21 @@ class CreatePageFromTemplate(BaseModel):
     page_order: Optional[int] = Field(
         None, description="Position in course (auto-assigned if not provided)"
     )
+
+
+class PageFromTemplatePage(BaseModel):
+    id: str
+    course_id: str
+    title: str
+    order_index: int
+    layout: Optional[dict] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PageFromTemplateResponse(BaseModel):
+    page: PageFromTemplatePage
+    message: str
 
 
 class CourseOut(BaseModel):
@@ -273,7 +289,7 @@ async def delete_course(
     summary="Upsert course (create if absent, update if present)",
     responses={
         200: {"description": "Course updated"},
-        201: {"description": "Course created"},
+        201: {"description": "Course created", "model": CourseOut},
     },
 )
 async def upsert_course(
@@ -313,7 +329,7 @@ async def upsert_course(
 # Add Page from Template Feature Endpoints
 
 
-@router.get("/{courseId}/pages")
+@router.get("/{courseId}/pages", response_model=List[NestedPageDTO])
 async def get_course_pages(
     courseId: str,
     session: AsyncSession = Depends(get_session),
@@ -326,7 +342,7 @@ async def get_course_pages(
     return [p.to_dict() for p in pages]
 
 
-@router.post("/{courseId}/pages/from-template")
+@router.post("/{courseId}/pages/from-template", response_model=PageFromTemplateResponse)
 async def create_page_from_template(
     courseId: str,
     request: CreatePageFromTemplate,

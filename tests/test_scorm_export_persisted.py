@@ -199,8 +199,9 @@ async def test_export_404_for_missing_course(test_app: FastAPI):
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
         r = await client.post("/api/v1/export/scorm/nonexistent-course")
         assert r.status_code == 404
-        body = r.json()
-        assert "nonexistent-course" in body.get("detail", "")
+        detail = r.json()["detail"]
+        assert detail["code"] == "NOT_FOUND"
+        assert detail["details"]["courseId"] == "nonexistent-course"
 
 
 @pytest.mark.asyncio
@@ -213,8 +214,10 @@ async def test_export_422_course_no_pages(test_app: FastAPI):
         r = await client.post(f"/api/v1/export/scorm/{cid}")
         assert r.status_code == 422, r.text
         detail = r.json()["detail"]
-        assert isinstance(detail, list), "detail must be an array"
-        codes = [e["code"] for e in detail]
+        assert detail["code"] == "VALIDATION_ERROR"
+        errors = detail["details"]["errors"]
+        assert isinstance(errors, list), "detail.errors must be an array"
+        codes = [e["code"] for e in errors]
         assert "COURSE_NO_PAGES" in codes, f"Expected COURSE_NO_PAGES, got {codes}"
 
 
@@ -231,14 +234,14 @@ async def test_export_422_page_no_components(test_app: FastAPI):
         r = await client.post(f"/api/v1/export/scorm/{cid}")
         assert r.status_code == 422, r.text
         detail = r.json()["detail"]
-        assert isinstance(detail, list)
-        codes = [e["code"] for e in detail]
+        assert detail["code"] == "VALIDATION_ERROR"
+        codes = [e["code"] for e in detail["details"]["errors"]]
         assert "PAGE_NO_COMPONENTS" in codes, f"Expected PAGE_NO_COMPONENTS, got {codes}"
 
 
 @pytest.mark.asyncio
 async def test_export_422_structured_fields(test_app: FastAPI):
-    """Each error in the 422 detail array must have the required fields."""
+    """Each error in the 422 detail envelope must have the required fields."""
     async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
         cid = "export-fields-001"
         await _seed_course(client, course_id=cid)
@@ -246,7 +249,8 @@ async def test_export_422_structured_fields(test_app: FastAPI):
         r = await client.post(f"/api/v1/export/scorm/{cid}")
         assert r.status_code == 422
         detail = r.json()["detail"]
-        for err in detail:
+        assert detail["code"] == "VALIDATION_ERROR"
+        for err in detail["details"]["errors"]:
             assert "code" in err, f"Missing 'code' in {err}"
             assert "field" in err, f"Missing 'field' in {err}"
             assert "message" in err, f"Missing 'message' in {err}"
@@ -265,9 +269,10 @@ async def test_export_format_query_param_accepted(test_app: FastAPI):
         assert r.status_code in (200, 404, 422)
         if r.status_code == 422:
             detail = r.json()["detail"]
-            # Must be our structured array, not a Pydantic request body error
-            assert isinstance(detail, list)
-            for e in detail:
+            assert detail["code"] == "VALIDATION_ERROR"
+            errors = detail["details"]["errors"]
+            assert isinstance(errors, list)
+            for e in errors:
                 assert isinstance(e, dict), "detail items must be dicts"
                 # Pydantic body errors have 'loc', ours don't
                 assert "loc" not in e, "Unexpected Pydantic body validation error"

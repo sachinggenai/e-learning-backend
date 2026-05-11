@@ -13,6 +13,11 @@ from typing import Optional, List, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+try:
+    from pydantic import ConfigDict
+    PYDANTIC_V2 = True
+except ImportError:  # pragma: no cover
+    PYDANTIC_V2 = False
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import get_session
@@ -33,6 +38,30 @@ class QuestionResponseDTO(BaseModel):
     questionId: str
     selectedOptionIds: List[str] = Field(default_factory=list)
 
+    if PYDANTIC_V2:
+        model_config = ConfigDict(
+            json_schema_extra={
+                "examples": [
+                    {"questionId": "q-1", "selectedOptionIds": ["opt-a"]},
+                    {
+                        "questionId": "q-2",
+                        "selectedOptionIds": ["Learner typed answer"],
+                    },
+                ]
+            }
+        )
+    else:
+        class Config:
+            schema_extra = {
+                "examples": [
+                    {"questionId": "q-1", "selectedOptionIds": ["opt-a"]},
+                    {
+                        "questionId": "q-2",
+                        "selectedOptionIds": ["Learner typed answer"],
+                    },
+                ]
+            }
+
 
 class ComponentAnswerDTO(BaseModel):
     componentId: str
@@ -43,6 +72,52 @@ class ComponentAnswerDTO(BaseModel):
 class ScoreCalculateDTO(BaseModel):
     answers: List[ComponentAnswerDTO]
     attemptNumber: int = 1
+
+    if PYDANTIC_V2:
+        model_config = ConfigDict(
+            json_schema_extra={
+                "examples": [
+                    {
+                        "answers": [
+                            {
+                                "componentId": "final-assessment-1",
+                                "componentType": "final-assessment",
+                                "responses": [
+                                    {"questionId": "q-1", "selectedOptionIds": ["a"]},
+                                    {
+                                        "questionId": "q-2",
+                                        "selectedOptionIds": ["Learner typed answer"],
+                                    },
+                                ],
+                            }
+                        ],
+                        "attemptNumber": 1,
+                    }
+                ]
+            }
+        )
+    else:
+        class Config:
+            schema_extra = {
+                "examples": [
+                    {
+                        "answers": [
+                            {
+                                "componentId": "final-assessment-1",
+                                "componentType": "final-assessment",
+                                "responses": [
+                                    {"questionId": "q-1", "selectedOptionIds": ["a"]},
+                                    {
+                                        "questionId": "q-2",
+                                        "selectedOptionIds": ["Learner typed answer"],
+                                    },
+                                ],
+                            }
+                        ],
+                        "attemptNumber": 1,
+                    }
+                ]
+            }
 
 
 class ComponentStateDTO(BaseModel):
@@ -73,6 +148,101 @@ class InteractionEventDTO(BaseModel):
     learnerId: Optional[str] = None
     data: Optional[InteractionDataDTO] = None
     completed: bool = False
+
+
+class ScoringConfigDTO(BaseModel):
+    scoringId: Optional[str] = None
+    courseId: str
+    config: dict
+    componentScores: Optional[list] = None
+    scormReporting: Optional[dict] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+
+
+class ValidationIssueDTO(BaseModel):
+    field: str
+    message: str
+
+
+class ScoringValidationResultDTO(BaseModel):
+    valid: bool
+    errors: List[ValidationIssueDTO]
+    warnings: List[ValidationIssueDTO]
+
+
+class ScoreQuestionResultDTO(BaseModel):
+    questionId: str
+    correct: bool
+    score: float
+    maxScore: float
+    partialCredit: bool
+
+
+class ScoreComponentResultDTO(BaseModel):
+    componentId: str
+    componentType: str
+    score: float
+    maxScore: float
+    weight: float
+    weightedScore: float
+    questionResults: List[ScoreQuestionResultDTO]
+
+
+class ScoreCalculateResultDTO(BaseModel):
+    totalScore: float
+    maxScore: float
+    percentage: float
+    passed: bool
+    passingScore: float
+    componentResults: List[ScoreComponentResultDTO]
+    attemptNumber: int
+    remainingAttempts: Optional[int] = None
+
+
+class PageCompletionComponentDTO(BaseModel):
+    componentId: str
+    completed: bool
+    completionType: str
+    threshold: Optional[float] = None
+
+
+class PageCompletionResultDTO(BaseModel):
+    pageId: str
+    title: str
+    completed: bool
+    strategy: str
+    components: List[PageCompletionComponentDTO]
+
+
+class CourseCompletionPageDTO(BaseModel):
+    pageId: str
+    title: str
+    completed: bool
+    strategy: str
+    components: List[PageCompletionComponentDTO]
+
+
+class CourseCompletionResultDTO(BaseModel):
+    courseId: str
+    status: str
+    overallProgress: float
+    pages: List[CourseCompletionPageDTO]
+
+
+class InteractionEventOutDTO(BaseModel):
+    eventId: str
+    courseId: str
+    pageId: str
+    componentId: str
+    learnerId: str
+    interactionType: str
+    data: Optional[dict] = None
+    completed: bool
+    score: Optional[float] = None
+    maxScore: Optional[float] = None
+    duration: Optional[float] = None
+    createdAt: Optional[str] = None
 
 
 router = APIRouter(tags=["Scoring", "Completion"])
@@ -114,6 +284,23 @@ def _get_correct_option_ids(question: dict) -> set[str]:
             if option_id is not None:
                 option_ids.add(str(option_id))
     return option_ids
+
+
+def _normalize_answer_text(value: Any) -> str:
+    return str(value).strip().casefold()
+
+
+def _is_fill_in_blank_correct(question: dict, responses: List[str]) -> bool:
+    accepted_answers = question.get("correctAnswers") or []
+    if not accepted_answers or not responses:
+        return False
+
+    normalized_answers = {
+        _normalize_answer_text(answer)
+        for answer in accepted_answers
+        if str(answer).strip()
+    }
+    return _normalize_answer_text(responses[0]) in normalized_answers
 
 
 async def _build_scorable_lookup(
@@ -269,7 +456,7 @@ def _build_page_completion_payload(
 
 # ── Scoring Endpoints ───────────────────────
 
-@router.get("/courses/{courseId}/scoring")
+@router.get("/courses/{courseId}/scoring", response_model=ScoringConfigDTO)
 async def get_scoring_config(
     courseId: str,
     session: AsyncSession = Depends(get_session),
@@ -305,7 +492,7 @@ async def get_scoring_config(
     return record.to_dict()
 
 
-@router.patch("/courses/{courseId}/scoring")
+@router.patch("/courses/{courseId}/scoring", response_model=ScoringConfigDTO)
 async def update_scoring_config(
     courseId: str,
     body: dict,
@@ -326,7 +513,7 @@ async def update_scoring_config(
     return record.to_dict()
 
 
-@router.post("/courses/{courseId}/scoring/validate")
+@router.post("/courses/{courseId}/scoring/validate", response_model=ScoringValidationResultDTO)
 async def validate_scoring_config(
     courseId: str,
     session: AsyncSession = Depends(get_session),
@@ -379,7 +566,7 @@ async def validate_scoring_config(
     return {"valid": len(errors) == 0, "errors": errors, "warnings": warnings}
 
 
-@router.post("/courses/{courseId}/scoring/calculate")
+@router.post("/courses/{courseId}/scoring/calculate", response_model=ScoreCalculateResultDTO)
 async def calculate_score(
     courseId: str,
     body: ScoreCalculateDTO,
@@ -459,47 +646,68 @@ async def calculate_score(
                     },
                 )
 
-            correct_option_ids = _get_correct_option_ids(question)
-            if not correct_option_ids:
-                raise api_http_exception(
-                    422,
-                    "VALIDATION_ERROR",
-                    "Question "
-                    f"'{resp.questionId}' has no correct options configured",
-                    field="answers[].responses[].selectedOptionIds",
-                    details={
-                        "componentId": answer.componentId,
-                        "questionId": resp.questionId,
-                    },
-                )
-
             selected_option_ids = {
                 str(opt_id) for opt_id in resp.selectedOptionIds
             }
             q_max = max_points / max(len(answer.responses), 1)
             comp_max += q_max
 
-            is_exact_match = selected_option_ids == correct_option_ids
-            question_score = q_max if is_exact_match else 0.0
-            partial_credit = False
-            if (
-                not is_exact_match
-                and config.get("allowPartialCredit")
-                and len(correct_option_ids) > 1
-            ):
-                correct_selected = len(
-                    selected_option_ids & correct_option_ids
+            question_type = question.get("type")
+            if question_type == "fill-in-blank":
+                if not question.get("correctAnswers"):
+                    raise api_http_exception(
+                        422,
+                        "VALIDATION_ERROR",
+                        "Question "
+                        f"'{resp.questionId}' has no correct answers configured",
+                        field="answers[].responses[].selectedOptionIds",
+                        details={
+                            "componentId": answer.componentId,
+                            "questionId": resp.questionId,
+                        },
+                    )
+                is_exact_match = _is_fill_in_blank_correct(
+                    question,
+                    resp.selectedOptionIds,
                 )
-                incorrect_selected = len(
-                    selected_option_ids - correct_option_ids
-                )
-                fraction = (
-                    (correct_selected - incorrect_selected)
-                    / len(correct_option_ids)
-                )
-                fraction = max(0.0, fraction)
-                question_score = round(q_max * fraction, 4)
-                partial_credit = 0.0 < question_score < q_max
+                question_score = q_max if is_exact_match else 0.0
+                partial_credit = False
+            else:
+                correct_option_ids = _get_correct_option_ids(question)
+                if not correct_option_ids:
+                    raise api_http_exception(
+                        422,
+                        "VALIDATION_ERROR",
+                        "Question "
+                        f"'{resp.questionId}' has no correct options configured",
+                        field="answers[].responses[].selectedOptionIds",
+                        details={
+                            "componentId": answer.componentId,
+                            "questionId": resp.questionId,
+                        },
+                    )
+
+                is_exact_match = selected_option_ids == correct_option_ids
+                question_score = q_max if is_exact_match else 0.0
+                partial_credit = False
+                if (
+                    not is_exact_match
+                    and config.get("allowPartialCredit")
+                    and len(correct_option_ids) > 1
+                ):
+                    correct_selected = len(
+                        selected_option_ids & correct_option_ids
+                    )
+                    incorrect_selected = len(
+                        selected_option_ids - correct_option_ids
+                    )
+                    fraction = (
+                        (correct_selected - incorrect_selected)
+                        / len(correct_option_ids)
+                    )
+                    fraction = max(0.0, fraction)
+                    question_score = round(q_max * fraction, 4)
+                    partial_credit = 0.0 < question_score < q_max
 
             comp_score += question_score
             question_results.append({
@@ -552,7 +760,7 @@ async def calculate_score(
 
 # ── Completion Endpoints ─────────────────────
 
-@router.get("/courses/{courseId}/completion")
+@router.get("/courses/{courseId}/completion", response_model=CourseCompletionResultDTO)
 async def get_course_completion(
     courseId: str,
     session: AsyncSession = Depends(get_session),
@@ -592,7 +800,7 @@ async def get_course_completion(
     }
 
 
-@router.get("/courses/{courseId}/pages/{pageId}/completion")
+@router.get("/courses/{courseId}/pages/{pageId}/completion", response_model=PageCompletionResultDTO)
 async def get_page_completion(
     courseId: str,
     pageId: str,
@@ -617,7 +825,7 @@ async def get_page_completion(
     return _build_page_completion_payload(page, latest_events)
 
 
-@router.post("/courses/{courseId}/pages/{pageId}/completion")
+@router.post("/courses/{courseId}/pages/{pageId}/completion", response_model=PageCompletionResultDTO)
 async def record_page_completion(
     courseId: str,
     pageId: str,
@@ -708,7 +916,7 @@ async def record_page_completion(
 # Known types include: flip, reveal, drag-sort, text-input, rating,
 # acknowledge, download, mcq-answer, match, drag-drop, etc.
 
-@router.post("/courses/{courseId}/interactions", status_code=201)
+@router.post("/courses/{courseId}/interactions", response_model=InteractionEventOutDTO, status_code=201)
 async def record_interaction(
     courseId: str,
     body: InteractionEventDTO,
@@ -742,7 +950,7 @@ async def record_interaction(
     return event.to_dict()
 
 
-@router.get("/courses/{courseId}/interactions")
+@router.get("/courses/{courseId}/interactions", response_model=List[InteractionEventOutDTO])
 async def list_interactions(
     courseId: str,
     learnerId: str | None = None,

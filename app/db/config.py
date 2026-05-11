@@ -16,11 +16,14 @@ Environment Variables:
 from __future__ import annotations
 import os
 from typing import AsyncGenerator
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     create_async_engine,
     async_sessionmaker,
 )
+
+load_dotenv()
 
 # Build PostgreSQL URL from environment variables if not explicitly set
 

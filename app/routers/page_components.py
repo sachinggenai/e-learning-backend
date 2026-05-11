@@ -38,6 +38,30 @@ class ComponentUpdateDTO(BaseModel):
     styling: Optional[dict] = None
 
 
+class ComponentDTO(BaseModel):
+    componentId: str
+    componentType: str
+    order: int
+    data: dict
+    audioConfig: Optional[dict] = None
+    completionCriteria: Optional[dict] = None
+    styling: Optional[dict] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+
+
+class PageDTO(BaseModel):
+    pageId: str
+    title: str
+    order: int
+    layout: Optional[dict] = None
+    theme: Optional[dict] = None
+    pageCompletion: Optional[dict] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+    components: Optional[List[ComponentDTO]] = None
+
+
 class PageCreateDTO(BaseModel):
     title: str = Field(..., max_length=200)
     components: Optional[List[ComponentCreateDTO]] = None
@@ -82,7 +106,7 @@ router = APIRouter(tags=["Pages", "Components"])
 
 # ── Page Endpoints ───────────────────────────
 
-@router.get("/courses/{courseId}/pages")
+@router.get("/courses/{courseId}/pages", response_model=List[PageDTO])
 async def list_pages(
     courseId: str,
     session: AsyncSession = Depends(get_session),
@@ -93,7 +117,7 @@ async def list_pages(
     return [p.to_dict() for p in pages]
 
 
-@router.post("/courses/{courseId}/pages", status_code=201)
+@router.post("/courses/{courseId}/pages", response_model=PageDTO, status_code=201)
 async def create_page(
     courseId: str,
     body: PageCreateDTO,
@@ -135,7 +159,7 @@ async def create_page(
     return page.to_dict()
 
 
-@router.post("/courses/{courseId}/pages/reorder")
+@router.post("/courses/{courseId}/pages/reorder", response_model=List[PageDTO])
 async def reorder_pages(
     courseId: str,
     body: ReorderDTO,
@@ -147,7 +171,7 @@ async def reorder_pages(
     return [p.to_dict() for p in pages]
 
 
-@router.get("/courses/{courseId}/pages/{pageId}")
+@router.get("/courses/{courseId}/pages/{pageId}", response_model=PageDTO)
 async def get_page(
     courseId: str,
     pageId: str,
@@ -157,7 +181,7 @@ async def get_page(
     return page.to_dict()
 
 
-@router.patch("/courses/{courseId}/pages/{pageId}")
+@router.patch("/courses/{courseId}/pages/{pageId}", response_model=PageDTO)
 async def update_page(
     courseId: str,
     pageId: str,
@@ -193,7 +217,7 @@ async def delete_page(
 
 # ── Component Endpoints ─────────────────────
 
-@router.get("/courses/{courseId}/pages/{pageId}/components")
+@router.get("/courses/{courseId}/pages/{pageId}/components", response_model=List[ComponentDTO])
 async def list_components(
     courseId: str,
     pageId: str,
@@ -205,7 +229,7 @@ async def list_components(
     return [c.to_dict() for c in comps]
 
 
-@router.post("/courses/{courseId}/pages/{pageId}/components", status_code=201)
+@router.post("/courses/{courseId}/pages/{pageId}/components", response_model=ComponentDTO, status_code=201)
 async def add_component(
     courseId: str,
     pageId: str,
@@ -229,7 +253,7 @@ async def add_component(
     return comp.to_dict()
 
 
-@router.post("/courses/{courseId}/pages/{pageId}/components/reorder")
+@router.post("/courses/{courseId}/pages/{pageId}/components/reorder", response_model=List[ComponentDTO])
 async def reorder_components(
     courseId: str,
     pageId: str,
@@ -242,7 +266,7 @@ async def reorder_components(
     return [c.to_dict() for c in comps]
 
 
-@router.get("/courses/{courseId}/pages/{pageId}/components/{componentId}")
+@router.get("/courses/{courseId}/pages/{pageId}/components/{componentId}", response_model=ComponentDTO)
 async def get_component(
     courseId: str,
     pageId: str,
@@ -257,7 +281,7 @@ async def get_component(
     return comp.to_dict()
 
 
-@router.patch("/courses/{courseId}/pages/{pageId}/components/{componentId}")
+@router.patch("/courses/{courseId}/pages/{pageId}/components/{componentId}", response_model=ComponentDTO)
 async def update_component(
     courseId: str,
     pageId: str,
