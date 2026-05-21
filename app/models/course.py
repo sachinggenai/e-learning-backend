@@ -6,7 +6,7 @@ They follow the JSON Schema specification defined in /shared/schema/course.json
 and implement the Phase 1 requirements for data validation.
 """
 
-from typing import Any, List, Optional, Literal, Union
+from typing import Any, List, Optional, Literal
 # Pydantic v1/v2 compatibility imports
 try:  # Prefer Pydantic v2 style APIs
     from pydantic import BaseModel, Field, field_validator, model_validator
@@ -19,7 +19,18 @@ from datetime import datetime
 
 # Template type definitions - hybrid enum/DB approach for Phase 2
 # Built-in types (always available)
-BUILTIN_TEMPLATE_TYPES = ["welcome", "content-video", "mcq", "content-text", "summary"]
+BUILTIN_TEMPLATE_TYPES = [
+    "welcome", 
+    "content-video", 
+    "mcq", 
+    "content-text", 
+    "summary",
+    "final-assessment",  # Assessment template type
+    "tabs",              # Content organization
+    "accordion",         # Content organization
+    "video",             # Alias for content-video
+    "quiz",              # Alias for mcq
+]
 # Allow any string for dynamic types loaded from DB
 TemplateType = str  # Changed from Literal for hybrid enum/DB support
 AssetType = Literal["video", "image", "audio", "document", "other"]
@@ -94,7 +105,8 @@ if PYDANTIC_V2:
         content: Optional[str] = Field(None, description="Main content text")
         subtitle: Optional[str] = Field(None, description="Optional subtitle")
         videoUrl: Optional[str] = Field(None, description="Video URL for content-video templates")
-        questions: Optional[Union[List[Question], List[dict[str, Any]]]] = Field(None, description="Questions for assessment templates")
+        # Keep raw question objects to avoid lossy coercion before template-specific validation.
+        questions: Optional[List[dict[str, Any]]] = Field(None, description="Questions for assessment templates")
         tabs: Optional[List[dict]] = Field(None, description="Tabs data for tabs templates")
         panels: Optional[List[dict]] = Field(None, description="Panel data for accordion templates")
         # text-with-media / content-media fields
@@ -202,7 +214,8 @@ else:
         content: Optional[str] = Field(None, description="Main content text")
         subtitle: Optional[str] = Field(None, description="Optional subtitle")
         videoUrl: Optional[str] = Field(None, description="Video URL for content-video templates")
-        questions: Optional[Union[List[Question], List[dict[str, Any]]]] = Field(None, description="Questions for assessment templates")
+        # Keep raw question objects to avoid lossy coercion before template-specific validation.
+        questions: Optional[List[dict[str, Any]]] = Field(None, description="Questions for assessment templates")
         tabs: Optional[List[dict]] = Field(None, description="Tabs data for tabs templates")
         panels: Optional[List[dict]] = Field(None, description="Panel data for accordion templates")
         # text-with-media fields
@@ -231,11 +244,40 @@ else:
                         continue
                     Question(**question)
             if template_type == 'final-assessment':
-                FinalAssessmentData(**data.dict())
+                try:
+                    # Validate final assessment structure
+                    questions = data.questions
+                    if not isinstance(questions, list):
+                        if isinstance(questions, str):
+                            # Handle case where questions is a string (malformed data)
+                            raise ValueError(
+                                f"Final Assessment 'questions' must be a list of question objects, got string: {repr(questions[:50])}"
+                            )
+                        raise ValueError(f"Final Assessment 'questions' must be a list, got {type(questions).__name__}")
+                    
+                    if len(questions) == 0:
+                        raise ValueError("Final Assessment must have at least one question")
+                    
+                    # Validate each question
+                    for idx, question in enumerate(questions):
+                        if isinstance(question, dict):
+                            FinalAssessmentQuestion(**question)
+                        elif hasattr(question, '__dict__'):
+                            FinalAssessmentQuestion(**question.__dict__)
+                        else:
+                            raise ValueError(f"Question {idx} has invalid format: {type(question)}")
+                    
+                    # Full data validation
+                    FinalAssessmentData(**data.dict())
+                except ValueError as ve:
+                    raise ValueError(f"Final Assessment validation failed: {str(ve)}")
+                except Exception as e:
+                    raise ValueError(f"Final Assessment validation error: {type(e).__name__}: {str(e)}")
             if template_type == 'content-video':
                 if data.videoUrl and not data.videoUrl.startswith(('http://', 'https://')):
                     raise ValueError("Video URL must be a valid HTTP/HTTPS URL")
             return data
+
 
 
 class Asset(BaseModel):

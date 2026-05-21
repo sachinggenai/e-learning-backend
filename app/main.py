@@ -102,6 +102,12 @@ async def lifespan(app: FastAPI):
             count = await seed_component_types(session)
             logger.info("Seeded %d component types", count)
 
+        # Seed template types
+        from app.services.seed_template_types import seed_template_types
+        async with SessionLocal() as session:
+            count = await seed_template_types(session)
+            logger.info("Seeded %d template types", count)
+
         # Validate critical in-process contracts at startup.
         _verify_critical_contracts()
     except Exception:

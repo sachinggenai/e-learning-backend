@@ -376,7 +376,32 @@ def _component_data_with_content(comp_type: str, data: dict) -> dict:
 
     out = dict(data)
 
-    if comp_type in ("text-with-media", "content-media"):
+    if comp_type == "final-assessment":
+        # For final assessment, sanitize questions field if it's malformed
+        questions = out.get("questions")
+        if isinstance(questions, str):
+            # If questions is a string, it's malformed - try to parse it or clear it
+            questions_str = (questions or "").strip()
+            if not questions_str:
+                # Empty string or whitespace - initialize as empty list
+                out["questions"] = []
+            else:
+                # Try to parse as JSON, otherwise keep as string and let validation fail with better error
+                try:
+                    import json
+                    parsed = json.loads(questions)
+                    out["questions"] = parsed if isinstance(parsed, list) else []
+                except (json.JSONDecodeError, TypeError):
+                    # Keep as string - will fail validation with clear error message
+                    pass
+        elif not isinstance(questions, list):
+            # If it's not a list or string, convert to empty list
+            out["questions"] = []
+        
+        # Synthesize content from introText
+        out["content"] = out.get("introText") or out.get("title") or "final-assessment"
+
+    elif comp_type in ("text-with-media", "content-media"):
         # Preserve all text-with-media fields as-is; synthesize a
         # plain-text content fallback from body without overwriting mediaUrl.
         out["content"] = data.get("body") or comp_type
@@ -839,6 +864,22 @@ async def export_persisted_course(
                 field="course",
                 message="Schema validation failed",
                 details={"errors": errors},
+            ),
+        )
+    except ValueError as exc:
+        # Catch validation errors raised by Pydantic validators (e.g., @validator)
+        error_msg = str(exc)
+        raise HTTPException(
+            status_code=422,
+            detail=build_error(
+                code="VALIDATION_ERROR",
+                field="course",
+                message=error_msg,
+                details={
+                    "errors": [
+                        _export_error("VALIDATION_ERROR", "course", error_msg)
+                    ]
+                },
             ),
         )
     except Exception as exc:
