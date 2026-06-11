@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import os
+from importlib import import_module
 from contextlib import asynccontextmanager
 from typing import List
 
@@ -82,15 +83,18 @@ async def lifespan(app: FastAPI):
         from app.db.config import engine, SessionLocal
         from app.models.base import Base
 
-        # Import all ORM models so Base.metadata knows about them
-        import app.models.persisted_course  # noqa: F401
-        import app.models.page_component  # noqa: F401
-        import app.models.component_type  # noqa: F401
-        import app.models.scoring  # noqa: F401
-        import app.models.theme  # noqa: F401
-        import app.models.branching  # noqa: F401
-        import app.models.social  # noqa: F401
-        import app.models.interaction_event  # noqa: F401
+        # Import all ORM models so Base.metadata knows about them.
+        for module_name in (
+            "app.models.persisted_course",
+            "app.models.page_component",
+            "app.models.component_type",
+            "app.models.scoring",
+            "app.models.theme",
+            "app.models.branching",
+            "app.models.social",
+            "app.models.interaction_event",
+        ):
+            import_module(module_name)
 
         # Create tables that don't exist yet (non-destructive)
         async with engine.begin() as conn:

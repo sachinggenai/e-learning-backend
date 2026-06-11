@@ -211,7 +211,7 @@ def main():
     print("\nNext steps:")
     print("  1. Check database: sqlite3 data/elearning.db \"SELECT * FROM import_jobs LIMIT 1;\"")
     print("  2. View in Swagger: http://localhost:8000/docs")
-    print("  3. Read: docs/TESTING.md")
+    print("  3. Run targeted tests: /Users/aiwork/iOSStudy/backend/.venv/bin/python -m pytest -q tests/test_import_discovery.py")
     
     return True
 

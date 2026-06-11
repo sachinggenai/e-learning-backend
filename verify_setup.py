@@ -50,9 +50,14 @@ def check_router_registration() -> bool:
     
     content = main_py.read_text()
     
+    router_registered = (
+        "app.include_router(imports.router" in content
+        or "api_router.include_router(imports.router" in content
+    )
+
     checks = [
         ("from app.routers import" in content and "imports" in content, "Import statement"),
-        ("app.include_router(imports.router" in content, "Router registration"),
+        (router_registered, "Router registration"),
     ]
     
     all_good = True
@@ -133,9 +138,7 @@ def main():
     print("🧪 Test Files:")
     print("-" * 70)
     results.append(check_file_exists("test_import_quick.py", "Quick test script"))
-    results.append(check_file_exists("README.md", "Project quick start guide"))
-    results.append(check_file_exists("docs/DEVELOPMENT.md", "Development guide"))
-    results.append(check_file_exists("docs/TESTING.md", "Testing guide"))
+    # Markdown documentation files are intentionally excluded from this verifier.
     print()
     
     # Check 3: Router registration

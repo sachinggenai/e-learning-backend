@@ -143,4 +143,9 @@ def test_import_commit_rejects_duplicate_course_id(test_client: TestClient):
         f"/api/v1/imports/jobs/{job_id}/commit"
     )
     assert commit_response.status_code == 400
-    assert "already exists" in commit_response.json()["detail"]
+    body = commit_response.json()
+    detail = body["detail"]
+    assert isinstance(detail, dict)
+    assert detail["detail"] == "Import commit failed"
+    assert "errors" in detail
+    assert detail["errors"][0]["code"] == "IMPORT_COMMIT_ERROR"

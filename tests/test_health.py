@@ -111,11 +111,16 @@ class TestHealthEndpoints:
 
     def test_health_check_cors_headers(self, test_client: TestClient):
         """Test health check includes proper CORS headers"""
-        response = test_client.get("/api/v1/health")
+        origin = "http://localhost:3000"
+        response = test_client.get(
+            "/api/v1/health",
+            headers={"Origin": origin},
+        )
         
         # Should include CORS headers for frontend access
         headers = response.headers
         assert "access-control-allow-origin" in headers
+        assert headers["access-control-allow-origin"] == origin
 
     @pytest.mark.skip(reason="datetime mock crashes ASGI app; needs proper error handling in endpoint first")
     def test_health_check_error_handling(self, test_client: TestClient):

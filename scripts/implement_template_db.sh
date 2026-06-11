@@ -92,7 +92,7 @@ if [ $? -eq 0 ]; then
     echo "Next steps:"
     echo "1. Start the server: uvicorn app.main:app --reload"
     echo "2. Test the endpoint: curl http://localhost:8000/api/v1/courses/templates/available"
-    echo "3. Review: docs/SCORM.md"
+    echo "3. Run tests: /Users/aiwork/iOSStudy/backend/.venv/bin/python -m pytest -q tests/test_templates_api.py"
     echo ""
 else
     echo ""
