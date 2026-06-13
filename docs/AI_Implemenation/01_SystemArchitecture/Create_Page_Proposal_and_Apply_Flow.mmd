@@ -1,0 +1,143 @@
+---
+title: Create Page Proposal and Apply Flow - Detailed Steps
+config:
+    look: handDrawn
+    layout: elk
+---
+
+graph TD
+  Start([AI Decides to Add New Page]) --> AG1["Agent: call propose_create_page(session_id, title, template_type, data)"]
+  
+  AG1 --> BE_RECV[Backend: Receive propose_create_page request]
+  BE_RECV --> REQ_VAL{Request payload valid?}
+  REQ_VAL -->|No| ERR1[Return 400: Bad Request]
+  ERR1 --> FE_ERR1[Caller: Display validation error]
+  
+  REQ_VAL -->|Yes| AUTH1{Session authenticated & active?}
+  AUTH1 -->|No| ERR2[Return 401: Unauthorized or 440: Session expired]
+  ERR2 --> FE_ERR2[Caller: Trigger re-auth]
+  
+  AUTH1 -->|Yes| PERM1[Backend: Check user permissions for course]
+  PERM1 -->|Denied| ERR3[Return 403: Forbidden]
+  ERR3 --> FE_ERR3[Caller: Show access denied]
+  
+  PERM1 -->|OK| RATE1[Backend: Check rate limits & quotas]
+  RATE1 -->|Exceeded| ERR4[Return 429: Too Many Requests]
+  ERR4 --> FE_ERR4[Caller: Backoff & retry]
+  
+  RATE1 -->|OK| TITLE_CHECK[Backend: Validate page title uniqueness in course]
+  TITLE_CHECK -->|Duplicate| ERR5[Return 409: Title already exists]
+  ERR5 --> FE_ERR5[Caller: Show title conflict]
+  
+  TITLE_CHECK -->|OK| TMPL_CHECK[Backend: Validate template_type exists]
+  TMPL_CHECK -->|Not found| ERR6[Return 404: Template type not found]
+  ERR6 --> FE_ERR6[Caller: Show template error]
+  
+  TMPL_CHECK -->|OK| FETCH_TMPL[Backend: Fetch template schema and defaults]
+  FETCH_TMPL --> SCHEMA_VAL[Backend: Validate data schema against template]
+  SCHEMA_VAL -->|Schema invalid| ERR7[Return 422: Schema validation failed]
+  ERR7 --> FE_ERR7[Caller: Show schema errors]
+  
+  SCHEMA_VAL -->|OK| BIZ_RULES[Backend: Validate business rules]
+  BIZ_RULES --> CHECK_SCORM[Validate SCORM compliance if applicable]
+  CHECK_SCORM --> CHECK_WCAG[Validate WCAG accessibility requirements]
+  CHECK_WCAG --> CHECK_FIELDS[Validate required fields present]
+  CHECK_FIELDS --> CHECK_MEDIA[Validate media references exist]
+  CHECK_MEDIA -->|Any failed| ERR8[Return 422: Business rule violation]
+  ERR8 --> FE_ERR8[Caller: Show rule violations]
+  
+  CHECK_MEDIA -->|All passed| GEN_PROP_ID[Backend: Generate unique proposal_id]
+  GEN_PROP_ID --> RENDER_PREVIEW["Backend: Render preview (HTML/JSON representation)"]
+  RENDER_PREVIEW --> MERGE_DEFAULTS[Backend: Merge template defaults with provided data]
+  MERGE_DEFAULTS --> PREP_RESPONSE["Backend: Prepare proposal response<br/>(proposal_id, preview, validation_status, etag)"]
+  
+  PREP_RESPONSE --> STORE_PROP[Backend: Store proposal temporarily with TTL]
+  STORE_PROP --> AUDIT_PROP[Audit: Log propose_create_page event]
+  AUDIT_PROP --> RESP_PROP[Return 200: OK with proposal details]
+  
+  RESP_PROP --> FE_RECV[Frontend: Receive proposal]
+  FE_RECV --> FE_DISPLAY[Frontend: Display page preview to user]
+  FE_DISPLAY --> FE_SHOW_DATA[Frontend: Show title, template type, data summary]
+  FE_SHOW_DATA --> FE_VALIDATION[Frontend: Display validation status & warnings]
+  
+  FE_VALIDATION --> USER_CHOICE{User approves proposal?}
+  USER_CHOICE -->|Reject| END_REJECT([Proposal discarded])
+  
+  USER_CHOICE -->|Approve| AG2["Frontend/Agent: call apply_page_proposal(proposal_id, user_confirmed=true)"]
+  
+  AG2 --> BE_APPLY_RECV[Backend: Receive apply_page_proposal request]
+  BE_APPLY_RECV --> APPLY_VAL{Request payload valid?}
+  APPLY_VAL -->|No| ERR9[Return 400: Bad Request]
+  ERR9 --> FE_ERR9[Caller: Show validation error]
+  
+  APPLY_VAL -->|Yes| AUTH2{Session authenticated & active?}
+  AUTH2 -->|No| ERR10[Return 401: Unauthorized or 440: Session expired]
+  ERR10 --> FE_ERR10[Caller: Re-authenticate]
+  
+  AUTH2 -->|Yes| PERM2[Backend: Check user permissions for course]
+  PERM2 -->|Denied| ERR11[Return 403: Forbidden]
+  ERR11 --> FE_ERR11[Caller: Show access denied]
+  
+  PERM2 -->|OK| PROP_LOOKUP[Backend: Lookup proposal by proposal_id]
+  PROP_LOOKUP -->|Not found| ERR12[Return 404: Proposal not found or expired]
+  ERR12 --> FE_ERR12[Caller: Show proposal error, restart]
+  
+  PROP_LOOKUP -->|Found| PROP_OWNER_CHECK[Backend: Verify proposal belongs to current session]
+  PROP_OWNER_CHECK -->|Mismatch| ERR13[Return 403: Proposal not authorized]
+  ERR13 --> FE_ERR13[Caller: Show authorization error]
+  
+  PROP_OWNER_CHECK -->|Match| PROP_TTL[Backend: Check proposal has not expired]
+  PROP_TTL -->|Expired| ERR14[Return 409: Proposal expired, retry]
+  ERR14 --> FE_ERR14[Caller: Show expiration, retry]
+  
+  PROP_TTL -->|Active| RE_VALIDATE[Backend: Re-validate proposal data]
+  RE_VALIDATE -->|Invalid| ERR15[Return 422: Proposal data no longer valid]
+  ERR15 --> FE_ERR15[Caller: Show validation error]
+  
+  RE_VALIDATE -->|Valid| GEN_PAGE_ID[Backend: Generate unique page_id]
+  GEN_PAGE_ID --> ASSEMBLE_PAGE[Backend: Assemble final page object]
+  ASSEMBLE_PAGE --> SET_METADATA["Backend: Set metadata (created_at, created_by, status='published')"]
+  SET_METADATA --> SET_SEQ[Backend: Calculate page sequence/order in course]
+  
+  SET_SEQ --> DB_INSERT[Backend: Insert page into database]
+  DB_INSERT --> DB_SUCCESS{Insert successful?}
+  DB_SUCCESS -->|Failed| ERR16[Return 500: Database error]
+  ERR16 --> FE_ERR16[Caller: Show system error]
+  
+  DB_SUCCESS -->|Success| CLEAR_PROP[Backend: Clear/delete proposal from temp storage]
+  CLEAR_PROP --> AUDIT_CREATE[Audit: Log page_created event]
+  AUDIT_CREATE --> AUDIT_DETAILS["Audit: Log page_id, session_id, user_id, template_type, title"]
+  AUDIT_DETAILS --> INVALIDATE_CACHE[Backend: Invalidate course pages list cache]
+  
+  INVALIDATE_CACHE --> PREP_SUCCESS["Backend: Prepare success response<br/>(page_id, page_data, etag)"]
+  PREP_SUCCESS --> RESP_SUCCESS[Return 201: Created with page details]
+  
+  RESP_SUCCESS --> FE_APPLY_RECV[Frontend: Receive page creation success]
+  FE_APPLY_RECV --> FE_UPDATE_STATE[Frontend: Update course state with new page]
+  FE_UPDATE_STATE --> FE_REFRESH_LIST[Frontend: Refresh pages list or append new page]
+  FE_UPDATE_STATE --> FE_NOTIFY[Frontend: Show success notification]
+  FE_NOTIFY --> END_SUCCESS([Page Created Successfully])
+  
+  style Start fill:#e8f7ff
+  style END_SUCCESS fill:#e8f7ff
+  style END_REJECT fill:#fff5e6
+  style ERR1 fill:#ffecec
+  style ERR2 fill:#ffecec
+  style ERR3 fill:#ffecec
+  style ERR4 fill:#ffecec
+  style ERR5 fill:#ffecec
+  style ERR6 fill:#ffecec
+  style ERR7 fill:#ffecec
+  style ERR8 fill:#ffecec
+  style ERR9 fill:#ffecec
+  style ERR10 fill:#ffecec
+  style ERR11 fill:#ffecec
+  style ERR12 fill:#ffecec
+  style ERR13 fill:#ffecec
+  style ERR14 fill:#ffecec
+  style ERR15 fill:#ffecec
+  style ERR16 fill:#ffecec
+  style FE_DISPLAY fill:#f0fff0
+  style DB_INSERT fill:#fff8e6
+  style RENDER_PREVIEW fill:#f7f0ff
+  style AUDIT_CREATE fill:#f7f7f7

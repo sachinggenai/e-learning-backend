@@ -1,0 +1,88 @@
+---
+title: Page List and Fetch Flow - Detailed Steps
+config:
+    look: handDrawn
+    layout: elk
+---
+
+graph TD
+  Start([AI Agent Requests Course State]) --> AG1["Agent: call list_pages(session_id)"]
+  AG1 --> BE_RECEIVE[Backend: Receive list_pages request]
+  BE_RECEIVE --> REQ_VALID{Is request payload valid?}
+  REQ_VALID -->|No| ERR1[Return 400: Bad Request]
+  ERR1 --> FE_ERR1[Caller: Handle validation error]
+
+  REQ_VALID -->|Yes| AUTH{Session authenticated & active?}
+  AUTH -->|No| ERR2[Return 401: Unauthorized or 440: Session expired]
+  ERR2 --> FE_ERR2[Caller: Trigger re-auth/login]
+
+  AUTH -->|Yes| PERM_CHECK[Backend: Check user permissions for course]
+  PERM_CHECK -->|No| ERR3[Return 403: Forbidden]
+  ERR3 --> FE_ERR3[Caller: Show access denied]
+
+  PERM_CHECK -->|Yes| RATE_LIM[Backend: Check rate limits & quotas]
+  RATE_LIM -->|Exceeded| ERR4[Return 429: Too Many Requests]
+  ERR4 --> FE_ERR4[Caller: Backoff & retry]
+  RATE_LIM -->|OK| CACHE_CHECK[Backend: Check page-list cache for course]
+
+  CACHE_CHECK -->|Hit| CACHE_HIT[Return cached page metadata]
+  CACHE_HIT --> RESP_CACHE["Include: pages[], total_count, etag"]
+  RESP_CACHE --> AUDIT_C1[Audit: log list_pages served from cache]
+  RESP_CACHE --> AG_RETURN1[Agent: receive page metadata]
+
+  CACHE_CHECK -->|Miss| QUERY_DB[Backend: Query DB for pages by course_id]
+  QUERY_DB --> FILTER[Backend: Filter by visibility, role, and draft state]
+  FILTER --> MAP_META["Backend: Map to page metadata (id, title, type, summary, updated_at, etag)"]
+  MAP_META --> SORT_PAG[Backend: Apply sort & pagination]
+  SORT_PAG --> AGG_COUNT[Backend: Compute total_count]
+  AGG_COUNT --> STORE_CACHE[Backend: Store result in cache with ttl]
+  STORE_CACHE --> AUDIT_C2[Audit: log list_pages DB query]
+  STORE_CACHE --> AG_RETURN2[Return page metadata to agent]
+
+  AG_RETURN1 --> CHOOSE[Agent or UI: choose page to inspect or edit]
+  AG_RETURN2 --> CHOOSE
+  CHOOSE --> AG2["Call fetch_page(session_id, page_id)"]
+
+  AG2 --> BE_FETCH_RECEIVE[Backend: Receive fetch_page request]
+  BE_FETCH_RECEIVE --> REQ_VALID2{Is request payload valid?}
+  REQ_VALID2 -->|No| ERR5[Return 400: Bad Request]
+  ERR5 --> FE_ERR5[Caller: Show validation error]
+
+  REQ_VALID2 -->|Yes| AUTH2{Session authenticated & active?}
+  AUTH2 -->|No| ERR6[Return 401: Unauthorized or 440: Session expired]
+  ERR6 --> FE_ERR6[Caller: Re-authenticate]
+
+  AUTH2 -->|Yes| PERM_PAGE[Check user permission for page]
+  PERM_PAGE -->|No| ERR7[Return 403: Forbidden]
+  ERR7 --> FE_ERR7[Caller: Deny access]
+
+  PERM_PAGE -->|Yes| LOCK_CHECK[Check page lock/status for concurrent edits]
+  LOCK_CHECK -->|Locked by other user| LOCK_ERR[Return 409: Conflict - locked]
+  LOCK_ERR --> FE_LOCK_ERR[Caller: Show lock owner & option to request takeover]
+  LOCK_CHECK -->|OK| FETCH_CONTENT["Backend: Retrieve page content & template_id"]
+
+  FETCH_CONTENT --> TEMPLATE_FETCH[Backend: Retrieve template details and schema]
+  TEMPLATE_FETCH --> TRANSFORM["Backend: Render or transform page data (resolve includes, media refs)"]
+  TRANSFORM --> ASSEMBLE["Assemble response: page, template_meta, render_preview, etag"]
+
+  ASSEMBLE --> CACHE_PAGE[Optional: cache page response with etag]
+  CACHE_PAGE --> AUDIT_FETCH[Audit: log fetch_page event, session_id, page_id]
+  ASSEMBLE --> RESP_FETCH[Return 200: OK with page payload]
+
+  RESP_FETCH --> AG_RECEIVE[Agent/UI: receive full page data and template details]
+  AG_RECEIVE --> END([Page fetched and ready for inspection/edit])
+
+  style Start fill:#000000
+  style END fill:#000000
+  style ERR1 fill:#000000
+  style ERR2 fill:#000000
+  style ERR3 fill:#000000
+  style ERR4 fill:#000000
+  style ERR5 fill:#000000
+  style ERR6 fill:#000000
+  style ERR7 fill:#000000
+  style LOCK_ERR fill:#000000
+  style CACHE_HIT fill:#000000
+  style QUERY_DB fill:#000000
+  style FETCH_CONTENT fill:#000000
+  style AUDIT_FETCH fill:#000000

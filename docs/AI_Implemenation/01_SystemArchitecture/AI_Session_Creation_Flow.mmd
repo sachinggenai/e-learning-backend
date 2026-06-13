@@ -1,0 +1,112 @@
+---
+title: AI Session Creation Flow - Detailed Steps
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+    Start([User Initiates AI Session]) --> FE1[Frontend: User clicks 'Build with AI' button]
+    FE1 --> FE2[Frontend: Retrieve stored user_id, course_id, organization_id]
+    FE2 --> FE3[Frontend: Prepare request payload]
+    FE3 --> APICall["Frontend: POST /api/v1/ai/sessions<br/>Body: user_id, course_id, organization_id"]
+    
+    APICall --> BE1[Backend: Receive request]
+    BE1 --> BE2{Is request valid?}
+    BE2 -->|Invalid| ERR1[Return 400: Bad Request]
+    ERR1 --> FE_ERR1[Frontend: Display validation error]
+    
+    BE2 -->|Valid| BE3[Backend: Extract user_id, course_id, organization_id]
+    
+    BE3 --> AUTH1{User Authenticated?}
+    AUTH1 -->|No| ERR2[Return 401: Unauthorized]
+    ERR2 --> FE_ERR2[Frontend: Redirect to login]
+    
+    AUTH1 -->|Yes| VAL1[Backend: Validate user exists in DB]
+    VAL1 --> VAL1_RESULT{User found?}
+    VAL1_RESULT -->|No| ERR3[Return 404: User not found]
+    ERR3 --> FE_ERR3[Frontend: Display user error]
+    
+    VAL1_RESULT -->|Yes| VAL2[Backend: Validate course exists]
+    VAL2 --> VAL2_RESULT{Course found?}
+    VAL2_RESULT -->|No| ERR4[Return 404: Course not found]
+    ERR4 --> FE_ERR4[Frontend: Display course error]
+    
+    VAL2_RESULT -->|Yes| VAL3[Backend: Validate organization exists]
+    VAL3 --> VAL3_RESULT{Organization found?}
+    VAL3_RESULT -->|No| ERR5[Return 404: Organization not found]
+    ERR5 --> FE_ERR5[Frontend: Display organization error]
+    
+    VAL3_RESULT -->|Yes| PERM1[Backend: Check user permissions]
+    PERM1 --> PERM1_CHK{User has access<br/>to course?}
+    PERM1_CHK -->|No| ERR6[Return 403: Forbidden]
+    ERR6 --> FE_ERR6[Frontend: Display permission error]
+    
+    PERM1_CHK -->|Yes| PERM2{User has access<br/>to organization?}
+    PERM2 -->|No| ERR7[Return 403: Forbidden]
+    ERR7 --> FE_ERR7[Frontend: Display org access error]
+    
+    PERM2 -->|Yes| CREATE1[Backend: Generate unique session_id<br/>UUID v4]
+    CREATE1 --> CREATE2[Backend: Create AI session object]
+    CREATE2 --> CREATE3[Backend: Set session status to 'active']
+    CREATE3 --> CREATE4[Backend: Set session_created_at timestamp]
+    
+    CREATE4 --> FETCH1[Backend: Fetch course metadata]
+    FETCH1 --> FETCH2[Backend: Fetch course pages count]
+    FETCH2 --> FETCH3[Backend: Fetch organization settings]
+    FETCH3 --> FETCH4[Backend: Fetch user role within organization]
+    
+    FETCH4 --> STATE1[Backend: Build course state object]
+    STATE1 --> STATE2[Backend: Include page list summary]
+    STATE2 --> STATE3[Backend: Include course schema definitions]
+    STATE3 --> STATE4[Backend: Include available templates]
+    
+    STATE4 --> DB1[Backend: Save session to database]
+    DB1 --> DB1_CHECK{Save successful?}
+    DB1_CHECK -->|Failed| ERR8[Return 500: Database error]
+    ERR8 --> FE_ERR8[Frontend: Display system error]
+    
+    DB1_CHECK -->|Success| AUDIT1[Backend: Create audit log entry<br/>Event: session_created]
+    AUDIT1 --> AUDIT2[Backend: Log session_id, user_id, course_id]
+    AUDIT2 --> AUDIT3[Backend: Log timestamp and IP address]
+    
+    AUDIT3 --> RESP1[Backend: Prepare response]
+    RESP1 --> RESP2[Backend: Include session_id]
+    RESP2 --> RESP3[Backend: Include course state object]
+    RESP3 --> RESP4[Backend: Include session_created_at]
+    RESP4 --> RESP5[Backend: Include user permissions]
+    RESP5 --> RESP6[Backend: Return 201: Created<br/>with response body]
+    
+    RESP6 --> FE_STORE1[Frontend: Receive response]
+    FE_STORE1 --> FE_STORE2[Frontend: Extract session_id]
+    FE_STORE2 --> FE_STORE3[Frontend: Store session_id in sessionStorage]
+    FE_STORE3 --> FE_STORE4[Frontend: Store course state in Redux/Context]
+    FE_STORE4 --> FE_STORE5[Frontend: Store session_created_at]
+    
+    FE_STORE5 --> FE_UI1[Frontend: Update UI - Show AI interface]
+    FE_UI1 --> FE_UI2[Frontend: Enable AI tools/actions]
+    FE_UI2 --> FE_UI3[Frontend: Display course scope info]
+    FE_UI3 --> FE_UI4[Frontend: Initialize chat component]
+    FE_UI4 --> END([AI Session Ready])
+    
+    style Start fill:#000000
+    style END fill:#000000
+    style ERR1 fill:#000000
+    style ERR2 fill:#000000
+    style ERR3 fill:#000000
+    style ERR4 fill:#000000
+    style ERR5 fill:#000000
+    style ERR6 fill:#000000
+    style ERR7 fill:#000000
+    style ERR8 fill:#000000
+    style FE_ERR1 fill:#000000
+    style FE_ERR2 fill:#000000
+    style FE_ERR3 fill:#000000
+    style FE_ERR4 fill:#000000
+    style FE_ERR5 fill:#000000
+    style FE_ERR6 fill:#000000
+    style FE_ERR7 fill:#000000
+    style FE_ERR8 fill:#000000
+    style APICall fill:#000000
+    style DB1 fill:#000000
+    style AUDIT1 fill:#000000
+    style END fill:#00000
