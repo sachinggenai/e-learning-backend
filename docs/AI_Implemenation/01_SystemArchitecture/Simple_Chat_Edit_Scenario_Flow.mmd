@@ -1,0 +1,106 @@
+---
+title: Simple Chat Edit Scenario Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - CHAT INTAKE
+%% =====================================================
+subgraph P0["Phase 0 - Chat Intake"]
+    A0([User asks AI to refine one page])
+    A1["POST /api/v1/ai/chat\nsession_id, course_id, prompt, selected context"]
+    A2["Request guard\nAuth, session expiry, rate limit, prompt safety"]
+    A3{"Allowed to continue?"}
+    A4["Return auth, rate limit, or safety error"]
+    A5["Create trace and conversation turn\nNo course mutation yet"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 -- "No" --> A4
+    A3 -- "Yes" --> A5
+end
+
+%% =====================================================
+%% PHASE 1 - STATE REFRESH AND PLANNING
+%% =====================================================
+subgraph P1["Phase 1 - State Refresh and Planning"]
+    B1["Agent must call list_pages\nLatest page metadata from DB"]
+    B2["Agent resolves target page\nBy page_id or title disambiguation"]
+    B3{"Target page unambiguous?"}
+    B4["Ask user clarification\nDo not propose update"]
+    B5["Agent calls fetch_page\nFull page plus components"]
+    B6["Optional query_similar_courses\nTone/examples only"]
+    B7["Model plans minimal patch\nRespect allowed template/component contracts"]
+
+    A5 --> B1
+    B1 --> B2
+    B2 --> B3
+    B3 -- "No" --> B4
+    B3 -- "Yes" --> B5
+    B5 --> B6
+    B6 --> B7
+end
+
+%% =====================================================
+%% PHASE 2 - TOOL ENFORCED PROPOSAL
+%% =====================================================
+subgraph P2["Phase 2 - Tool Enforced Proposal"]
+    C1["Agent calls propose_update_page\nNo direct mutation tool is allowed"]
+    C2["Server validates patch scope\nPage belongs to session.course_id"]
+    C3["Run schema, business, export, and accessibility validation"]
+    C4{"Patch valid?"}
+    C5["Return validation errors to model\nRetry within max retry policy"]
+    C6["Return proposal_id, diff, preview, warnings"]
+    C7["Stream assistant message\nExplain proposed change and ask for approval"]
+
+    B7 --> C1
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+    C4 -- "No" --> C5
+    C5 --> B7
+    C4 -- "Yes" --> C6
+    C6 --> C7
+end
+
+%% =====================================================
+%% PHASE 3 - USER APPROVAL AND APPLY
+%% =====================================================
+subgraph P3["Phase 3 - User Approval and Apply"]
+    D1["Frontend diff review\nBefore and after, preview, validation messages"]
+    D2{"User approves?"}
+    D3["Cancel proposal or request new edit"]
+    D4["apply_update_proposal\nproposal_id, user_confirmed=true"]
+    D5["Apply service revalidates\nTTL, ownership, stale base hash"]
+    D6{"Apply still safe?"}
+    D7["Return conflict or expired proposal\nRestart from fresh fetch"]
+    D8["Patch DB through PageRepository and ComponentRepository"]
+    D9["Return updated page and refreshed course state"]
+
+    C7 --> D1
+    D1 --> D2
+    D2 -- "No" --> D3
+    D2 -- "Yes" --> D4
+    D4 --> D5
+    D5 --> D6
+    D6 -- "No" --> D7
+    D6 -- "Yes" --> D8
+    D8 --> D9
+end
+
+%% =====================================================
+%% PHASE 4 - AUDIT AND UI REFRESH
+%% =====================================================
+subgraph P4["Phase 4 - Audit and UI Refresh"]
+    E1["Audit record required\nchat_turn_id, proposal_id, before/after diff, model metadata"]
+    E2["Outbox event\nPageUpdatedByAI"]
+    E3["Frontend re-renders editor and chat confirmation"]
+
+    D8 --> E1
+    E1 --> E2
+    D9 --> E3
+end

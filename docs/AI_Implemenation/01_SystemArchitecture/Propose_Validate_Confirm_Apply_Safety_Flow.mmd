@@ -1,0 +1,132 @@
+---
+title: Propose Validate Confirm Apply Safety Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - INTENT CLASSIFICATION
+%% =====================================================
+subgraph P0["Phase 0 - Intent Classification"]
+    A0([Intent to modify course])
+    A1["Entry point\nAI chat, file import, page tool, or manual AI action"]
+    A2["Classify operation\ncreate, update, delete, batch import, validation only"]
+    A3["Prompt and tool safety guard\nPII, injection, tool allowlist"]
+    A4{"Mutation requested?"}
+    A5["Read-only tool path\nlist_pages, fetch_page, query_similar_courses, validate_course"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 --> A4
+    A4 -- "No" --> A5
+end
+
+%% =====================================================
+%% PHASE 1 - PROPOSE
+%% =====================================================
+subgraph P1["Phase 1 - Propose"]
+    B1["Session and permission gate\nuser, org, course, role"]
+    B2{"Scope valid?"}
+    B3["Return permission error\nNo proposal"]
+    B4["Fetch latest source of truth\nCourseRepository, PageRepository, ComponentRepository"]
+    B5["Build proposal candidate\nNo database mutation"]
+    B6["Assign proposal_id\nbase hash, TTL, idempotency key, trace_id"]
+
+    A4 -- "Yes" --> B1
+    B1 --> B2
+    B2 -- "No" --> B3
+    B2 -- "Yes" --> B4
+    B4 --> B5
+    B5 --> B6
+end
+
+%% =====================================================
+%% PHASE 2 - VALIDATE
+%% =====================================================
+subgraph P2["Phase 2 - Validate"]
+    C1["Structural validation\nJSON parse, required fields, allowed operation fields"]
+    C2["Schema validation\nTemplateDefinition, ComponentType, renderer manifest"]
+    C3["Business validation\nCourse rules, page rules, SCORM/export readiness, accessibility"]
+    C4{"Blocking errors?"}
+    C5["Return validation errors\nLLM may retry within max retry policy"]
+    C6["Create preview\nDiff, warnings, affected pages, rollback metadata"]
+
+    B6 --> C1
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+    C4 -- "Yes" --> C5
+    C5 --> B5
+    C4 -- "No" --> C6
+end
+
+%% =====================================================
+%% PHASE 3 - CONFIRM
+%% =====================================================
+subgraph P3["Phase 3 - Confirm"]
+    D1["Frontend review surface\nDiff preview, validation messages, user-readable impact"]
+    D2{"Destructive or batch operation?"}
+    D3["Require stronger confirmation\nModal, token, explicit user-approved flag"]
+    D4["Standard approval\nuser_confirmed=true"]
+    D5{"User approves?"}
+    D6["Cancel proposal\nExpire or mark rejected"]
+    D7["Send apply request\nproposal_id and confirmation data"]
+
+    C6 --> D1
+    D1 --> D2
+    D2 -- "Yes" --> D3
+    D2 -- "No" --> D4
+    D3 --> D5
+    D4 --> D5
+    D5 -- "No" --> D6
+    D5 -- "Yes" --> D7
+end
+
+%% =====================================================
+%% PHASE 4 - APPLY
+%% =====================================================
+subgraph P4["Phase 4 - Apply"]
+    E1["Apply service rechecks proposal\nownership, TTL, idempotency, confirmation token"]
+    E2{"Proposal active?"}
+    E3["Return expired, reused, or mismatched proposal error"]
+    E4["Re-fetch current state\nCompare base hash for stale data"]
+    E5{"Stale or conflicting?"}
+    E6["Return 409 conflict\nRequire fresh proposal or merge path"]
+    E7["Begin database transaction"]
+    E8["Execute mutation through existing repositories\nCourseRepository, PageRepository, ComponentRepository, ImportJobRepository"]
+    E9["Re-run validation on changed scope"]
+    E10{"Post-apply validation passes?"}
+    E11["Rollback and return validation failure"]
+    E12["Commit transaction"]
+
+    D7 --> E1
+    E1 --> E2
+    E2 -- "No" --> E3
+    E2 -- "Yes" --> E4
+    E4 --> E5
+    E5 -- "Yes" --> E6
+    E5 -- "No" --> E7
+    E7 --> E8
+    E8 --> E9
+    E9 --> E10
+    E10 -- "No" --> E11
+    E10 -- "Yes" --> E12
+end
+
+%% =====================================================
+%% PHASE 5 - AUDIT AND RETURN
+%% =====================================================
+subgraph P5["Phase 5 - Audit and Return"]
+    F1["Audit log required\nactor, operation, before/after, validation, confirmation, model metadata"]
+    F2["Transactional outbox event\nVersioned domain event for audit, search, analytics"]
+    F3["Telemetry and cost metrics\ntrace_id, latency, provider, prompt/schema versions"]
+    F4["Return success and refreshed state\nFrontend re-renders from database"]
+
+    E12 --> F1
+    F1 --> F2
+    E12 --> F3
+    E12 --> F4
+end

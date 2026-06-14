@@ -1,0 +1,127 @@
+---
+title: File Ingestion and Document Import Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - UPLOAD AND SESSION BOUNDARY
+%% =====================================================
+subgraph P0["Phase 0 - Upload and Session Boundary"]
+    A0([User uploads PDF, DOCX, or importable package])
+    A1["AI document route\nPOST /api/v1/files/upload or analyze_document_for_import"]
+    A2["Validate session, course scope, file size, content type, malware policy"]
+    A3{"File accepted?"}
+    A4["Return 400 or 413 with actionable error"]
+    A5["Create ingestion job\njob_id, status=uploaded, source metadata, trace_id"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 -- "No" --> A4
+    A3 -- "Yes" --> A5
+end
+
+%% =====================================================
+%% PHASE 1 - DETERMINISTIC EXTRACTION
+%% =====================================================
+subgraph P1["Phase 1 - Deterministic Extraction"]
+    B1{"File type"}
+    B2["PDF extractor\nSections, headings, text, tables, images"]
+    B3["DOCX extractor\nHeading hierarchy, paragraphs, tables, media refs"]
+    B4["Current implemented package path\nPOST /api/v1/imports/analyze -> ImportService"]
+    B5["ImportService strategy registry\nScorm12Strategy or JsonPayloadStrategy"]
+    B6["Normalize extracted structure\nsections, assets, warnings, source offsets"]
+    B7["Persist preview in job store\nImportJob.result_data or AI ingestion job payload"]
+
+    A5 --> B1
+    B1 -- "PDF" --> B2
+    B1 -- "DOCX" --> B3
+    B1 -- "ZIP/SCORM" --> B4
+    B4 --> B5
+    B2 --> B6
+    B3 --> B6
+    B5 --> B6
+    B6 --> B7
+end
+
+%% =====================================================
+%% PHASE 2 - AI SEGMENTATION AND PAGE PLAN
+%% =====================================================
+subgraph P2["Phase 2 - AI Segmentation and Page Plan"]
+    C1["LLM Segmenter\nMap sections to allowed templates only"]
+    C2["Template capability registry\ntext-content, tabs, accordion, click-reveal, final-assessment"]
+    C3["Generate proposed page breakdown\npage title, template, source sections, rationale"]
+    C4["Validate segmentation\nsource coverage, duplicate sections, unsupported templates"]
+    C5{"Segmentation valid?"}
+    C6["Return errors or clarification request\nNo pages created"]
+    C7["Return page plan preview to frontend"]
+
+    B7 --> C1
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+    C4 --> C5
+    C5 -- "No" --> C6
+    C5 -- "Yes" --> C7
+end
+
+%% =====================================================
+%% PHASE 3 - HUMAN REVIEW CHECKPOINT
+%% =====================================================
+subgraph P3["Phase 3 - Human Review Checkpoint"]
+    D1["Frontend review UI\nMerge, split, reorder, retitle, change template"]
+    D2{"User approves breakdown?"}
+    D3["Save edited plan or cancel\nJob remains staged"]
+    D4["Approve plan\nProceed to content generation"]
+
+    C7 --> D1
+    D1 --> D2
+    D2 -- "No" --> D3
+    D2 -- "Yes" --> D4
+end
+
+%% =====================================================
+%% PHASE 4 - CONTENT GENERATION, VALIDATION, AND APPLY
+%% =====================================================
+subgraph P4["Phase 4 - Content Generation, Validation, and Apply"]
+    E1["Generate template data per page\nGrounded in approved source sections"]
+    E2["Run validation pipeline per page and whole course\nSchema, business rules, export readiness, accessibility"]
+    E3{"All pages valid?"}
+    E4["Return page-level validation failures\nUser or LLM revises plan"]
+    E5["Create batch proposal\nAll-or-nothing semantics"]
+    E6["Frontend final preview and confirmation"]
+    E7{"User confirms final import?"}
+    E8["Cancel or keep staged job"]
+    E9["Apply batch transaction\nCreate pages/components via PageRepository and ComponentRepository"]
+    E10["For existing SCORM import commit\n/api/v1/imports/jobs/job_id/commit creates CourseRecord and TemplateRecord"]
+    E11["Commit transaction and mark job committed"]
+
+    D4 --> E1
+    E1 --> E2
+    E2 --> E3
+    E3 -- "No" --> E4
+    E4 --> D1
+    E3 -- "Yes" --> E5
+    E5 --> E6
+    E6 --> E7
+    E7 -- "No" --> E8
+    E7 -- "Yes" --> E9
+    E9 --> E10
+    E10 --> E11
+end
+
+%% =====================================================
+%% PHASE 5 - AUDIT AND OUTPUT
+%% =====================================================
+subgraph P5["Phase 5 - Audit and Output"]
+    F1["Audit record required\noperation=file_import, file hash, pages created, validation summary"]
+    F2["Outbox events\nCourseImported, PagesCreated, TemplatesHarvested"]
+    F3["Return imported course pages\nNavigate frontend to existing editor"]
+
+    E11 --> F1
+    F1 --> F2
+    E11 --> F3
+end

@@ -1,0 +1,82 @@
+---
+title: Similar Course Retrieval Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - QUERY INTAKE AND POLICY
+%% =====================================================
+subgraph P0["Phase 0 - Query Intake and Policy"]
+    A0([AI agent requests examples, tone, or pedagogy references])
+    A1["Tool call query_similar_courses(session_id, query, filters)"]
+    A2["Session and org scope gate\nDo not expose cross-tenant content"]
+    A3{"Session and org allowed?"}
+    A4["Return permission error"]
+    A5["Query safety filter\nPII redaction, prompt-injection scan, length limits"]
+    A6["Intent classifier\nExamples only, never source of API contracts or validation rules"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 -- "No" --> A4
+    A3 -- "Yes" --> A5
+    A5 --> A6
+end
+
+%% =====================================================
+%% PHASE 1 - RETRIEVAL STRATEGY
+%% =====================================================
+subgraph P1["Phase 1 - Retrieval Strategy"]
+    B1{"Org-scoped vector index available?"}
+    B2["Vector search\nTenant partition, course metadata filters, topK candidates"]
+    B3["Current backend fallback\nCourseRepository, TemplateTypeRepository, Component Registry metadata"]
+    B4["Hybrid search merge\nSemantic score + keyword/topic filters + template fit"]
+    B5["Cross-encoder or heuristic rerank\nPrefer accessible, complete, approved examples"]
+
+    A6 --> B1
+    B1 -- "Yes" --> B2
+    B1 -- "No" --> B3
+    B2 --> B4
+    B3 --> B4
+    B4 --> B5
+end
+
+%% =====================================================
+%% PHASE 2 - RESULT SHAPING
+%% =====================================================
+subgraph P2["Phase 2 - Result Shaping"]
+    C1["Permission filter per course and page\nOrg, role, visibility, draft status"]
+    C2["Extract safe snippets\nCourse title, objective, page title, template type, short excerpt"]
+    C3["Redact sensitive fields\nNo student data, secrets, private notes, hidden metadata"]
+    C4["Build style guidance\nTone notes, structure patterns, content density, assessment style"]
+    C5{"Any usable results?"}
+    C6["Return empty result with fallback guidance\nGeneration can continue without RAG"]
+    C7["Return ranked examples and style guidance to AI agent"]
+
+    B5 --> C1
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+    C4 --> C5
+    C5 -- "No" --> C6
+    C5 -- "Yes" --> C7
+end
+
+%% =====================================================
+%% PHASE 3 - SAFETY AND OBSERVABILITY
+%% =====================================================
+subgraph P3["Phase 3 - Safety and Observability"]
+    D1["Usage guardrail\nRAG informs tone only; tools and schemas remain authoritative"]
+    D2["Telemetry\nquery hash, filters, result count, latency, index version"]
+    D3["Audit retrieval event\nNo full retrieved content stored in prompts beyond snippets"]
+    D4([AI uses examples to improve proposed page content])
+
+    C6 --> D1
+    C7 --> D1
+    D1 --> D2
+    D2 --> D3
+    D1 --> D4
+end

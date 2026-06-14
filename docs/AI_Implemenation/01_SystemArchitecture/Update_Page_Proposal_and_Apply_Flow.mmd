@@ -1,0 +1,122 @@
+---
+title: Update Page Proposal and Apply Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - SESSION SCOPE AND FRESH PAGE STATE
+%% =====================================================
+subgraph P0["Phase 0 - Session Scope and Fresh State"]
+    A0([AI or user intent to update an existing page])
+    A1["POST /api/v1/ai/chat or tool call propose_update_page"]
+    A2["AI Session Gate\nValidate session_id, user, org, course scope"]
+    A3{"Session valid and course scoped?"}
+    A4["Stop with 401, 403, or session expired error"]
+    A5["Refresh source of truth\nCall list_pages then fetch_page"]
+    A6["Existing backend adapter\nGET /api/v1/courses/courseId/pages/pageId"]
+    A7["PageRepository.get_by_course_and_page\nLoad PageRecord, components, updatedAt"]
+    A8["Create before snapshot\nbase_updated_at, base_page_hash, component hashes"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 -- "No" --> A4
+    A3 -- "Yes" --> A5
+    A5 --> A6
+    A6 --> A7
+    A7 --> A8
+end
+
+%% =====================================================
+%% PHASE 1 - PROPOSAL BUILD AND VALIDATION
+%% =====================================================
+subgraph P1["Phase 1 - Proposal Build and Validation"]
+    B1["Patch Normalizer\nAllow only title, layout, theme, pageCompletion, components"]
+    B2["Patch Scope Guard\nBlock courseId, pageId, order, foreign page changes"]
+    B3["Build candidate after state\nMerge patch with before snapshot"]
+    B4["Schema Registry Lookup\nComponent Registry, Template Definitions, renderer manifest"]
+    B5["Validation Pipeline\nPydantic/export compatibility, component schema, SCORM, WCAG hints"]
+    B6{"Validation status"}
+    B7["Return validation errors to LLM\nRetry within policy, no mutation"]
+    B8["Generate semantic diff\nbefore, after, changed fields, warnings"]
+    B9["Persist proposal with TTL\nproposal_id, session_id, base hash, diff, idempotency key"]
+    B10["Return proposal_id and diff preview to frontend"]
+
+    A8 --> B1
+    B1 --> B2
+    B2 --> B3
+    B3 --> B4
+    B4 --> B5
+    B5 --> B6
+    B6 -- "Error" --> B7
+    B7 --> B1
+    B6 -- "Valid or warning" --> B8
+    B8 --> B9
+    B9 --> B10
+end
+
+%% =====================================================
+%% PHASE 2 - HUMAN REVIEW
+%% =====================================================
+subgraph P2["Phase 2 - Human Review"]
+    C1["Frontend Proposal UI\nShow field-level diff, preview render, warnings"]
+    C2{"User action"}
+    C3["Reject or edit request\nMark proposal cancelled"]
+    C4["Approve update\nSend user_confirmed=true"]
+
+    B10 --> C1
+    C1 --> C2
+    C2 -- "Reject" --> C3
+    C2 -- "Approve" --> C4
+end
+
+%% =====================================================
+%% PHASE 3 - APPLY WITH STALENESS AND TRANSACTION GATES
+%% =====================================================
+subgraph P3["Phase 3 - Apply With Staleness and Transaction Gates"]
+    D1["apply_update_proposal\nproposal_id + user_confirmed=true"]
+    D2{"User confirmed?"}
+    D3["Return 400 confirmation required"]
+    D4["Lookup proposal\nVerify session ownership, TTL, unused status"]
+    D5{"Proposal active and owned?"}
+    D6["Return 404 or 409 proposal invalid"]
+    D7["Re-fetch current page\nCompare current hash to base hash"]
+    D8{"Stale page?"}
+    D9["Return 409 conflict\nRequire refresh, merge, or new proposal"]
+    D10["Begin AI apply transaction"]
+    D11["Apply existing repository mutations\nPageRepository.update and ComponentRepository updates"]
+    D12["Commit transaction\nUpdate updatedAt and derived course state"]
+    D13["Invalidate page/course caches\nReturn updated page payload"]
+
+    C4 --> D1
+    D1 --> D2
+    D2 -- "No" --> D3
+    D2 -- "Yes" --> D4
+    D4 --> D5
+    D5 -- "No" --> D6
+    D5 -- "Yes" --> D7
+    D7 --> D8
+    D8 -- "Yes" --> D9
+    D8 -- "No" --> D10
+    D10 --> D11
+    D11 --> D12
+    D12 --> D13
+end
+
+%% =====================================================
+%% PHASE 4 - AUDIT, OUTBOX, OBSERVABILITY
+%% =====================================================
+subgraph P4["Phase 4 - Audit, Outbox, Observability"]
+    E1["Audit record required\noperation=update_page, user, session, before, after, validation"]
+    E2["Transactional outbox event\nPageUpdatedByAI v1"]
+    E3["Telemetry\ntrace_id, model, prompt_version, schema_version, latency, token cost"]
+    E4([Frontend refreshes editor with updated page])
+
+    D12 --> E1
+    E1 --> E2
+    D13 --> E3
+    D13 --> E4
+end

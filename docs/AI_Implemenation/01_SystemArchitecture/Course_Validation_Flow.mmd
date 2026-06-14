@@ -1,0 +1,100 @@
+---
+title: Course Validation Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - REQUEST ENTRY
+%% =====================================================
+subgraph P0["Phase 0 - Request Entry"]
+    A0([User, agent, export flow, or proposal gate requests validation])
+    A1["AI tool validate_course(session_id)\nor existing POST /api/v1/courses/validate"]
+    A2{"Request includes AI session?"}
+    A3["Validate AI session scope\nuser, org, course_id"]
+    A4["Validate direct API payload\nCourseValidationRequest.courseData"]
+    A5{"Scope or payload valid?"}
+    A6["Return 400, 401, 403, or 422 error envelope"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 -- "Yes" --> A3
+    A2 -- "No" --> A4
+    A3 --> A5
+    A4 --> A5
+    A5 -- "No" --> A6
+end
+
+%% =====================================================
+%% PHASE 1 - SOURCE OF TRUTH ASSEMBLY
+%% =====================================================
+subgraph P1["Phase 1 - Source of Truth Assembly"]
+    B1["Fetch CourseRecord\nCourseRepository.get_by_course_id"]
+    B2["Fetch pages and components\nPageRepository.list_by_course with selectinload"]
+    B3["Assemble canonical validation DTO\ncourseId, title, pages, components, templates"]
+    B4["Resolve dynamic contracts\nTemplateDefinitionRepository and ComponentTypeRepository"]
+    B5["Attach schemaVersion and etag metadata\nfrom component registry where available"]
+
+    A5 -- "Yes" --> B1
+    B1 --> B2
+    B2 --> B3
+    B3 --> B4
+    B4 --> B5
+end
+
+%% =====================================================
+%% PHASE 2 - VALIDATION PIPELINE
+%% =====================================================
+subgraph P2["Phase 2 - Validation Pipeline"]
+    C1["Structural schema checks\ncourseData must be object, required courseId, title, pages"]
+    C2["Page shape checks\nid/pageId, title, order, components array"]
+    C3["Template compatibility\nPydantic Course model when templates are present"]
+    C4["Component schema checks\ncomponentType present, dynamic type lookup, required renderer fields"]
+    C5["Business rules\nMCQ answers, welcome title, content body, ordering, duplicates"]
+    C6["Export readiness\nExportValidator and renderer manifest support"]
+    C7["Accessibility and SCORM hints\nalt text, assessment instructions, score constraints"]
+    C8["Normalize findings\nerrors, warnings, info, page/component field paths"]
+
+    B5 --> C1
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+    C4 --> C5
+    C5 --> C6
+    C6 --> C7
+    C7 --> C8
+end
+
+%% =====================================================
+%% PHASE 3 - RESULT AND GATING
+%% =====================================================
+subgraph P3["Phase 3 - Result and Gating"]
+    D1{"Any blocking errors?"}
+    D2["Return valid=false\nCategorized errors and warnings with timestamp"]
+    D3["Block proposal apply\nLLM may retry or user may edit"]
+    D4["Return valid=true\nWarnings remain visible but do not block"]
+    D5["Allow apply, export, or preview publish path"]
+
+    C8 --> D1
+    D1 -- "Yes" --> D2
+    D2 --> D3
+    D1 -- "No" --> D4
+    D4 --> D5
+end
+
+%% =====================================================
+%% PHASE 4 - OBSERVABILITY
+%% =====================================================
+subgraph P4["Phase 4 - Observability"]
+    E1["Validation audit summary\nscope, counts, schema versions, duration"]
+    E2["Metrics\nerror frequency by template and component type"]
+    E3([Frontend renders validation panel and affected page links])
+
+    D2 --> E1
+    D4 --> E1
+    E1 --> E2
+    D2 --> E3
+    D4 --> E3
+end

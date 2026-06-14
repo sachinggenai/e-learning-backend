@@ -1,0 +1,132 @@
+---
+title: Full Course from Uploaded File Scenario Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - COURSE CREATION INTAKE
+%% =====================================================
+subgraph P0["Phase 0 - Course Creation Intake"]
+    A0([User uploads a course outline or source package])
+    A1["POST /api/v1/ai/chat with upload intent\nAI file route planned; imports route exists today"]
+    A2["Create or attach AI session\nuser, organization, target course shell"]
+    A3["File policy gate\nsize, type, virus scan, allowed extension"]
+    A4{"Upload accepted?"}
+    A5["Return upload error and remediation"]
+    A6["Create import job\nstatus=uploaded or analyzing"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 --> A4
+    A4 -- "No" --> A5
+    A4 -- "Yes" --> A6
+end
+
+%% =====================================================
+%% PHASE 1 - EXTRACTION AND STAGING
+%% =====================================================
+subgraph P1["Phase 1 - Extraction and Staging"]
+    B1{"Source type"}
+    B2["PDF/DOCX deterministic extraction\nheadings, sections, tables, media references"]
+    B3["Current implemented SCORM path\n/api/v1/imports/analyze -> ImportService"]
+    B4["StrategyRegistry\nSCORM 1.2 or JSON payload analysis"]
+    B5["SchemaInferenceEngine\nInfer template data signatures"]
+    B6["AssetRewriter\nMap assets and detect ambiguous references"]
+    B7["Stage course plan in job\nImportJob.result_data, warnings, progress"]
+    B8["Frontend polls\nGET /api/v1/imports/jobs/job_id or preview"]
+
+    A6 --> B1
+    B1 -- "PDF/DOCX" --> B2
+    B1 -- "ZIP/SCORM" --> B3
+    B3 --> B4
+    B4 --> B5
+    B5 --> B6
+    B2 --> B7
+    B6 --> B7
+    B7 --> B8
+end
+
+%% =====================================================
+%% PHASE 2 - PAGE PLAN REVIEW
+%% =====================================================
+subgraph P2["Phase 2 - Page Plan Review"]
+    C1["LLM segmenter maps extracted sections to templates\nAllowed template whitelist only"]
+    C2["Generate proposed course page plan\nordering, titles, source coverage, template rationale"]
+    C3["Validate plan\nNo missing source sections, no unsupported templates, page count limits"]
+    C4{"Plan valid?"}
+    C5["Return plan errors and editable breakdown"]
+    C6["Frontend review modal\nUser edits page titles, merge, split, reorder"]
+    C7{"User confirms recommended breakdown?"}
+    C8["Keep job staged or cancel"]
+
+    B8 --> C1
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+    C4 -- "No" --> C5
+    C4 -- "Yes" --> C6
+    C6 --> C7
+    C7 -- "No" --> C8
+end
+
+%% =====================================================
+%% PHASE 3 - GENERATE FULL COURSE AND VALIDATE
+%% =====================================================
+subgraph P3["Phase 3 - Generate Full Course and Validate"]
+    D1["Generate page/component data from approved plan\nOne proposal payload per page"]
+    D2["Validate every page\nComponent schemas, Course model, ExportValidator, SCORM and accessibility hints"]
+    D3{"Any blocking validation error?"}
+    D4["Return page-level errors\nUser edits plan or AI regenerates affected pages"]
+    D5["Create batch create_page proposals\nAll-or-nothing apply contract"]
+    D6["Frontend final course preview\nPage list, warnings, import summary"]
+    D7{"User confirms final course?"}
+    D8["Cancel or preserve draft job"]
+
+    C7 -- "Yes" --> D1
+    D1 --> D2
+    D2 --> D3
+    D3 -- "Yes" --> D4
+    D4 --> C6
+    D3 -- "No" --> D5
+    D5 --> D6
+    D6 --> D7
+    D7 -- "No" --> D8
+end
+
+%% =====================================================
+%% PHASE 4 - APPLY AND COMMIT
+%% =====================================================
+subgraph P4["Phase 4 - Apply and Commit"]
+    E1["Begin batch transaction\nIdempotency key from job_id and proposal batch"]
+    E2["Create or update CourseRecord\nCourseRepository.create or upsert"]
+    E3["Create pages and components\nPageRepository.create and ComponentRepository.create"]
+    E4["Implemented import commit path\n/api/v1/imports/jobs/job_id/commit creates CourseRecord and TemplateRecord"]
+    E5["Harvest templates into global template library\nTemplateTypeRepository with signature dedupe"]
+    E6["Commit transaction and mark job committed"]
+    E7["Return final course with pages to frontend"]
+
+    D7 -- "Yes" --> E1
+    E1 --> E2
+    E2 --> E3
+    E3 --> E4
+    E4 --> E5
+    E5 --> E6
+    E6 --> E7
+end
+
+%% =====================================================
+%% PHASE 5 - AUDIT AND DOWNSTREAM
+%% =====================================================
+subgraph P5["Phase 5 - Audit and Downstream"]
+    F1["Audit record required\nfile hash, source type, pages created, validation summary"]
+    F2["Outbox events\nCourseCreatedFromFile, ImportCommitted, TemplatesHarvested"]
+    F3["Frontend opens existing course editor\nManual and AI workflows remain available"]
+
+    E6 --> F1
+    F1 --> F2
+    E7 --> F3
+end

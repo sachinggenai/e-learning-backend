@@ -1,0 +1,204 @@
+graph TD
+
+%% =====================================================
+%% P0: TENANT BOUNDARY & INTAKE
+%% =====================================================
+subgraph P0["Phase 0 - Edge & Tenant Boundary"]
+    A1["POST /api/v1/ai/page-proposals"]
+    A2["API Gateway\nStrict Tenant Isolation & Rate Limits"]
+    A3{"Tenant Quota Engine\nCheck Monthly & Daily Budgets"}
+    A3_Err["429 Quota Exceeded"]
+    A4["AI Request Service"]
+    A5["Start Workflow Execution\nPass trace_id, idempotency_key, tenant_id"]
+    A6["Return 202 Accepted\nworkflow_id"]
+
+    A1 --> A2
+    A2 --> A3
+    A3 -- "Exceeded" --> A3_Err
+    A3 -- "OK" --> A4
+    A4 --> A5
+    A5 --> A6
+end
+
+%% =====================================================
+%% P1: DURABLE EXECUTION CONTROL PLANE
+%% =====================================================
+subgraph P1["Phase 1 - Workflow Engine Control Plane"]
+    W1{{"Temporal / Cadence Engine\nNative Retries, State Management, Human-in-the-Loop Awaits"}}
+    W2["Activity: Advanced Retrieval"]
+    W3["Activity: Planning & Generation"]
+    W4["Activity: Validation & Policy"]
+    W5["Activity: Async Preview Isolation"]
+    W6["Activity: Apply & Audit"]
+
+    W1 -. "Orchestrates" .-> W2
+    W1 -. "Orchestrates" .-> W3
+    W1 -. "Orchestrates" .-> W4
+    W1 -. "Orchestrates" .-> W5
+    W1 -. "Orchestrates" .-> W6
+end
+
+A5 --> W1
+
+%% =====================================================
+%% P2: ADVANCED RAG PIPELINE
+%% =====================================================
+subgraph P2["Phase 2 - Advanced RAG & Context"]
+    R1["Query Rewriter\nOptimize prompt for vector search"]
+    R2["Vector Search\nStrictly Tenant-Isolated Index"]
+    R3["Cross-Encoder Reranker\nRe-score top K results for relevance"]
+    R4["Fetch Tenant-Specific Templates & Schemas"]
+
+    W2 --> R1
+    R1 --> R2
+    R2 --> R3
+    R3 --> R4
+end
+
+%% =====================================================
+%% P3: MULTI-PROVIDER AI ROUTING & SAFETY
+%% =====================================================
+subgraph P3["Phase 3 - Multi-Provider AI Gateway"]
+    AI1["Prompt Guard\nPII / Injection Scan"]
+    AI2{"Provider & Model Router\nBased on Task, Cost & Availability"}
+    
+    AI3["Primary Provider\ne.g., OpenAI (GPT-4o)"]
+    AI4["Fallback Provider 1\ne.g., Anthropic (Claude 3.5)"]
+    AI5["Fallback Provider 2\ne.g., Google (Gemini 1.5)"]
+
+    AI1 --> AI2
+    AI2 --> AI3
+    AI3 -- "Timeout / 503 / 429" --> AI4
+    AI4 -- "Timeout / 503" --> AI5
+end
+
+%% =====================================================
+%% P4: GENERATION PIPELINE
+%% =====================================================
+subgraph P4["Phase 4 - Generation & Pruning"]
+    G1["Context Pruning Engine\nDrop unused templates, minimize tokens"]
+    G2["LLM Planner (Fast/Cheap Model)\nDetermine structure & template"]
+    G3["Generation Payload Builder"]
+    G4["LLM Generator (Premium Model)\nSchema-bound generation"]
+    G5{"Valid JSON?"}
+    G6["JSON Repair (Fast Model)"]
+
+    W3 --> G1
+    G1 --> G2
+    G2 --> G3
+    G3 --> G4
+    G4 --> G5
+    G5 -- "No" --> G6
+    G6 --> G4
+end
+
+G2 -.-> AI1
+G4 -.-> AI1
+G6 -.-> AI1
+
+%% =====================================================
+%% P5: VALIDATION & POLICY ENGINE
+%% =====================================================
+subgraph P5["Phase 5 - Validation & Policy Gate"]
+    V1["Output Guard\nToxicity & Brand Safety Scan"]
+    V2["Schema & Business Rule Validation"]
+    V3{"OPA / Cedar Policy Engine\nEvaluates: Can user auto-apply? Role permissions?"}
+    
+    W4 --> V1
+    V1 --> V2
+    V2 --> V3
+end
+
+G5 -- "Yes" --> V1
+
+%% =====================================================
+%% P6: ASYNC PREVIEW & EXPLICIT STATE MACHINE
+%% =====================================================
+subgraph P6["Phase 6 - State Transitions & Previews"]
+    S1(("PROCESSING"))
+    S2(("NEEDS_CLARIFICATION"))
+    S3(("READY_FOR_PREVIEW"))
+    S4(("PENDING_REVIEW"))
+    S5(("APPROVED"))
+    S6(("APPLYING"))
+    S7(("APPLIED"))
+    S8(("FAILED"))
+    S9(("EXPIRED / CANCELLED"))
+
+    S1 -.-> S2
+    S2 -.-> S1
+    S1 -.-> S3
+    S3 -.-> S4
+    S4 -.-> S5
+    S5 -.-> S6
+    S6 -.-> S7
+    S1 -.-> S8
+    S4 -.-> S9
+
+    P1A["Preview Generation Service\nIsolated Queue & Workers"]
+    V3 --> S3
+    S3 --> P1A
+    P1A --> S4
+end
+
+W5 --> P6
+
+%% =====================================================
+%% P7: HUMAN REVIEW & PROVENANCE
+%% =====================================================
+subgraph P7["Phase 7 - UI, RLHF & Provenance"]
+    U1["Proposal Review UI"]
+    U2{"User Action"}
+    U3["Content or Structural Revision"]
+    U4["Approve"]
+
+    U5["Compile Provenance Manifest\n{prompt_v, model_v, provider_used, source_docs, rag_chunks, timestamp}"]
+    U6["Human Feedback Store (RLHF)\n{generated_json, final_json, edit_distance, prompt_version}"]
+
+    S4 --> U1
+    U1 --> U2
+    U2 -- "Modify" --> U3
+    U3 --> W3
+    U2 -- "Approve" --> U4
+    U4 --> U5
+    U4 --> U6
+end
+
+%% =====================================================
+%% P8: APPLY & VERSIONED OUTBOX
+%% =====================================================
+subgraph P8["Phase 8 - Apply & Versioned Events"]
+    E1["Apply Idempotency & Staleness Check"]
+    E2["Begin Database Transaction"]
+    E3["Write Domain Data\nUpdate Pages/Course"]
+    E4["Write Outbox Event Record\n{eventType: 'ProposalApplied', eventVersion: 'v1', payload}"]
+    E5["Commit Transaction"]
+
+    W6 --> E1
+    U5 --> E1
+    E1 --> E2
+    E2 --> E3
+    E3 --> E4
+    E4 --> E5
+    E5 --> S7
+end
+
+%% =====================================================
+%% P9: OFFLINE EVALUATION & EVENT STREAM
+%% =====================================================
+subgraph P9["Phase 9 - Data Flywheel & Consumers"]
+    F1["Outbox Relay (Debezium)"]
+    F2["Event Bus (Kafka)"]
+    F3["Downstream Consumers\nSearch, Audit, Analytics"]
+    
+    F4["Offline AI Evaluation Pipeline\nBatch processing of RLHF metrics"]
+    F5["Compute Performance Deltas\nAcceptance Rate, Mean Edit Distance, Cost/Token"]
+    F6["Prompt & Model Leaderboard\nAutomated A/B Version Ranking"]
+
+    E5 -.-> F1
+    F1 --> F2
+    F2 --> F3
+    U6 -.-> F4
+    F4 --> F5
+    F5 --> F6
+end

@@ -1,0 +1,205 @@
+graph TD
+
+%% =====================================================
+%% PHASE 0 - EDGE & INTAKE (WITH COST GOVERNANCE)
+%% =====================================================
+subgraph P0["Phase 0 - Edge & Intake"]
+    A1["POST /api/v1/ai/page-proposals"]
+    A2["API Gateway\nAuthN/AuthZ | Rate Limit | Tenant Isolation"]
+    A3{"Quota Check\nDaily Token Budget & Limits"}
+    A3_Err["429 Quota Exceeded"]
+    A4["AI Request Service"]
+    A5["Create Job Record\nstatus=PROCESSING\ntrace_id + idempotency_key"]
+    A6["Return 202 Accepted\njob_id"]
+    A7["Publish to Job Queue"]
+
+    A1 --> A2
+    A2 --> A3
+    A3 -- "Exceeded" --> A3_Err
+    A3 -- "OK" --> A4
+    A4 --> A5
+    A5 --> A6
+    A5 --> A7
+end
+
+%% =====================================================
+%% PHASE 1 - ASYNC WORKER & DISTRIBUTED STATE
+%% =====================================================
+subgraph P1["Phase 1 - Async Worker & Distributed State"]
+    B1["Job Queue (Kafka/SQS)"]
+    B2["AI Orchestrator Worker"]
+    B3["Redlock Lease Manager\nAcquire lock by job_id\nHeartbeat renewal"]
+    B4["Checkpoint Loader\nRestore Phase & Context"]
+
+    B1 --> B2
+    B2 --> B3
+    B3 --> B4
+end
+
+A7 --> B1
+
+%% =====================================================
+%% PHASE 2 - AI SAFETY & ROUTING
+%% =====================================================
+subgraph P2["Phase 2 - AI Safety & Routing"]
+    C1["Prompt Guard\nPII Scan & Prompt Injection Detection"]
+    C2["Model Router"]
+    C3["Route: Cheap/Fast Model\ne.g., GPT-4o-mini"]
+    C4["Route: Premium/Reasoning Model\ne.g., GPT-4o / Claude 3.5 Sonnet"]
+
+    C1 --> C2
+    C2 -.-> C3
+    C2 -.-> C4
+end
+
+B4 --> C1
+
+%% =====================================================
+%% PHASE 3 - CORE GENERATION PIPELINE (WITH PRUNING)
+%% =====================================================
+subgraph P3["Phase 3 - Core AI Pipeline"]
+    D1["LLM Planner (Cheap Model)\nGoal, Template Selection, Order"]
+    D2["Atomic Checkpoint Write (CAS)\nversion++"]
+    D3["Context Pruning Engine\nDrop unused templates/fields\nFilter irrelevant RAG"]
+    D4["Generation Payload Builder\nStrictly Pruned Context"]
+    D5["LLM Generator (Premium Model)\nSchema-bound page generation"]
+    D6["Atomic Checkpoint Write (CAS)\nversion++"]
+    D7{"Valid JSON?"}
+    D8["JSON Repair (Cheap Model)"]
+
+    D1 --> D2
+    D2 --> D3
+    D3 --> D4
+    D4 --> D5
+    D5 --> D6
+    D6 --> D7
+    D7 -- "No" --> D8
+    D8 --> D5
+end
+
+C3 -.-> D1
+C4 -.-> D5
+C3 -.-> D8
+
+%% =====================================================
+%% PHASE 4 - VALIDATION & OUTPUT SAFETY
+%% =====================================================
+subgraph P4["Phase 4 - Validation Pipeline"]
+    E1["Output Guard\nToxicity & Safety Scan"]
+    E2["Schema Validation\nAgainst strict Template JSON Schema"]
+    E3["Business Rules Validation\nMedia, Accessibility, Constraints"]
+
+    E1 --> E2
+    E2 --> E3
+end
+
+D7 -- "Yes" --> E1
+
+%% =====================================================
+%% PHASE 5 - PROPOSAL STATE MACHINE
+%% =====================================================
+subgraph P5["Phase 5 - Explicit State Machine"]
+    S1(("PROCESSING"))
+    S2(("NEEDS_CLARIFICATION"))
+    S3(("PENDING_REVIEW"))
+    S4(("APPLIED"))
+    S5(("FAILED / CANCELLED / EXPIRED"))
+
+    S1 -.-> S2
+    S2 -.-> S1
+    S1 -.-> S3
+    S3 -.-> S4
+    S1 -.-> S5
+    S3 -.-> S5
+    S2 -.-> S5
+end
+
+E3 --> S3
+
+%% =====================================================
+%% PHASE 6 - HUMAN REVIEW & RLHF DATA FLYWHEEL
+%% =====================================================
+subgraph P6["Phase 6 - Human Review & RLHF"]
+    F1["Review UI\nstatus=PENDING_REVIEW"]
+    F2{"User Action"}
+    F3["Approve"]
+    F4["Modify (Content vs Structural Router)"]
+    F5["Human Feedback Store (RLHF)\nRecord: prompt_version, model_version\ngenerated_payload, final_payload\nedit_distance"]
+
+    F1 --> F2
+    F2 -- "Approve" --> F3
+    F2 -- "Modify" --> F4
+    F4 --> F1
+    F3 --> F5
+end
+
+S3 -.-> F1
+
+%% =====================================================
+%% PHASE 7 - APPLY & TRANSACTIONAL OUTBOX
+%% =====================================================
+subgraph P7["Phase 7 - Apply & Transactional Outbox"]
+    G1["POST /apply-proposal\nIdempotency Key: tenant + approval_ctx + proposal"]
+    G2{"Staleness Check"}
+    G3["Merge Required UX\nDeterministic Patch Generation"]
+    G4["Begin Database Transaction"]
+    G5["Write Page Domain Data"]
+    G6["Write Outbox Event Record\n{event_type, payload, status}"]
+    G7["Commit Transaction"]
+
+    G1 --> G2
+    G2 -- "Stale" --> G3
+    G3 --> G4
+    G2 -- "Fresh" --> G4
+    G4 --> G5
+    G5 --> G6
+    G6 --> G7
+    G7 --> S4
+end
+
+F3 --> G1
+
+%% =====================================================
+%% PHASE 8 - EVENT STREAMING (OUTBOX PUBLISHER)
+%% =====================================================
+subgraph P8["Phase 8 - Event Streaming"]
+    H1["Outbox Relay Worker / Debezium\nTails database outbox table"]
+    H2["Event Bus (Kafka / SNS)"]
+    H3["Consumers\nAudit, Search, Analytics"]
+
+    H1 --> H2
+    H2 --> H3
+end
+
+G7 -.-> H1
+
+%% =====================================================
+%% PHASE 9 - OPERATIONS & DEAD LETTER RECOVERY
+%% =====================================================
+subgraph P9["Phase 9 - Operations & Recovery"]
+    I1["Dead Letter Queue (DLQ)\nMax retries exceeded"]
+    I2["Operations Dashboard\nAlerts & Triage"]
+    I3["DLQ Replay Service\nBulk requeue for transient provider outages"]
+
+    I1 --> I2
+    I2 --> I3
+    I3 --> B1
+end
+
+D7 -.-> I1
+E2 -.-> I1
+
+%% =====================================================
+%% PHASE 10 - GOVERNANCE & OBSERVABILITY
+%% =====================================================
+subgraph P10["Phase 10 - Governance & Observability"]
+    J1["Telemetry Extractor"]
+    J2["Langfuse / LangSmith / OTEL\nTrace ID context preservation"]
+    J3["Registries Pinned to Proposal\nprompt_version, schema_version\nmodel_version, template_version"]
+
+    J1 --> J2
+    J1 --> J3
+end
+
+D5 -.-> J1
+G7 -.-> J1

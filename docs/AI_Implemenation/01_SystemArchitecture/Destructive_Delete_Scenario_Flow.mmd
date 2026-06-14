@@ -1,0 +1,109 @@
+---
+title: Destructive Delete Scenario Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - CHAT INTENT AND DISAMBIGUATION
+%% =====================================================
+subgraph P0["Phase 0 - Chat Intent and Disambiguation"]
+    A0([User asks AI to delete an assessment section])
+    A1["POST /api/v1/ai/chat\nNatural language delete request"]
+    A2["Intent classifier\nDestructive course mutation"]
+    A3["Session and permission gate\nuser, org, course role"]
+    A4{"Allowed to propose delete?"}
+    A5["Return permission or policy error"]
+    A6["Agent calls list_pages\nFind assessment candidates"]
+    A7["Agent calls fetch_page for candidates\nInspect template/component types"]
+    A8{"Exactly one target?"}
+    A9["Ask clarification\nNo proposal created"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 --> A4
+    A4 -- "No" --> A5
+    A4 -- "Yes" --> A6
+    A6 --> A7
+    A7 --> A8
+    A8 -- "No" --> A9
+end
+
+%% =====================================================
+%% PHASE 1 - DELETE PROPOSAL
+%% =====================================================
+subgraph P1["Phase 1 - Delete Proposal"]
+    B1["Agent calls propose_delete_page\nResolved page_id only"]
+    B2["Server revalidates scope\nPage belongs to session.course_id"]
+    B3["Destructive operation gate\nRequires separate confirmation token"]
+    B4["Impact analysis\nFinal assessment, scoring, branching, navigation, export warnings"]
+    B5["Build warning preview\nPage title, components, dependencies, rollback note"]
+    B6["Persist pending delete proposal\nTTL, base_page_hash, confirmation_token_id"]
+    B7["Return proposal_id and destructive warning to UI"]
+
+    A8 -- "Yes" --> B1
+    B1 --> B2
+    B2 --> B3
+    B3 --> B4
+    B4 --> B5
+    B5 --> B6
+    B6 --> B7
+end
+
+%% =====================================================
+%% PHASE 2 - EXPLICIT USER CONFIRMATION
+%% =====================================================
+subgraph P2["Phase 2 - Explicit User Confirmation"]
+    C1["Frontend modal\nRequire explicit confirm action for delete"]
+    C2{"User confirms deletion?"}
+    C3["Reject proposal\nLeave page unchanged"]
+    C4["confirm_delete_page\nproposal_id, user_approved_delete=true"]
+
+    B7 --> C1
+    C1 --> C2
+    C2 -- "No" --> C3
+    C2 -- "Yes" --> C4
+end
+
+%% =====================================================
+%% PHASE 3 - APPLY DELETE SAFELY
+%% =====================================================
+subgraph P3["Phase 3 - Apply Delete Safely"]
+    D1["Validate proposal ownership, TTL, token, and base hash"]
+    D2{"Proposal still valid?"}
+    D3["Return expired or stale proposal\nRestart from fresh state"]
+    D4["Begin transaction"]
+    D5["Delete via existing backend path\nDELETE /api/v1/courses/courseId/pages/pageId"]
+    D6["PageRepository.delete\nCascades components and commits"]
+    D7["Post-delete validation\nCourse still has pages, navigation and scoring consistent"]
+    D8{"Post-delete valid?"}
+    D9["Rollback and return validation issue"]
+    D10["Commit and return updated page list"]
+
+    C4 --> D1
+    D1 --> D2
+    D2 -- "No" --> D3
+    D2 -- "Yes" --> D4
+    D4 --> D5
+    D5 --> D6
+    D6 --> D7
+    D7 --> D8
+    D8 -- "No" --> D9
+    D8 -- "Yes" --> D10
+end
+
+%% =====================================================
+%% PHASE 4 - AUDIT AND USER FEEDBACK
+%% =====================================================
+subgraph P4["Phase 4 - Audit and User Feedback"]
+    E1["Audit record required\noperation=delete_assessment, prompt, proposal, confirmation, snapshot"]
+    E2["Outbox event\nAssessmentPageDeletedByAI"]
+    E3["Frontend refreshes course editor and chat\nShow deleted page title and undo policy if available"]
+
+    D10 --> E1
+    E1 --> E2
+    D10 --> E3
+end

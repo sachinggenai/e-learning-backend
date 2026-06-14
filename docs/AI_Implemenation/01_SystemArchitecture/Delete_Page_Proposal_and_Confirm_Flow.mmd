@@ -1,0 +1,111 @@
+---
+title: Delete Page Proposal and Confirm Flow - Production Architecture
+config:
+    look: handDrawn
+    layout: elk
+---
+graph TD
+
+%% =====================================================
+%% PHASE 0 - INTENT, SESSION, AND TARGET RESOLUTION
+%% =====================================================
+subgraph P0["Phase 0 - Intent, Session, and Target Resolution"]
+    A0([AI or user intent to remove a page])
+    A1["Tool call propose_delete_page(session_id, page_id)"]
+    A2["AI Session Gate\nValidate user, org, course scope"]
+    A3{"Session valid?"}
+    A4["Stop with auth or scope error"]
+    A5["Fetch target page\nGET /api/v1/courses/courseId/pages/pageId"]
+    A6["PageRepository.get_by_course_and_page\nLoad title, order, components, updatedAt"]
+    A7{"Page exists in scoped course?"}
+    A8["Return 404 page not found"]
+
+    A0 --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 -- "No" --> A4
+    A3 -- "Yes" --> A5
+    A5 --> A6
+    A6 --> A7
+    A7 -- "No" --> A8
+end
+
+%% =====================================================
+%% PHASE 1 - DESTRUCTIVE PROPOSAL GATE
+%% =====================================================
+subgraph P1["Phase 1 - Destructive Proposal Gate"]
+    B1["Destructive Operation Classifier\nDelete page always requires explicit confirmation"]
+    B2["Dependency Check\nNavigation, scoring, branching, export references, final assessment rules"]
+    B3["Risk Preview Builder\nPage title, template/component summary, downstream warnings"]
+    B4["Generate confirmation token\nBound to session, proposal, page hash, expiry"]
+    B5["Persist pending delete proposal\nstatus=PENDING_CONFIRMATION"]
+    B6["Return proposal_id, warning, token metadata, page preview"]
+
+    A7 -- "Yes" --> B1
+    B1 --> B2
+    B2 --> B3
+    B3 --> B4
+    B4 --> B5
+    B5 --> B6
+end
+
+%% =====================================================
+%% PHASE 2 - FRONTEND CONFIRMATION
+%% =====================================================
+subgraph P2["Phase 2 - Frontend Confirmation"]
+    C1["Frontend destructive modal\nShow page name, warnings, irreversible action text"]
+    C2{"User explicitly confirms?"}
+    C3["Cancel proposal\nNo database mutation"]
+    C4["confirm_delete_page\nsession_id, proposal_id, user_approved_delete=true"]
+
+    B6 --> C1
+    C1 --> C2
+    C2 -- "No" --> C3
+    C2 -- "Yes" --> C4
+end
+
+%% =====================================================
+%% PHASE 3 - CONFIRM AND APPLY DELETE
+%% =====================================================
+subgraph P3["Phase 3 - Confirm and Apply Delete"]
+    D1["Validate confirmation token\nMatches proposal, session, page hash, not expired"]
+    D2{"Token valid and user approved?"}
+    D3["Return 400 confirmation required or expired"]
+    D4["Re-fetch page and compare hash"]
+    D5{"Page changed or already deleted?"}
+    D6["Return 409 conflict or idempotent deleted response"]
+    D7["Begin database transaction"]
+    D8["Existing backend mutation\nDELETE /api/v1/courses/courseId/pages/pageId"]
+    D9["PageRepository.delete\nComponents cascade through page relationship"]
+    D10["Repair derived course state\nOptional reorder, navigation cleanup, validation warnings"]
+    D11["Commit transaction"]
+    D12["Return status=deleted and updated course/page list"]
+
+    C4 --> D1
+    D1 --> D2
+    D2 -- "No" --> D3
+    D2 -- "Yes" --> D4
+    D4 --> D5
+    D5 -- "Yes" --> D6
+    D5 -- "No" --> D7
+    D7 --> D8
+    D8 --> D9
+    D9 --> D10
+    D10 --> D11
+    D11 --> D12
+end
+
+%% =====================================================
+%% PHASE 4 - AUDIT AND RECOVERY SURFACE
+%% =====================================================
+subgraph P4["Phase 4 - Audit and Recovery Surface"]
+    E1["Audit record required\noperation=delete_page, confirmation_token_id, page snapshot"]
+    E2["Outbox event\nPageDeletedByAI v1"]
+    E3["Recovery metadata\nRetain deleted page snapshot for rollback window if policy allows"]
+    E4([Frontend removes page and refreshes course state])
+
+    D11 --> E1
+    E1 --> E2
+    E1 --> E3
+    D12 --> E4
+end
