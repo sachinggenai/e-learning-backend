@@ -91,6 +91,9 @@ async def lifespan(app: FastAPI):
         import app.models.branching  # noqa: F401
         import app.models.social  # noqa: F401
         import app.models.interaction_event  # noqa: F401
+        import app.models.ai_models  # noqa: F401 — AI sessions, proposals, audit, etc.
+        import app.models.ai_admin_override  # noqa: F401 — admin override audit trail
+        import app.models.ai_safety_event  # noqa: F401 — safety events
 
         # Create tables that don't exist yet (non-destructive)
         async with engine.begin() as conn:
@@ -110,6 +113,24 @@ async def lifespan(app: FastAPI):
 
         # Validate critical in-process contracts at startup.
         _verify_critical_contracts()
+
+        # ── AI Configuration ──────────────────
+        # Load AI config (feature flags, model routing, rate limits).
+        # This does NOT crash if AI is disabled or misconfigured —
+        # AI features degrade gracefully.
+        try:
+            from app.services.ai.config import load_ai_config
+            ai_cfg = load_ai_config()
+            if ai_cfg.ai_authoring_enabled:
+                logger.info(
+                    "AI authoring ENABLED — status: %s", ai_cfg.ai_status.value
+                )
+            else:
+                logger.info("AI authoring DISABLED")
+        except Exception:
+            logger.exception(
+                "Error loading AI configuration — AI features will be unavailable"
+            )
     except Exception:
         logger.exception("Error during startup seeding — continuing anyway")
 
@@ -135,6 +156,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── AI Middleware (US-BKND-AI-021) ──────────────────────────────
+# Ordered outermost -> innermost: CORS -> RateLimiter -> Telemetry -> App
+from app.middleware.ai_rate_limiter import AIRateLimitMiddleware
+from app.middleware.ai_telemetry import AITelemetryMiddleware
+
+app.add_middleware(AIRateLimitMiddleware)
+app.add_middleware(AITelemetryMiddleware)
 
 
 @app.exception_handler(RequestValidationError)
@@ -174,6 +203,40 @@ api_router.include_router(audio.router)
 api_router.include_router(branching.router)
 api_router.include_router(social.router)
 api_router.include_router(analytics.router)
+
+# ── AI Routers (conditionally mounted) ────────────────────────
+# AI routes are only available when AI_AUTHORING_ENABLED=true.
+# When false, they don't appear in OpenAPI schema and return 404.
+# Each import is wrapped in try/except so a broken AI router
+# never prevents application startup (degraded AI is better than
+# a crashed server).
+from app.services.ai.config import get_ai_config
+_ai_config = get_ai_config()
+if _ai_config.ai_authoring_enabled:
+    _ai_routers = {
+        "ai_config": "ai_config",
+        "ai_sessions": "ai_sessions",
+        "ai_tools": "ai_tools",
+        "ai_chat": "ai_chat",
+        "ai_templates": "ai_templates",
+        "ai_proposals": "ai_proposals",
+        "ai_ingestion": "ai_ingestion",
+        "ai_confirmations": "ai_confirmations",
+        "ai_admin": "ai_admin",
+    }
+    for _name, _module in _ai_routers.items():
+        try:
+            _imported = __import__(
+                f"app.routers.{_module}", fromlist=["router"]
+            )
+            api_router.include_router(_imported.router)
+            logger.info("AI router mounted: %s", _name)
+        except Exception:
+            logger.exception(
+                "Failed to mount AI router '%s' — AI features degraded",
+                _name,
+            )
+
 app.include_router(api_router)
 
 

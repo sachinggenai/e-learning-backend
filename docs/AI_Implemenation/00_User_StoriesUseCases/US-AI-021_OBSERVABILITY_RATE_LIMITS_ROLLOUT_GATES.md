@@ -1,3 +1,4 @@
+
 # US-AI-021: Add Production Observability, Rate Limits, and Rollout Gates
 
 **Status:** Draft  
@@ -25,6 +26,7 @@ The AI authoring subsystem must expose production-grade observability, rate limi
 3. **Rollout Gates** — AI functionality can be gradually enabled per environment, tenant, organization, user role, and route. Percentage-based rollouts allow canarying. Feature flags are hot-reloadable without server restart.
 
 ### 1.3 Actors
+
 
 | Actor | Role |
 |---|---|

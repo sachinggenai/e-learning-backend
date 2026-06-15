@@ -1,7 +1,7 @@
 # Backend AI User Stories — Index
 
 **Total Backend Stories:** 47 (5 prerequisites + 42 AI backend stories)
-**Last Updated:** 2026-06-14
+**Last Updated:** 2026-06-15
 
 ---
 
@@ -47,7 +47,7 @@ Each story has a corresponding file: `US-BKND-AI-XXX_enriched.md`
 | [US-BKND-AI-008](US-BKND-AI-008_enriched.md) | Unify Course/Page/Schema/Export/Accessibility Validation | ✅ COMPLETE | MUST |
 | [US-BKND-AI-009](US-BKND-AI-009_enriched.md) | Implement Generic Proposal Lifecycle | ✅ COMPLETE | MUST |
 | [US-BKND-AI-010](US-BKND-AI-010_enriched.md) | Apply Proposals with Idempotency, Audit, Outbox | ✅ COMPLETE | MUST |
-| [US-BKND-AI-049](US-BKND-AI-049_enriched.md) | Confirmation Token System for Destructive Operations | ❌ TODO | MUST |
+| [US-BKND-AI-049](US-BKND-AI-049_enriched.md) | Confirmation Token System for Destructive Operations | ✅ COMPLETE | MUST |
 
 ---
 
@@ -57,7 +57,7 @@ Each story has a corresponding file: `US-BKND-AI-XXX_enriched.md`
 |---|---|---|---|
 | [US-BKND-AI-011](US-BKND-AI-011_enriched.md) | Propose and Apply AI-Created Pages | ✅ COMPLETE | MUST |
 | [US-BKND-AI-012](US-BKND-AI-012_enriched.md) | Propose and Apply AI Updates to Existing Pages | ✅ COMPLETE | MUST |
-| US-BKND-AI-013 | Propose and Confirm Destructive Page Deletes | ❌ TODO | MUST |
+| US-BKND-AI-013 | Propose and Confirm Destructive Page Deletes | ✅ COMPLETE | MUST |
 | [US-BKND-AI-014](US-BKND-AI-014_enriched.md) | Simple Chat Edit Orchestration (Backend) | ✅ COMPLETE | MUST |
 | [US-BKND-AI-029](US-BKND-AI-029_enriched.md) | Batch Proposal and All-or-Nothing Semantics | ✅ COMPLETE | SHOULD |
 
@@ -70,7 +70,7 @@ Each story has a corresponding file: `US-BKND-AI-XXX_enriched.md`
 | [US-BKND-AI-015](US-BKND-AI-015_enriched.md) | Retrieve Similar Courses for Examples and Tone | ✅ COMPLETE | SHOULD |
 | [US-BKND-AI-016](US-BKND-AI-016_enriched.md) | File Upload and Ingestion Job Foundation | ✅ COMPLETE | MUST |
 | [US-BKND-AI-017](US-BKND-AI-017_enriched.md) | Extract Documents and Review Page Breakdown | ✅ COMPLETE | MUST |
-| US-BKND-AI-019 | Generate Full Course From Uploaded File | ❌ TODO | SHOULD |
+| US-BKND-AI-019 | Generate Full Course From Uploaded File | ✅ COMPLETE | SHOULD |
 
 ---
 
@@ -78,17 +78,17 @@ Each story has a corresponding file: `US-BKND-AI-XXX_enriched.md`
 
 | Story ID | Title | Status | Priority |
 |---|---|---|---|
-| US-BKND-AI-023 | AI Chat Endpoint and LLM Interaction Loop | ❌ TODO | MUST |
-| US-BKND-AI-025 | Prompt Safety and Content Guardrails | ❌ TODO | MUST |
+| US-BKND-AI-023 | AI Chat Endpoint and LLM Interaction Loop | ✅ COMPLETE | MUST |
+| US-BKND-AI-025 | Prompt Safety and Content Guardrails | ✅ COMPLETE | MUST |
 | [US-BKND-AI-026](US-BKND-AI-026_enriched.md) | Multi-Provider Model Routing and Fallback | ✅ COMPLETE | SHOULD |
-| US-BKND-AI-027 | JSON Repair and Structured Output Recovery | ❌ TODO | SHOULD |
-| US-BKND-AI-028 | Context Pruning and Token Optimization | ❌ TODO | SHOULD |
+| US-BKND-AI-027 | JSON Repair and Structured Output Recovery | ✅ COMPLETE | SHOULD |
+| US-BKND-AI-028 | Context Pruning and Token Optimization | ✅ COMPLETE | SHOULD |
 | [US-BKND-AI-031](US-BKND-AI-031_enriched.md) | RLHF Feedback and Provenance Tracking | ✅ COMPLETE | SHOULD |
 | US-BKND-AI-032 | Policy Engine for Auto-Apply Decisions | ❌ TODO | COULD |
 | US-BKND-AI-034 | Durable Workflow Engine for Long-Running AI Jobs | ❌ TODO | COULD |
 | US-BKND-AI-041 | Async Preview Generation Service | ❌ TODO | COULD |
 | US-BKND-AI-042 | System Prompt Versioning and A/B Testing | ❌ TODO | COULD |
-| US-BKND-AI-044 | Two-Tier Model Architecture (Planner + Generator) | ❌ TODO | SHOULD |
+| US-BKND-AI-044 | Two-Tier Model Architecture (Planner + Generator) | ✅ COMPLETE | SHOULD |
 
 ---
 
@@ -96,12 +96,12 @@ Each story has a corresponding file: `US-BKND-AI-XXX_enriched.md`
 
 | Story ID | Title | Status | Priority |
 |---|---|---|---|
-| US-BKND-AI-020 | Admin Audit, Compliance, and Recovery Views | ❌ TODO | SHOULD |
-| US-BKND-AI-021 | Production Observability, Rate Limits, Rollout Gates | ❌ TODO | MUST |
-| US-BKND-AI-022 | E2E Regression and Release Readiness Tests (Backend) | ❌ TODO | MUST |
+| US-BKND-AI-020 | Admin Audit, Compliance, and Recovery Views | ✅ COMPLETE | SHOULD |
+| US-BKND-AI-021 | Production Observability, Rate Limits, Rollout Gates | ✅ COMPLETE | MUST |
+| US-BKND-AI-022 | E2E Regression and Release Readiness Tests (Backend) | ✅ COMPLETE | MUST |
 | [US-BKND-AI-033](US-BKND-AI-033_enriched.md) | Event-Driven Outbox for Downstream Consumers | ✅ COMPLETE | SHOULD |
 | [US-BKND-AI-035](US-BKND-AI-035_enriched.md) | AI Content Accessibility Compliance | ✅ COMPLETE | SHOULD |
-| US-BKND-AI-036 | Cost Tracking and Token Budget Enforcement | ❌ TODO | SHOULD |
+| US-BKND-AI-036 | Cost Tracking and Token Budget Enforcement | ✅ COMPLETE | SHOULD |
 | US-BKND-AI-037 | Template Definition Harvesting from AI Content | ❌ TODO | COULD |
 | US-BKND-AI-038 | SCORM Export Readiness for AI-Generated Content | ❌ TODO | SHOULD |
 | US-BKND-AI-039 | Session Context Window Recovery | ❌ TODO | SHOULD |
@@ -113,20 +113,20 @@ Each story has a corresponding file: `US-BKND-AI-XXX_enriched.md`
 
 | Story ID | Title | Status | Priority |
 |---|---|---|---|
-| US-BKND-AI-030 | Course Assembly into Existing Editor State | ❌ TODO | MUST |
-| US-BKND-AI-043 | Concurrency Control and Page Locking | ❌ TODO | MUST |
-| US-BKND-AI-045 | Real-Time Job Status Service | ❌ TODO | SHOULD |
-| US-BKND-AI-046 | AI-Assisted Course-Level Operations | ❌ TODO | SHOULD |
+| US-BKND-AI-030 | Course Assembly into Existing Editor State | ✅ COMPLETE | MUST |
+| US-BKND-AI-043 | Concurrency Control and Page Locking | ✅ COMPLETE | MUST |
+| US-BKND-AI-045 | Real-Time Job Status Service | ✅ COMPLETE | SHOULD |
+| US-BKND-AI-046 | AI-Assisted Course-Level Operations | ✅ COMPLETE | SHOULD |
 | US-BKND-AI-047 | Multi-User Collaboration Service | ❌ TODO | COULD |
-| US-BKND-AI-048 | Dead Letter Queue and Failed Job Recovery | ❌ TODO | SHOULD |
-| US-BKND-AI-050 | Stale Detection and Merge Resolution | ❌ TODO | SHOULD |
+| US-BKND-AI-048 | Dead Letter Queue and Failed Job Recovery | ✅ COMPLETE | SHOULD |
+| US-BKND-AI-050 | Stale Detection and Merge Resolution | ✅ COMPLETE | SHOULD |
 
 ---
 
 ## Quick Stats
 
-- ✅ **COMPLETE:** 26 stories ready for implementation
-- ❌ **TODO:** 21 stories need writing
+- ✅ **COMPLETE:** 44 stories ready for implementation
+- ❌ **TODO:** 3 stories need writing
 - **Total:** 47 backend stories
 
 ---

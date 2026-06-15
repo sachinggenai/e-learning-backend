@@ -23,6 +23,18 @@ from app.models.social import (
     PollVote,
     Team,
 )
+from app.models.ai_models import (
+    AISessionRecord,
+    AIProposalRecord,
+    AIConfirmationTokenRecord,
+    AIAuditLogRecord,
+    AIOutboxEventRecord,
+    AIChatTurnRecord,
+    AIIdempotencyKeyRecord,
+    AIIngestionJobRecord,
+)
+from app.models.ai_admin_override import AIAdminOverrideRecord
+from app.models.ai_safety_event import AISafetyEvent
 
 __all__ = [
     "Base",
@@ -47,4 +59,17 @@ __all__ = [
     "Poll",
     "PollVote",
     "Team",
+    # AI Persistence
+    "AISessionRecord",
+    "AIProposalRecord",
+    "AIConfirmationTokenRecord",
+    "AIAuditLogRecord",
+    "AIOutboxEventRecord",
+    "AIChatTurnRecord",
+    "AIIdempotencyKeyRecord",
+    "AIIngestionJobRecord",
+    # Admin Override (US-BKND-AI-049)
+    "AIAdminOverrideRecord",
+    # Safety Events (US-BKND-AI-025)
+    "AISafetyEvent",
 ]

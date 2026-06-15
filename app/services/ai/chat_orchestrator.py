@@ -1,0 +1,858 @@
+"""AI Chat Orchestrator — US-BKND-AI-023.
+
+Manages the LLM interaction loop: receives user messages, constructs
+system prompts with tool definitions, calls the LLM (or mock), executes
+tool calls via ToolExecutor, and returns structured responses.
+
+Architecture:
+- DB-first state: every turn re-fetches course state from the database
+- Propose-before-apply: mutation tools create proposals, never mutate
+- Server-side tool execution: validates inputs/outputs, routes to services
+- Streaming-ready: SSE events for real-time progress
+- Multi-turn loop: LLM may call multiple tools before responding
+- Mock mode: deterministic intent parsing for testing without LLM
+
+US-BKND-AI-023: Full LLM interaction loop with tool calling
+US-BKND-AI-025: Input/output safety guardrails
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+from datetime import datetime
+from typing import Dict, Any, List, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.ai.config import get_ai_config
+
+logger = logging.getLogger("ai_authoring")
+
+# ── System prompt template ──────────────────────────────────────
+
+SYSTEM_PROMPT = """You are an AI course authoring assistant. You help instructors create and edit e-learning courses.
+
+Your capabilities:
+- List and fetch pages from the current course
+- Propose new pages with validated template types
+- Propose updates to existing pages
+- Validate course content against template rules
+- Search for similar courses for style guidance
+
+IMPORTANT RULES:
+1. NEVER mutate data directly — always create proposals first
+2. Always validate before proposing — use the validate tool
+3. Always fetch current state — never trust conversation history
+4. For destructive actions — always require explicit user confirmation
+5. Stay within the session's course scope — do not access other courses
+
+Available template types: text-content, tabs, accordion, click-reveal, final-assessment
+"""
+
+
+class ChatOrchestrator:
+    """Manages the AI chat interaction loop.
+
+    In mock mode (default), parses user intent and calls tools directly
+    without an LLM. In production mode, calls the Anthropic API with
+    tool definitions.
+
+    Usage:
+        orch = ChatOrchestrator(db)
+        result = await orch.process_message(session_id, user_id, prompt)
+    """
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+        self.config = get_ai_config()
+
+    async def process_message(
+        self,
+        session_id: str,
+        user_id: str,
+        prompt: str,
+        course_id: str = "",
+    ) -> Dict[str, Any]:
+        """Process a user message and return a structured response.
+
+        This is the main entry point for the chat endpoint.
+        In mock mode, parses intent and executes tools directly.
+        In production mode, runs the full LLM interaction loop.
+
+        Safety checks (US-BKND-AI-025):
+        1. Input guard: prompt injection + PII scan before processing
+        2. Output guard: blocked terms scan after response generation
+        """
+        # ── Safety: Input guard (US-BKND-AI-025) ──────────────
+        from app.services.ai.safety_service import SafetyService
+        safety = SafetyService(
+            prompt_safety_enabled=self.config.prompt_safety_enabled,
+            output_safety_enabled=self.config.output_safety_enabled,
+        )
+        safety_result = safety.scan_input(prompt)
+        if not safety_result.allowed:
+            return {
+                "role": "assistant",
+                "content": "Your message was blocked by safety filters. "
+                           "Please remove any sensitive information and try again.",
+                "tool_calls": [],
+                "proposals": [],
+                "intent": "blocked",
+                "safety_blocks": safety_result.blocks,
+            }
+        # Use sanitized prompt
+        prompt = safety_result.sanitized_text or prompt
+
+        tool_calls = []
+        proposals = []
+
+        # In mock mode: parse intent and route to tools
+        intent = self._parse_intent(prompt)
+
+        # Execute tools based on intent
+        for tool_name, tool_args in intent.get("tool_calls", []):
+            try:
+                result = await self._execute_mock_tool(
+                    tool_name, tool_args, session_id, user_id, course_id
+                )
+                tool_calls.append({
+                    "tool": tool_name,
+                    "status": "success",
+                    "result": result,
+                })
+                # Collect proposals from propose_* tools
+                if "proposal_id" in result:
+                    proposals.append({
+                        "proposal_id": result.get("proposal_id"),
+                        "proposal_type": tool_name.replace("propose_", ""),
+                        "status": "pending_review",
+                        "validation_status": result.get("validation_status", "valid"),
+                        "diff": result.get("diff", {}),
+                    })
+            except Exception as e:
+                tool_calls.append({
+                    "tool": tool_name,
+                    "status": "error",
+                    "error": str(e),
+                })
+
+        # Build response
+        response_content = self._build_response(prompt, intent, tool_calls, proposals)
+
+        # ── Safety: Output guard (US-BKND-AI-025) ──────────────
+        output_safety = safety.scan_output(response_content)
+        if not output_safety.allowed:
+            response_content = output_safety.sanitized_text or response_content
+
+        return {
+            "role": "assistant",
+            "content": response_content,
+            "tool_calls": tool_calls,
+            "proposals": proposals,
+            "intent": intent.get("intent", "unknown"),
+            "safety_input_warnings": safety_result.warnings,
+        }
+
+    def _parse_intent(self, prompt: str) -> Dict[str, Any]:
+        """Parse user intent from natural language (mock LLM).
+
+        In production, this is replaced by the LLM's native tool-calling
+        response. In mock mode, we use keyword matching to determine
+        what tools to call.
+        """
+        p = prompt.lower()
+
+        # List pages
+        if any(w in p for w in ["list pages", "show pages", "what pages", "page list"]):
+            return {
+                "intent": "list_pages",
+                "tool_calls": [("list_pages", {})],
+            }
+
+        # Fetch specific page
+        if any(w in p for w in ["fetch page", "get page", "show page", "open page"]):
+            return {
+                "intent": "fetch_page",
+                "tool_calls": [
+                    ("list_pages", {}),
+                    ("fetch_page", {"title_hint": prompt}),
+                ],
+            }
+
+        # Create a new page
+        if any(w in p for w in ["create page", "add page", "new page", "add a"]):
+            title, ttype, data = self._extract_create_params(prompt)
+            return {
+                "intent": "create_page",
+                "tool_calls": [
+                    ("list_pages", {}),
+                    ("propose_create_page", {
+                        "title": title,
+                        "template_type": ttype,
+                        "data": data,
+                    }),
+                ],
+            }
+
+        # Update a page
+        if any(w in p for w in ["update page", "edit page", "change page", "modify", "simplify", "rewrite"]):
+            return {
+                "intent": "update_page",
+                "tool_calls": [
+                    ("list_pages", {}),
+                    ("propose_update_page", {"title_hint": prompt}),
+                ],
+            }
+
+        # Delete a page
+        if any(w in p for w in ["delete page", "remove page", "delete the"]):
+            return {
+                "intent": "delete_page",
+                "tool_calls": [
+                    ("list_pages", {}),
+                    ("propose_delete_page", {}),
+                ],
+            }
+
+        # Validate course
+        if any(w in p for w in ["validate", "check course", "course valid"]):
+            return {
+                "intent": "validate_course",
+                "tool_calls": [("validate_course", {"scope": "full"})],
+            }
+
+        # Similar courses
+        if any(w in p for w in ["similar course", "like this course", "examples of"]):
+            return {
+                "intent": "query_similar",
+                "tool_calls": [("query_similar_courses", {"query": prompt})],
+            }
+
+        # Default: list pages + offer help
+        return {
+            "intent": "help",
+            "tool_calls": [("list_pages", {})],
+        }
+
+    async def _execute_mock_tool(
+        self, tool_name: str, args: Dict[str, Any],
+        session_id: str, user_id: str, course_id: str,
+    ) -> Dict[str, Any]:
+        """Execute a tool in mock mode via ToolExecutor."""
+        from app.services.ai.tool_executor import ToolExecutor
+
+        executor = ToolExecutor(self.db)
+
+        if tool_name == "list_pages":
+            result = await executor.execute(
+                "list_pages", {"session_id": session_id}, user_id
+            )
+            return result.get("data", result)
+
+        if tool_name == "fetch_page":
+            # In mock, return first page if no page_id specified
+            pages_result = await executor.execute(
+                "list_pages", {"session_id": session_id}, user_id
+            )
+            pages = pages_result.get("data", {}).get("pages", [])
+            if pages:
+                page_id = pages[0]["page_id"]
+                result = await executor.execute(
+                    "fetch_page",
+                    {"session_id": session_id, "page_id": page_id},
+                    user_id,
+                )
+                return result.get("data", result)
+            return {"pages": [], "message": "No pages found"}
+
+        if tool_name == "propose_create_page":
+            from app.services.ai.proposal_service import AIProposalService
+            svc = AIProposalService(self.db)
+            title = args.get("title", "New Page")
+            ttype = args.get("template_type", "text-content")
+            data = args.get("data", {"content": "Sample content"})
+            result = await svc.create_proposal(
+                session_id=session_id, user_id=user_id,
+                organization_id="", course_id=course_id,
+                operation="create_page", resource_type="page",
+                data={"title": title, "template_type": ttype, "data": data},
+            )
+            return result
+
+        if tool_name == "propose_update_page":
+            from app.services.ai.proposal_service import AIProposalService
+            svc = AIProposalService(self.db)
+            pages_result = await self._execute_mock_tool(
+                "list_pages", {}, session_id, user_id, course_id
+            )
+            pages = pages_result.get("pages", [])
+            if pages:
+                result = await svc.create_proposal(
+                    session_id=session_id, user_id=user_id,
+                    organization_id="", course_id=course_id,
+                    operation="update_page", resource_type="page",
+                    resource_id=pages[0]["page_id"],
+                    data={"title": pages[0].get("title", "Updated"),
+                          "template_type": "", "data": {"content": "Updated content"}},
+                )
+                return result
+            return {"error": "No pages to update"}
+
+        if tool_name == "propose_delete_page":
+            from app.services.ai.proposal_service import AIProposalService
+            svc = AIProposalService(self.db)
+            pages_result = await self._execute_mock_tool(
+                "list_pages", {}, session_id, user_id, course_id
+            )
+            pages = pages_result.get("pages", [])
+            if pages:
+                result = await svc.create_proposal(
+                    session_id=session_id, user_id=user_id,
+                    organization_id="", course_id=course_id,
+                    operation="delete_page", resource_type="page",
+                    resource_id=pages[-1]["page_id"],
+                    data={"title": "", "template_type": "", "data": {}},
+                )
+                return result
+            return {"error": "No pages to delete"}
+
+        if tool_name == "validate_course":
+            from app.services.validation.unified_validator import (
+                UnifiedValidator, ValidationScope
+            )
+            validator = UnifiedValidator(self.db)
+            result = await validator.validate_course(
+                course_id, scope=ValidationScope(args.get("scope", "full"))
+            )
+            return result.model_dump()
+
+        if tool_name == "query_similar_courses":
+            # Minimal — just return empty in mock
+            return {"courses": [], "total_count": 0}
+
+        return {"error": f"Unknown tool: {tool_name}"}
+
+    # ------------------------------------------------------------------
+    # US-BKND-AI-023: Full LLM Interaction Loop
+    # ------------------------------------------------------------------
+
+    async def run_llm_loop(
+        self,
+        session_id: str,
+        user_id: str,
+        prompt: str,
+        course_id: str,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+        max_tool_rounds: int = 10,
+    ) -> Dict[str, Any]:
+        """Run the full LLM interaction loop with tool calling.
+
+        This is the production path for AI chat. It:
+        1. Loads course context from DB
+        2. Builds system prompt + tool definitions
+        3. Sends everything to the LLM
+        4. If the LLM returns tool calls, executes them
+        5. Sends tool results back to the LLM
+        6. Repeats until the LLM produces a final text response
+
+        Args:
+            session_id: The active AI session.
+            user_id: The authenticated user.
+            prompt: The user's natural language message.
+            course_id: The course being authored.
+            conversation_history: Previous conversation turns for context.
+            max_tool_rounds: Max number of tool-calling rounds before forcing stop.
+
+        Returns:
+            Dict with content, tool_calls, proposals, token_usage, latency_ms.
+        """
+        from app.services.ai.llm_client import (
+            LLMClient, LLMProvider, LLMMessage, ToolDef,
+        )
+        from app.services.ai.tool_executor import ToolExecutor
+
+        # 1. Load course context
+        course_context = await self._load_course_context(course_id, session_id)
+
+        # 2. Build system prompt
+        system_prompt = self._build_system_prompt(course_context)
+
+        # 3. Build tool definitions from the tool registry
+        tool_defs = self._build_tool_definitions()
+
+        # 4. Build message list
+        messages: List[LLMMessage] = []
+
+        # Add conversation history
+        for hist_msg in (conversation_history or []):
+            messages.append(LLMMessage(
+                role=hist_msg.get("role", "user"),
+                content=hist_msg.get("content", ""),
+            ))
+
+        # Add current user message
+        messages.append(LLMMessage(role="user", content=prompt))
+
+        # 4b. Prune context window (US-BKND-AI-028)
+        from app.services.ai.context_manager import ContextManager
+        ctx_mgr = ContextManager()
+        msg_dicts = [
+            {"role": m.role, "content": m.content,
+             "tool_calls": m.tool_calls, "tool_results": m.tool_results}
+            for m in messages
+        ]
+        tool_dicts = [
+            {"name": td.name, "description": td.description,
+             "input_schema": td.input_schema}
+            for td in tool_defs
+        ]
+        pruned_dicts, pruning_info = ctx_mgr.prune(
+            msg_dicts, system_prompt=system_prompt, tool_definitions=tool_dicts,
+        )
+        if pruning_info["messages_removed"] > 0:
+            logger.info(
+                "Context pruned: removed %d messages (%d -> %d tokens)",
+                pruning_info["messages_removed"],
+                pruning_info["original_tokens"],
+                pruning_info["pruned_tokens"],
+            )
+
+        # Rebuild LLMMessage list from pruned dicts
+        messages = [
+            LLMMessage(
+                role=m.get("role", "user"),
+                content=m.get("content", ""),
+                tool_calls=m.get("tool_calls", []),
+                tool_results=m.get("tool_results", []),
+            )
+            for m in pruned_dicts
+        ]
+
+        # 5. Determine provider
+        provider = LLMProvider.MOCK
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if api_key and self.config.ai_authoring_enabled:
+            provider = LLMProvider.ANTHROPIC
+
+        client = LLMClient(provider=provider)
+        executor = ToolExecutor(self.db)
+
+        # 6. Run the interaction loop
+        tool_calls_log: List[Dict[str, Any]] = []
+        proposals: List[Dict[str, Any]] = []
+        all_tool_uses: List[Dict[str, Any]] = []
+        total_input_tokens = 0
+        total_output_tokens = 0
+        final_content = ""
+        latency_ms = 0.0
+
+        for round_num in range(max_tool_rounds):
+            import time
+            start = time.time()
+            response = await client.chat(
+                messages=messages,
+                tools=tool_defs,
+                system_prompt=system_prompt,
+            )
+            latency_ms += response.latency_ms
+
+            total_input_tokens += response.token_usage.get("input", 0)
+            total_output_tokens += response.token_usage.get("output", 0)
+
+            # If the LLM produced text content (final response), we're done
+            if response.content and not response.tool_calls:
+                final_content = response.content
+                messages.append(LLMMessage(
+                    role="assistant", content=final_content,
+                ))
+                break
+
+            # If the LLM produced tool calls, execute them
+            if response.tool_calls:
+                tool_results = []
+
+                for tc in response.tool_calls:
+                    tool_name = tc.get("name", "")
+                    tool_input = tc.get("input", {})
+                    tool_call_id = tc.get("id", f"call_{tool_name}_{round_num}")
+
+                    # Execute the tool
+                    try:
+                        exec_result = await executor.execute(
+                            tool_name,
+                            {**tool_input, "session_id": session_id},
+                            user_id,
+                        )
+                        output = exec_result.get("data", exec_result)
+                        is_error = exec_result.get("status") == "error"
+
+                        tool_calls_log.append({
+                            "tool_call_id": tool_call_id,
+                            "tool_name": tool_name,
+                            "input": tool_input,
+                            "status": "success" if not is_error else "error",
+                            "output": output if not is_error else None,
+                            "error": exec_result.get("message") if is_error else None,
+                        })
+
+                        # Collect proposals from propose_* tools
+                        if tool_name.startswith("propose_") and not is_error:
+                            proposals.append({
+                                "proposal_id": output.get("proposal_id", ""),
+                                "proposal_type": tool_name.replace("propose_", ""),
+                                "tool_call_id": tool_call_id,
+                                "status": "pending_review",
+                                "validation_status": output.get("validation_status", "valid"),
+                            })
+
+                    except Exception as exc:
+                        is_error = True
+                        output = {"error": str(exc)}
+                        tool_calls_log.append({
+                            "tool_call_id": tool_call_id,
+                            "tool_name": tool_name,
+                            "input": tool_input,
+                            "status": "error",
+                            "error": str(exc),
+                        })
+
+                    tool_results.append({
+                        "tool_use_id": tool_call_id,
+                        "output": output,
+                        "is_error": is_error,
+                    })
+
+                    all_tool_uses.append({
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "input": tool_input,
+                        "output_summary": (
+                            str(output)[:200] if output else ""
+                        ),
+                    })
+
+                # Add assistant message with tool calls
+                messages.append(LLMMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=[
+                        {"id": tc.get("id", ""), "name": tc.get("name", ""),
+                         "input": tc.get("input", {})}
+                        for tc in response.tool_calls
+                    ],
+                ))
+
+                # Add tool results message
+                messages.append(LLMMessage(
+                    role="user",
+                    content=None,
+                    tool_results=tool_results,
+                ))
+            else:
+                # No content and no tool calls — unusual, break
+                final_content = "I received your request but couldn't generate a response. Could you rephrase?"
+                break
+        else:
+            # Loop exhausted (max_tool_rounds reached)
+            final_content = (
+                "I've performed several actions to help with your request. "
+                "Let me know if you'd like me to refine anything or make additional changes."
+            )
+
+        return {
+            "role": "assistant",
+            "content": final_content,
+            "tool_calls": tool_calls_log,
+            "tool_uses": all_tool_uses,
+            "proposals": proposals,
+            "intent": "llm_interaction",
+            "token_usage": {
+                "input": total_input_tokens,
+                "output": total_output_tokens,
+            },
+            "latency_ms": latency_ms,
+            "loop_rounds": round_num + 1,
+        }
+
+    def _build_system_prompt(self, course_context: Dict[str, Any]) -> str:
+        """Build the system prompt with course context information.
+
+        The system prompt includes:
+        - Role definition and capabilities
+        - Current course metadata (title, page count, status)
+        - Available template types
+        - Key rules and constraints
+        """
+        course_title = course_context.get("title", "Untitled Course")
+        page_count = course_context.get("page_count", 0)
+        course_status = course_context.get("status", "draft")
+        template_types = course_context.get("template_types", [
+            "text-content", "tabs", "accordion", "click-reveal", "final-assessment",
+        ])
+
+        pages_summary = ""
+        for p in course_context.get("pages", [])[:5]:
+            pages_summary += (
+                f"  - {p.get('title', 'Untitled')} "
+                f"({p.get('template_type', 'text-content')})\n"
+            )
+
+        return (
+            f"You are an AI course authoring assistant. You help instructors "
+            f"create and edit e-learning courses.\n\n"
+            f"CURRENT COURSE: \"{course_title}\"\n"
+            f"Status: {course_status}\n"
+            f"Pages: {page_count} total\n"
+            f"{pages_summary}\n"
+            f"Available template types: {', '.join(template_types)}\n\n"
+            f"IMPORTANT RULES:\n"
+            f"1. NEVER mutate data directly — always create proposals first\n"
+            f"2. Always validate before proposing — use the validate tool\n"
+            f"3. Always fetch current state — never trust conversation history\n"
+            f"4. For destructive actions — always require explicit user confirmation\n"
+            f"5. Stay within the session's course scope — do not access other courses\n"
+            f"6. Reference pages by their title or position, not by internal IDs\n"
+        )
+
+    async def _load_course_context(
+        self, course_id: str, session_id: str,
+    ) -> Dict[str, Any]:
+        """Load current course state from the database for the system prompt."""
+        try:
+            from app.repositories.ai_session_repo import AISessionRepository
+
+            session_repo = AISessionRepository(self.db)
+            session = await session_repo.get(session_id)
+            if session is None:
+                return {"title": "Unknown", "page_count": 0, "pages": [], "status": "draft"}
+
+            # Try to load pages
+            try:
+                from app.repositories.page_component_repo import PageRepository
+                page_repo = PageRepository(self.db)
+                if course_id:
+                    pages = await page_repo.list_by_course(course_id)
+                else:
+                    pages = await page_repo.list_by_course(session.course_id) if session else []
+            except Exception:
+                pages = []
+
+            return {
+                "title": getattr(session, "course_id", "Unknown Course"),
+                "page_count": len(pages),
+                "pages": [
+                    {
+                        "title": getattr(p, "title", "Untitled"),
+                        "template_type": (
+                            p.layout.get("templateType", "text-content")
+                            if hasattr(p, "layout") and isinstance(p.layout, dict)
+                            else "text-content"
+                        ),
+                        "page_id": getattr(p, "page_id", ""),
+                    }
+                    for p in pages
+                ],
+                "status": "draft",
+                "template_types": [
+                    "text-content", "tabs", "accordion",
+                    "click-reveal", "final-assessment",
+                ],
+            }
+        except Exception:
+            logger.exception("Failed to load course context")
+            return {"title": "Unknown", "page_count": 0, "pages": [], "status": "draft"}
+
+    def _build_tool_definitions(self) -> list:
+        """Build tool definitions from the tool registry for the LLM.
+
+        Returns a list of ToolDef with JSON Schema input definitions.
+        These tell the LLM what tools are available and how to call them.
+        """
+        from app.services.ai.llm_client import ToolDef
+
+        return [
+            ToolDef(
+                name="list_pages",
+                description="List all pages in the current course with titles and types.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "AI session ID"},
+                    },
+                    "required": ["session_id"],
+                },
+            ),
+            ToolDef(
+                name="fetch_page",
+                description="Fetch the full content and components of a specific page by its page_id.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "AI session ID"},
+                        "page_id": {"type": "string", "description": "The page ID to fetch"},
+                    },
+                    "required": ["session_id", "page_id"],
+                },
+            ),
+            ToolDef(
+                name="propose_create_page",
+                description=(
+                    "Propose creating a new page. This does NOT immediately create the page "
+                    "— it creates a proposal for the user to review and apply."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "AI session ID"},
+                        "title": {"type": "string", "description": "Page title"},
+                        "template_type": {
+                            "type": "string",
+                            "enum": ["text-content", "tabs", "accordion",
+                                     "click-reveal", "final-assessment"],
+                            "description": "Template type for the page",
+                        },
+                        "content": {"type": "string", "description": "Page content as JSON"},
+                    },
+                    "required": ["session_id", "title", "template_type"],
+                },
+            ),
+            ToolDef(
+                name="propose_update_page",
+                description=(
+                    "Propose updating an existing page. Creates a proposal for the user "
+                    "to review before applying."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "AI session ID"},
+                        "page_id": {"type": "string", "description": "Page ID to update"},
+                        "title": {"type": "string", "description": "New title"},
+                        "content": {"type": "string", "description": "Updated content as JSON"},
+                    },
+                    "required": ["session_id", "page_id"],
+                },
+            ),
+            ToolDef(
+                name="propose_delete_page",
+                description=(
+                    "Propose deleting a page. This is a destructive operation that "
+                    "requires explicit user confirmation with a confirmation token."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "AI session ID"},
+                        "page_id": {"type": "string", "description": "Page ID to delete"},
+                    },
+                    "required": ["session_id", "page_id"],
+                },
+            ),
+            ToolDef(
+                name="validate_course",
+                description="Validate the entire course for schema, business rules, and accessibility compliance.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "AI session ID"},
+                        "scope": {
+                            "type": "string",
+                            "enum": ["schema", "business", "accessibility", "export", "full"],
+                            "description": "Validation scope",
+                        },
+                    },
+                    "required": ["session_id"],
+                },
+            ),
+        ]
+
+    @staticmethod
+    def _extract_create_params(prompt: str) -> tuple:
+        """Extract title, template type, and data from a create intent."""
+        title = "New Page"
+        ttype = "text-content"
+        data = {"content": "Sample content"}
+
+        p = prompt.lower()
+        # Try to extract title
+        for marker in ["called ", "named ", "titled ", "title "]:
+            if marker in p:
+                idx = p.find(marker) + len(marker)
+                rest = p[idx:].strip().strip('"\'').split(".")[0].split(",")[0]
+                if rest:
+                    title = rest.strip().title()
+
+        # Detect template type
+        if any(w in p for w in ["assessment", "quiz", "test"]):
+            ttype = "final-assessment"
+            data = {"passing_score": 80, "questions": []}
+        elif any(w in p for w in ["tabs", "compare"]):
+            ttype = "tabs"
+            data = {"tabs": [{"title": "Tab 1", "content": "..."}]}
+        elif any(w in p for w in ["accordion", "faq"]):
+            ttype = "accordion"
+            data = {"items": [{"title": "Item 1", "content": "..."}]}
+
+        return title, ttype, data
+
+    @staticmethod
+    def _build_response(
+        prompt: str, intent: Dict[str, Any],
+        tool_calls: List[Dict], proposals: List[Dict],
+    ) -> str:
+        """Build a natural-language response based on intent and results."""
+        intent_name = intent.get("intent", "help")
+
+        if intent_name == "list_pages":
+            pages_data = tool_calls[0].get("result", {}).get("pages", []) if tool_calls else []
+            count = len(pages_data)
+            if count == 0:
+                return "This course has no pages yet. Would you like me to create one?"
+            page_list = "\n".join(
+                f"• {p.get('title', 'Untitled')} ({p.get('template_type', 'text-content')})"
+                for p in pages_data[:10]
+            )
+            return f"I found {count} page(s) in this course:\n\n{page_list}\n\nWhat would you like to do with them?"
+
+        if intent_name == "create_page":
+            if proposals:
+                p = proposals[0]
+                return (
+                    f"I've created a proposal for a new page: **{p.get('diff', {}).get('after', {}).get('title', 'New Page')}**.\n\n"
+                    f"Validation status: {p.get('validation_status', 'valid')}.\n"
+                    f"Please review and apply it when ready."
+                )
+            return "I wasn't able to create that page. Could you provide more details?"
+
+        if intent_name == "update_page":
+            if proposals:
+                return "I've proposed an update to the page. Please review the changes and apply them when ready."
+            return "I couldn't find a page to update. Which page would you like me to modify?"
+
+        if intent_name == "delete_page":
+            if proposals:
+                return "I've created a delete proposal. ⚠️ This is a destructive action — please confirm before applying."
+            return "I couldn't find a page to delete. Which page would you like to remove?"
+
+        if intent_name == "validate_course":
+            if tool_calls:
+                result = tool_calls[0].get("result", {})
+                errors = result.get("errors", [])
+                if errors:
+                    return f"Validation found {len(errors)} issue(s). The course needs attention before export."
+                return "Course validation passed! All pages are well-formed."
+
+        if intent_name == "help":
+            return (
+                "I'm your AI course authoring assistant! Here's what I can help with:\n\n"
+                "• **List pages** — \"Show me all pages in this course\"\n"
+                "• **Create pages** — \"Add a new welcome page\"\n"
+                "• **Edit content** — \"Simplify the intro on page 2\"\n"
+                "• **Validate** — \"Check my course for issues\"\n"
+                "• **Find examples** — \"Show me similar courses\"\n\n"
+                "What would you like to do?"
+            )
+
+        return f"I processed your request: \"{prompt[:100]}\". How can I help further?"
