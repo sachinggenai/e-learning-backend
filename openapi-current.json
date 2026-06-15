@@ -1113,7 +1113,7 @@
             "description": "Course not found"
           },
           "422": {
-            "description": "Course exists but is not exportable — structured detail array returned"
+            "description": "Course exists but is not exportable \u2014 structured detail array returned"
           },
           "500": {
             "description": "Internal export failure"
@@ -8481,7 +8481,7 @@
           "Analytics"
         ],
         "summary": "Get Skill Mastery",
-        "description": "Skill mastery rollup — aggregated skill/tag performance.\n\nGroups components by their tags and computes mastery percentages\nbased on scoring component weights.",
+        "description": "Skill mastery rollup \u2014 aggregated skill/tag performance.\n\nGroups components by their tags and computes mastery percentages\nbased on scoring component weights.",
         "operationId": "get_skill_mastery_api_v1_courses__courseId__analytics_skills_get",
         "parameters": [
           {
@@ -8548,6 +8548,1913 @@
                 }
               ],
               "title": "Learnerid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/feature-status": {
+      "get": {
+        "tags": [
+          "AI - Configuration"
+        ],
+        "summary": "Get Ai Feature Status",
+        "description": "Return current AI feature status for frontend consumption.\n\nThe frontend calls this at boot time to decide whether to show\nthe \"Build with AI\" button and AI chat panel.\n\nResponse is always 200 (even when AI is disabled) so the frontend\ncan gracefully handle the disabled state.",
+        "operationId": "get_ai_feature_status_api_v1_api_v1_ai_feature_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/sessions": {
+      "post": {
+        "tags": [
+          "AI - Sessions"
+        ],
+        "summary": "Create Session",
+        "description": "Create a new AI authoring session scoped to a course.\n\nValidates:\n- Feature flag AI_AUTHORING_ENABLED is on\n- Course exists in the database\n- User has fewer than AI_MAX_ACTIVE_SESSIONS active sessions\n- Course is accessible (tenant isolation)\n\nReturns session metadata including a course_state snapshot with\nthe current page list, titles, and template types.\n\nThe returned session_id must be included in subsequent AI tool\nand chat requests via the Authorization: Session {sessionId} header.",
+        "operationId": "create_session_api_v1_api_v1_ai_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "AI - Sessions"
+        ],
+        "summary": "Get Session",
+        "description": "Get session metadata and current course state.\n\nReturns the session info even if expired or closed (status field\nindicates current state). Always builds a fresh course_state\nfrom the live database (PageRepository).\n\nOwnership validation: only the session owner can retrieve it.\nNon-existent sessions return 404 (not 403) to prevent enumeration.",
+        "operationId": "get_session_api_v1_api_v1_ai_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AI - Sessions"
+        ],
+        "summary": "Delete Session",
+        "description": "Close (soft-delete) an AI authoring session.\n\nIdempotent: calling DELETE on an already-closed session returns 200\nwith the same response body. After closure, all subsequent tool calls\nwith that session_id are rejected.\n\nOwnership validation: only the session owner can close it.",
+        "operationId": "delete_session_api_v1_api_v1_ai_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/list_pages": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "List Pages",
+        "description": "List all pages in the session's course with metadata.\n\nReturns ordered page metadata: page_id, title, template_type, order,\npage_etag (SHA-256 hash for staleness detection), and timestamps.\n\nFR-3: Each page includes page_etag for staleness detection.\nFR-4: Response includes total_pages count.\nFR-8: Empty course returns {pages: [], total_pages: 0}.\nFR-10: Idempotent read \u2014 no side effects.\n\nSession validation:\n- session_id must be active and non-expired (401/440 otherwise)\n- session.user_id must match authenticated user (403 otherwise)",
+        "operationId": "list_pages_api_v1_api_v1_ai_tools_list_pages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListPagesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/fetch_page": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Fetch Page",
+        "description": "Fetch a single page with full content for AI context.\n\nReturns complete page data including all components, layout, theme,\ncompletion config, and page_etag for staleness detection.\n\nFR-2: Page must belong to the session's course (403 otherwise).\nFR-5: Returns full page record with components array.\nFR-6: Includes page_etag for staleness detection.\nFR-9: Non-existent page returns 404 PAGE_NOT_FOUND.\nFR-10: Idempotent read \u2014 no side effects.",
+        "operationId": "fetch_page_api_v1_api_v1_ai_tools_fetch_page_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FetchPageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/validate_course": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Validate Course",
+        "description": "Run unified validation on all pages in a course.\n\nFR-001: Single unified validation endpoint.\nFR-002: Schema validation per page via TemplateValidationEngine.\nFR-003: Business rule validation per page.\nFR-004: Course-level structural checks (order gaps, duplicates, etc.).\nFR-006: Accessibility heuristic checks (alt-text, titles, instructions).\nFR-008: Categorized output (errors, warnings, info).\n\nSession validation:\n- session_id must be active and non-expired\n- session.user_id must match authenticated user",
+        "operationId": "validate_course_api_v1_api_v1_ai_tools_validate_course_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateCourseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/propose_create_page": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Propose Create Page",
+        "description": "Propose creating a new page. FR1 (US-BKND-AI-011).\n\nValidates session, template type, schema + business rules.\nReturns proposal_id and validation status. No mutation occurs.",
+        "operationId": "propose_create_page_api_v1_api_v1_ai_tools_propose_create_page_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposeCreatePageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/propose_update_page": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Propose Update Page",
+        "description": "Propose updating an existing page. FR1 (US-BKND-AI-011).\n\nValidates session, page ownership, schema + business rules.\nStores before-state snapshot for optimistic concurrency.\nReturns proposal_id and validation status. No mutation occurs.",
+        "operationId": "propose_update_page_api_v1_api_v1_ai_tools_propose_update_page_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposeUpdatePageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/apply_page_proposal": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Apply Page Proposal",
+        "description": "Apply an AI proposal with idempotency, outbox, and post-apply validation.\n\nUS-BKND-AI-010: Idempotent apply via X-Idempotency-Key or idempotency_key field.\nFR-APPLY-001: Transactional mutation + audit + outbox.\nFR-APPLY-002: Idempotency key support for safe retry.\nFR-APPLY-006: Post-apply validation of mutated scope.\nFR-APPLY-008: Outbox event for downstream consumers.",
+        "operationId": "apply_page_proposal_api_v1_api_v1_ai_tools_apply_page_proposal_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyPageProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/apply_update_proposal": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Apply Update Proposal",
+        "description": "Apply an update proposal with staleness detection (US-BKND-AI-012).\n\nEnhanced apply for page updates: re-checks base_hash against current\npage state, returns current state on conflict (409 STALE_BASE_HASH),\nand refreshes course state after successful apply.",
+        "operationId": "apply_update_proposal_api_v1_api_v1_ai_tools_apply_update_proposal_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyPageProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/propose_delete_page": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Propose Delete Page",
+        "description": "Propose deleting a page with dependency impact analysis (US-BKND-AI-013).\n\nCreates a delete proposal with before-state snapshot and confirmation\ntoken. Returns dependency warnings (branching rules, final assessment)\nbut does NOT mutate any data.",
+        "operationId": "propose_delete_page_api_v1_api_v1_ai_tools_propose_delete_page_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__ai_tools__ProposeDeletePageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/confirm_delete_page": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Confirm Delete Page",
+        "description": "Confirm and execute a page delete (US-BKND-AI-013).\n\nValidates the confirmation token (exists, not expired, not used),\nthen executes the deletion via the proposal apply flow.",
+        "operationId": "confirm_delete_page_api_v1_api_v1_ai_tools_confirm_delete_page_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__ai_tools__ConfirmDeletePageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/query_similar_courses": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Query Similar Courses",
+        "description": "Search for similar courses within the organization (US-BKND-AI-015).\n\nUses tier-3 keyword search (ILIKE) for MVP. Results are for style/tone\nguidance only \u2014 never authoritative for API contracts or schemas.",
+        "operationId": "query_similar_courses_api_v1_api_v1_ai_tools_query_similar_courses_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuerySimilarCoursesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/tools/validate": {
+      "post": {
+        "tags": [
+          "AI - Tools"
+        ],
+        "summary": "Validate Template Data",
+        "description": "Validate template data against schema and business rules (FR-4).\n\nThis standalone validation endpoint allows the AI agent to check\nwhether its proposed data is valid BEFORE creating a proposal.\nIt runs both JSON Schema validation and per-template-type business\nrule checks.\n\nReturns a ValidationResult with status (valid/warning/error),\nstructured messages with error codes, and the schema signature.",
+        "operationId": "validate_template_data_api_v1_api_v1_ai_tools_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/chat": {
+      "post": {
+        "tags": [
+          "AI - Chat"
+        ],
+        "summary": "Chat Message",
+        "description": "Send a message to the AI authoring assistant (JSON response).\n\nUS-BKND-AI-023: Full LLM interaction loop with tool calling.\nValidates the session, runs the LLM loop, persists turns, and\nreturns a structured JSON response with proposals and tool calls.",
+        "operationId": "chat_message_api_v1_api_v1_ai_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/chat/stream": {
+      "post": {
+        "tags": [
+          "AI - Chat"
+        ],
+        "summary": "Chat Message Stream",
+        "description": "Send a message to the AI authoring assistant (SSE streaming).\n\nUS-BKND-AI-023: Returns a Server-Sent Events stream with real-time\nprogress on tool calls, text generation, and turn completion.\n\nEvent types:\n    turn_start     \u2014 Turn has started\n    tool_call_start \u2014 A tool call is about to execute\n    tool_call_result \u2014 Tool call completed\n    text_delta     \u2014 Partial text from the LLM\n    turn_complete  \u2014 Turn finished with proposals and token usage\n    turn_error     \u2014 Error occurred",
+        "operationId": "chat_message_stream_api_v1_api_v1_ai_chat_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/chat/history": {
+      "get": {
+        "tags": [
+          "AI - Chat"
+        ],
+        "summary": "Chat History",
+        "description": "Get conversation history for a session.\n\nReturns all chat turns in chronological order. Used by the frontend\nto restore the chat panel on page reload.",
+        "operationId": "chat_history_api_v1_api_v1_ai_chat_history_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/templates": {
+      "get": {
+        "tags": [
+          "AI - Templates"
+        ],
+        "summary": "List Template Contracts",
+        "description": "List all template contracts available to the AI agent.\n\nReturns the full list of registered template types with their\nJSON Schema definitions, business rules, and schema signatures.\nThe AI session prompt builder consumes this at session start\nto embed the current contract set into the system prompt.\n\nFR-5: Template Registry Query API",
+        "operationId": "list_template_contracts_api_v1_api_v1_ai_templates_get",
+        "parameters": [
+          {
+            "name": "include_legacy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include deprecated/legacy contracts",
+              "default": false,
+              "title": "Include Legacy"
+            },
+            "description": "Include deprecated/legacy contracts"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/templates/{type_key}": {
+      "get": {
+        "tags": [
+          "AI - Templates"
+        ],
+        "summary": "Get Template Contract Detail",
+        "description": "Get a single template contract with its full JSON Schema.\n\nReturns the complete contract including the JSON Schema definition,\nbusiness rules, and version/signature metadata.\n\nFR-5: Template Registry Query API (detail view)",
+        "operationId": "get_template_contract_detail_api_v1_api_v1_ai_templates__type_key__get",
+        "parameters": [
+          {
+            "name": "type_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Type Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/proposals": {
+      "post": {
+        "tags": [
+          "AI - Proposals"
+        ],
+        "summary": "Create Proposal",
+        "description": "Create a new AI proposal. FR001-FR003.",
+        "operationId": "create_proposal_api_v1_api_v1_ai_proposals_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProposalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "AI - Proposals"
+        ],
+        "summary": "List Proposals",
+        "description": "List proposals with filters and pagination. FR009.",
+        "operationId": "list_proposals_api_v1_api_v1_ai_proposals_get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/proposals/{proposal_id}": {
+      "get": {
+        "tags": [
+          "AI - Proposals"
+        ],
+        "summary": "Get Proposal",
+        "description": "Get full proposal detail.",
+        "operationId": "get_proposal_api_v1_api_v1_ai_proposals__proposal_id__get",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/proposals/{proposal_id}/apply": {
+      "post": {
+        "tags": [
+          "AI - Proposals"
+        ],
+        "summary": "Apply Proposal",
+        "description": "Apply a pending proposal. FR004.",
+        "operationId": "apply_proposal_api_v1_api_v1_ai_proposals__proposal_id__apply_post",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyProposalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/proposals/{proposal_id}/cancel": {
+      "post": {
+        "tags": [
+          "AI - Proposals"
+        ],
+        "summary": "Cancel Proposal",
+        "description": "Cancel a pending proposal. FR005.",
+        "operationId": "cancel_proposal_api_v1_api_v1_ai_proposals__proposal_id__cancel_post",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelProposalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/proposals/delete-page": {
+      "post": {
+        "tags": [
+          "AI - Proposals"
+        ],
+        "summary": "Propose Delete Page",
+        "description": "Propose deletion of a page with dependency analysis and confirmation token.\n\nUS-BKND-AI-013 Phase 1: Creates a delete proposal. Never mutates domain data.\nReturns confirmation token, warnings, and page metadata.",
+        "operationId": "propose_delete_page_api_v1_api_v1_ai_proposals_delete_page_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__ai_proposals__ProposeDeletePageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/proposals/confirm-delete": {
+      "post": {
+        "tags": [
+          "AI - Proposals"
+        ],
+        "summary": "Confirm Delete Page",
+        "description": "Confirm and execute a previously proposed page deletion.\n\nUS-BKND-AI-013 Phase 3: Validates token, checks staleness,\nexecutes the deletion transactionally.",
+        "operationId": "confirm_delete_page_api_v1_api_v1_ai_proposals_confirm_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__ai_proposals__ConfirmDeletePageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/ingestions": {
+      "post": {
+        "tags": [
+          "AI - Ingestion"
+        ],
+        "summary": "Upload Document",
+        "description": "Upload a document for AI ingestion (US-BKND-AI-016).\n\nAccepts PDF, DOCX, TXT, MD, ZIP files up to 50MB.\nReturns a job_id for polling extraction progress.",
+        "operationId": "upload_document_api_v1_api_v1_ai_ingestions_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_document_api_v1_api_v1_ai_ingestions_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "AI - Ingestion"
+        ],
+        "summary": "List Ingestion Jobs",
+        "description": "List ingestion jobs for a session.",
+        "operationId": "list_ingestion_jobs_api_v1_api_v1_ai_ingestions_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/ingestions/{job_id}": {
+      "get": {
+        "tags": [
+          "AI - Ingestion"
+        ],
+        "summary": "Get Ingestion Job",
+        "description": "Poll ingestion job status (US-BKND-AI-016).",
+        "operationId": "get_ingestion_job_api_v1_api_v1_ai_ingestions__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/ingestions/{job_id}/propose-breakdown": {
+      "post": {
+        "tags": [
+          "AI - Ingestion"
+        ],
+        "summary": "Propose Page Breakdown",
+        "description": "Generate a page breakdown plan from ingested document sections.\n\nUS-BKND-AI-017: Maps extracted sections to proposed pages with\nsuggested template types. For MVP, each section becomes one page.\nThe LLM-driven segmentation will be added in US-BKND-AI-023.",
+        "operationId": "propose_page_breakdown_api_v1_api_v1_ai_ingestions__job_id__propose_breakdown_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposePageBreakdownRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/ingestions/{job_id}/review-plan": {
+      "post": {
+        "tags": [
+          "AI - Ingestion"
+        ],
+        "summary": "Review Page Plan",
+        "description": "Approve or modify a page breakdown plan (US-BKND-AI-017).\n\nOn approval, locks the plan and transitions the job to 'plan_approved'.\nOn rejection, returns the job to 'analyzed' for re-planning.",
+        "operationId": "review_page_plan_api_v1_api_v1_ai_ingestions__job_id__review_plan_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPagePlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/generate-course": {
+      "post": {
+        "tags": [
+          "AI - Ingestion"
+        ],
+        "summary": "Generate Course",
+        "description": "Generate a full course from an approved page plan (US-BKND-AI-019).\n\nInitiates course generation from the approved page plan in an import job.\nReturns the generation result with course preview data.",
+        "operationId": "generate_course_api_v1_api_v1_ai_generate_course_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateCourseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/generate-course/{import_job_id}": {
+      "get": {
+        "tags": [
+          "AI - Ingestion"
+        ],
+        "summary": "Get Generation Status",
+        "description": "Get the status of a course generation job (US-BKND-AI-019).",
+        "operationId": "get_generation_status_api_v1_api_v1_ai_generate_course__import_job_id__get",
+        "parameters": [
+          {
+            "name": "import_job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Import Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/proposals/{proposal_id}/confirm": {
+      "post": {
+        "tags": [
+          "AI - Confirmations"
+        ],
+        "summary": "Confirm a destructive operation using a confirmation token",
+        "description": "Validate a confirmation token for a destructive proposal.\n\nThis endpoint is the GATE that all destructive operations pass through.\nIt validates the token and proposal state, returning 200 if the\nconfirmation is legitimate. The caller (operation-specific orchestrator)\nmust then execute the actual mutation inside a database transaction.\n\nThis endpoint does NOT execute the operation itself \u2014 only validates\nthat the confirmation is legitimate.",
+        "operationId": "confirm_proposal_api_v1_api_v1_ai_proposals__proposal_id__confirm_post",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmProposalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token validated; operation can proceed",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "User confirmation required or invalid request"
+          },
+          "403": {
+            "description": "Invalid confirmation token"
+          },
+          "404": {
+            "description": "Proposal not found"
+          },
+          "409": {
+            "description": "Resource changed, already applied, or not confirmable"
+          },
+          "410": {
+            "description": "Confirmation token expired or resource deleted"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/admin/safety-events": {
+      "get": {
+        "tags": [
+          "AI - Admin"
+        ],
+        "summary": "List Safety Events",
+        "description": "List safety events with optional filters.\n\nUS-BKND-AI-025: Admin-auditable safety event records for compliance\nand security review. Returns the most recent events first.",
+        "operationId": "list_safety_events_api_v1_api_v1_ai_admin_safety_events_get",
+        "parameters": [
+          {
+            "name": "event_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by event type (prompt_injection_blocked, pii_detected_and_redacted, etc.)",
+              "title": "Event Type"
+            },
+            "description": "Filter by event type (prompt_injection_blocked, pii_detected_and_redacted, etc.)"
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by severity (low, medium, high, critical)",
+              "title": "Severity"
+            },
+            "description": "Filter by severity (low, medium, high, critical)"
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by session ID",
+              "title": "Session Id"
+            },
+            "description": "Filter by session ID"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Max results per page",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Max results per page"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Pagination offset",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Pagination offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/admin/safety-events/{event_id}": {
+      "get": {
+        "tags": [
+          "AI - Admin"
+        ],
+        "summary": "Get Safety Event",
+        "description": "Get a single safety event by ID.",
+        "operationId": "get_safety_event_api_v1_api_v1_ai_admin_safety_events__event_id__get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/admin/safety-stats": {
+      "get": {
+        "tags": [
+          "AI - Admin"
+        ],
+        "summary": "Safety Stats",
+        "description": "Get aggregate safety statistics.\n\nReturns counts by event type and severity for dashboard display.",
+        "operationId": "safety_stats_api_v1_api_v1_ai_admin_safety_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/admin/audit-logs": {
+      "get": {
+        "tags": [
+          "AI - Admin"
+        ],
+        "summary": "List Audit Logs",
+        "description": "Query AI audit logs with filters and pagination (US-BKND-AI-020).",
+        "operationId": "list_audit_logs_api_v1_api_v1_ai_admin_audit_logs_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Operation"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Outcome"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Date To"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Search"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/admin/audit-summary": {
+      "get": {
+        "tags": [
+          "AI - Admin"
+        ],
+        "summary": "Audit Operations Summary",
+        "description": "Get operations summary for compliance dashboard (US-BKND-AI-020).",
+        "operationId": "audit_operations_summary_api_v1_api_v1_ai_admin_audit_summary_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 7,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/api/v1/ai/admin/audit-logs/course/{course_id}": {
+      "get": {
+        "tags": [
+          "AI - Admin"
+        ],
+        "summary": "Course Audit History",
+        "description": "Get time-ordered change history for a course (US-BKND-AI-020).",
+        "operationId": "course_audit_history_api_v1_api_v1_ai_admin_audit_logs_course__course_id__get",
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Course Id"
             }
           }
         ],
@@ -8993,6 +10900,51 @@
         "title": "AnalyticsDashboard",
         "description": "Advanced analytics dashboard configuration"
       },
+      "ApplyPageProposalRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "proposal_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Proposal Id"
+          },
+          "user_confirmed": {
+            "type": "boolean",
+            "title": "User Confirmed",
+            "default": true
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Idempotency Key",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "proposal_id"
+        ],
+        "title": "ApplyPageProposalRequest",
+        "description": "Request body for apply_page_proposal tool."
+      },
+      "ApplyProposalRequest": {
+        "properties": {
+          "user_confirmed": {
+            "type": "boolean",
+            "title": "User Confirmed",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ApplyProposalRequest"
+      },
       "ApprovalRequest": {
         "properties": {
           "action": {
@@ -9382,6 +11334,35 @@
         ],
         "title": "Body_upload_audio_api_v1_assets_audio_post"
       },
+      "Body_upload_document_api_v1_api_v1_ai_ingestions_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id",
+            "default": ""
+          },
+          "correlation_id": {
+            "type": "string",
+            "title": "Correlation Id",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "session_id"
+        ],
+        "title": "Body_upload_document_api_v1_api_v1_ai_ingestions_post"
+      },
       "Body_upload_media_api_v1_media_upload_post": {
         "properties": {
           "file": {
@@ -9741,6 +11722,17 @@
         "title": "BusinessIntelligenceReport",
         "description": "Comprehensive BI report for executive dashboards"
       },
+      "CancelProposalRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "CancelProposalRequest"
+      },
       "CategoryUsageStats": {
         "properties": {
           "categoryId": {
@@ -9780,6 +11772,50 @@
         ],
         "title": "CategoryUsageStats",
         "description": "Category usage statistics"
+      },
+      "ChatRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Prompt"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "chat_edit"
+          },
+          "selected_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelectedContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream",
+            "description": "If true, response is streamed via Server-Sent Events",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "prompt"
+        ],
+        "title": "ChatRequest",
+        "description": "Request body for POST /api/v1/ai/chat."
       },
       "ComponentAnswerDTO": {
         "properties": {
@@ -10058,6 +12094,29 @@
         },
         "type": "object",
         "title": "ComponentUpdateDTO"
+      },
+      "ConfirmProposalRequest": {
+        "properties": {
+          "confirmation_token": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Confirmation Token",
+            "description": "The confirmation token received from the propose step"
+          },
+          "user_approved": {
+            "type": "boolean",
+            "title": "User Approved",
+            "description": "Whether the user explicitly approved the destructive operation",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmation_token"
+        ],
+        "title": "ConfirmProposalRequest",
+        "description": "Request body for POST /api/v1/ai/proposals/{proposal_id}/confirm."
       },
       "ContentAnalysisRequest": {
         "properties": {
@@ -10824,6 +12883,77 @@
         "title": "CreatePageFromTemplate",
         "description": "Request model for creating a page from template"
       },
+      "CreateProposalRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "operation": {
+            "type": "string",
+            "pattern": "^(create_page|update_page|delete_page)$",
+            "title": "Operation"
+          },
+          "resource_type": {
+            "type": "string",
+            "pattern": "^(page|course)$",
+            "title": "Resource Type",
+            "default": "page"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "operation"
+        ],
+        "title": "CreateProposalRequest"
+      },
+      "CreateSessionRequest": {
+        "properties": {
+          "course_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Course Id",
+            "description": "Course ID string for the course to author with AI",
+            "examples": [
+              "course-101"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "pattern": "^(page|course)$",
+            "title": "Scope",
+            "description": "Session scope: 'page' for page-level, 'course' for course-level",
+            "default": "page"
+          }
+        },
+        "type": "object",
+        "required": [
+          "course_id"
+        ],
+        "title": "CreateSessionRequest",
+        "description": "Request body for POST /api/v1/ai/sessions."
+      },
       "CustomTemplateResponse": {
         "properties": {
           "template": {
@@ -11100,6 +13230,31 @@
         "title": "EnhancedTemplate",
         "description": "Enhanced template model with full feature support"
       },
+      "FetchPageRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id",
+            "description": "AI session ID"
+          },
+          "page_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Page Id",
+            "description": "Page ID to fetch"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "page_id"
+        ],
+        "title": "FetchPageRequest",
+        "description": "Request body for fetch_page tool."
+      },
       "FieldDefinition": {
         "properties": {
           "id": {
@@ -11339,6 +13494,30 @@
         "type": "object",
         "title": "FieldValidation",
         "description": "Validation rules for template fields"
+      },
+      "GenerateCourseRequest": {
+        "properties": {
+          "import_job_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Import Job Id"
+          },
+          "course_id": {
+            "type": "string",
+            "title": "Course Id",
+            "default": ""
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "import_job_id"
+        ],
+        "title": "GenerateCourseRequest"
       },
       "HTTPValidationError": {
         "properties": {
@@ -11884,6 +14063,23 @@
         "type": "object",
         "title": "LayoutDefinition",
         "description": "Template layout configuration"
+      },
+      "ListPagesRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id",
+            "description": "AI session ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "ListPagesRequest",
+        "description": "Request body for list_pages tool."
       },
       "MobileOptimization": {
         "properties": {
@@ -12977,6 +15173,117 @@
         "title": "PreviewData",
         "description": "Template preview information"
       },
+      "ProposeCreatePageRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "template_type": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Template Type"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          },
+          "insert_at_index": {
+            "type": "integer",
+            "title": "Insert At Index",
+            "default": -1
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "title",
+          "template_type"
+        ],
+        "title": "ProposeCreatePageRequest",
+        "description": "Request body for propose_create_page tool."
+      },
+      "ProposePageBreakdownRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "job_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Job Id"
+          },
+          "max_pages": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Pages",
+            "default": 50
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "job_id"
+        ],
+        "title": "ProposePageBreakdownRequest",
+        "description": "Request body for propose_page_breakdown."
+      },
+      "ProposeUpdatePageRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "page_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Page Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Title",
+            "default": ""
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          },
+          "base_hash": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Base Hash",
+            "description": "SHA-256 of current page state for staleness detection",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "page_id"
+        ],
+        "title": "ProposeUpdatePageRequest",
+        "description": "Request body for propose_update_page tool."
+      },
       "PushNotification": {
         "properties": {
           "notificationId": {
@@ -13062,6 +15369,36 @@
         "title": "PushNotification",
         "description": "Push notification for mobile engagement"
       },
+      "QuerySimilarCoursesRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "query"
+        ],
+        "title": "QuerySimilarCoursesRequest",
+        "description": "Request body for query_similar_courses tool."
+      },
       "QuestionResponseDTO": {
         "properties": {
           "questionId": {
@@ -13080,7 +15417,21 @@
         "required": [
           "questionId"
         ],
-        "title": "QuestionResponseDTO"
+        "title": "QuestionResponseDTO",
+        "examples": [
+          {
+            "questionId": "q-1",
+            "selectedOptionIds": [
+              "opt-a"
+            ]
+          },
+          {
+            "questionId": "q-2",
+            "selectedOptionIds": [
+              "Learner typed answer"
+            ]
+          }
+        ]
       },
       "ReorderDTO": {
         "properties": {
@@ -13163,6 +15514,42 @@
         ],
         "title": "RevenueAnalytics",
         "description": "Revenue and financial analytics"
+      },
+      "ReviewPagePlanRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "job_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Job Id"
+          },
+          "approved": {
+            "type": "boolean",
+            "title": "Approved",
+            "default": true
+          },
+          "modifications": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Modifications"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "job_id"
+        ],
+        "title": "ReviewPagePlanRequest",
+        "description": "Request body for review_page_plan."
       },
       "SCORMPackage": {
         "properties": {
@@ -13311,7 +15698,32 @@
         "required": [
           "answers"
         ],
-        "title": "ScoreCalculateDTO"
+        "title": "ScoreCalculateDTO",
+        "examples": [
+          {
+            "answers": [
+              {
+                "componentId": "final-assessment-1",
+                "componentType": "final-assessment",
+                "responses": [
+                  {
+                    "questionId": "q-1",
+                    "selectedOptionIds": [
+                      "a"
+                    ]
+                  },
+                  {
+                    "questionId": "q-2",
+                    "selectedOptionIds": [
+                      "Learner typed answer"
+                    ]
+                  }
+                ]
+              }
+            ],
+            "attemptNumber": 1
+          }
+        ]
       },
       "ScoreCalculateResultDTO": {
         "properties": {
@@ -13732,6 +16144,35 @@
         ],
         "title": "SelectOption",
         "description": "Option for select/multiselect fields"
+      },
+      "SelectedContext": {
+        "properties": {
+          "page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Id"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          }
+        },
+        "type": "object",
+        "title": "SelectedContext",
+        "description": "Optional context hint from frontend about what the user selected."
       },
       "SharePermissions": {
         "properties": {
@@ -15295,6 +17736,63 @@
         "title": "UserProfile",
         "description": "Enhanced user profile with enterprise attributes"
       },
+      "ValidateCourseRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id",
+            "description": "AI session ID"
+          },
+          "validation_scope": {
+            "type": "string",
+            "title": "Validation Scope",
+            "description": "Scope: 'schema_only', 'business_rules', 'accessibility', or 'full'",
+            "default": "full"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "ValidateCourseRequest",
+        "description": "Request body for validate_course tool."
+      },
+      "ValidateRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id",
+            "description": "AI session ID"
+          },
+          "template_type": {
+            "type": "string",
+            "title": "Template Type",
+            "description": "Template type key"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data",
+            "description": "Template data payload to validate"
+          },
+          "validation_scope": {
+            "type": "string",
+            "title": "Validation Scope",
+            "description": "Validation scope: 'schema_only', 'business_rules', or 'full'",
+            "default": "full"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "template_type",
+          "data"
+        ],
+        "title": "ValidateRequest",
+        "description": "Request body for the standalone validate endpoint."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -15597,6 +18095,117 @@
         "title": "ValidationError",
         "description": "Validation error details"
       },
+      "app__routers__ai_proposals__ConfirmDeletePageRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "proposal_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Proposal Id"
+          },
+          "user_approved_delete": {
+            "type": "boolean",
+            "title": "User Approved Delete",
+            "description": "Must be true to confirm destructive deletion",
+            "default": false
+          },
+          "confirmation_token": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Confirmation Token",
+            "description": "The confirmation token from the propose response",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "proposal_id"
+        ],
+        "title": "ConfirmDeletePageRequest"
+      },
+      "app__routers__ai_proposals__ProposeDeletePageRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "page_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Page Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "page_id"
+        ],
+        "title": "ProposeDeletePageRequest"
+      },
+      "app__routers__ai_tools__ConfirmDeletePageRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "proposal_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Proposal Id"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Confirmation Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "proposal_id",
+          "confirmation_token"
+        ],
+        "title": "ConfirmDeletePageRequest",
+        "description": "Request body for confirm_delete_page tool."
+      },
+      "app__routers__ai_tools__ProposeDeletePageRequest": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "page_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Page Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "page_id"
+        ],
+        "title": "ProposeDeletePageRequest",
+        "description": "Request body for propose_delete_page tool."
+      },
       "app__routers__courses__ValidationError": {
         "properties": {
           "id": {
@@ -15775,6 +18384,7 @@
             "description": "Question interaction type",
             "enum": [
               "mcq",
+              "multiple-select",
               "true-false",
               "fill-in-blank"
             ],
@@ -15801,7 +18411,7 @@
               }
             ],
             "default": null,
-            "description": "Options for mcq/true-false questions",
+            "description": "Options for mcq/multiple-select/true-false questions",
             "title": "Options"
           },
           "correctAnswer": {
@@ -15877,6 +18487,7 @@
                 "description": "Question interaction type",
                 "enum": [
                   "mcq",
+                  "multiple-select",
                   "true-false",
                   "fill-in-blank"
                 ],
@@ -15903,7 +18514,7 @@
                   }
                 ],
                 "default": null,
-                "description": "Options for mcq/true-false questions",
+                "description": "Options for mcq/multiple-select/true-false questions",
                 "title": "Options"
               },
               "correctAnswer": {
