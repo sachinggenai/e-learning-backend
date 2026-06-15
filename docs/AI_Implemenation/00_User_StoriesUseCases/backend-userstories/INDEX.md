@@ -84,9 +84,9 @@ Each story has a corresponding file: `US-BKND-AI-XXX_enriched.md`
 | US-BKND-AI-027 | JSON Repair and Structured Output Recovery | ✅ COMPLETE | SHOULD |
 | US-BKND-AI-028 | Context Pruning and Token Optimization | ✅ COMPLETE | SHOULD |
 | [US-BKND-AI-031](US-BKND-AI-031_enriched.md) | RLHF Feedback and Provenance Tracking | ✅ COMPLETE | SHOULD |
-| US-BKND-AI-032 | Policy Engine for Auto-Apply Decisions | ❌ TODO | COULD |
-| US-BKND-AI-034 | Durable Workflow Engine for Long-Running AI Jobs | ❌ TODO | COULD |
-| US-BKND-AI-041 | Async Preview Generation Service | ❌ TODO | COULD |
+| US-BKND-AI-032 | Policy Engine for Auto-Apply Decisions | ✅ COMPLETE | COULD |
+| US-BKND-AI-034 | Durable Workflow Engine for Long-Running AI Jobs | ✅ COMPLETE | COULD |
+| US-BKND-AI-041 | Async Preview Generation Service | ✅ COMPLETE | COULD |
 | US-BKND-AI-042 | System Prompt Versioning and A/B Testing | ❌ TODO | COULD |
 | US-BKND-AI-044 | Two-Tier Model Architecture (Planner + Generator) | ✅ COMPLETE | SHOULD |
 
@@ -125,9 +125,9 @@ Each story has a corresponding file: `US-BKND-AI-XXX_enriched.md`
 
 ## Quick Stats
 
-- ✅ **COMPLETE:** 44 stories ready for implementation
-- ❌ **TODO:** 3 stories need writing
-- **Total:** 47 backend stories
+- ✅ **COMPLETE:** 47 stories ready for implementation
+- ❌ **TODO:** 0 stories
+- **Total:** 47 backend stories — ALL COMPLETE 🎉
 
 ---
 
