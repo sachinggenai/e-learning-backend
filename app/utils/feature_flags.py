@@ -66,6 +66,12 @@ class FeatureFlagService:
                 description='Enable AI-powered content suggestions',
                 environments=[Environment.STAGING, Environment.PRODUCTION]
             ),
+            'similar_course_retrieval': FeatureFlag(
+                name='similar_course_retrieval',
+                enabled=False,
+                description='Enable AI similar course retrieval (RAG) for pedagogical examples and tone references',
+                environments=[Environment.DEVELOPMENT, Environment.QA],
+            ),
             'advanced_scorm': FeatureFlag(
                 name='advanced_scorm',
                 enabled=False,

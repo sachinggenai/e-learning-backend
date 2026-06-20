@@ -134,6 +134,12 @@ class ToolExecutor:
             elif tool_name == "fetch_page":
                 page_id = payload.get("page_id", "")
                 result = await self._handle_fetch_page(session.course_id, page_id)
+            elif tool_name == "query_similar_courses":
+                result = await self._handle_query_similar_courses(
+                    session.course_id,
+                    session.organization_id,
+                    payload,
+                )
             else:
                 return self._error_response(
                     ToolError("UNKNOWN_TOOL", f"Unknown tool: '{tool_name}'", 400)
@@ -265,6 +271,53 @@ class ToolExecutor:
         }
 
         return {"status": "success", "data": result}
+
+    async def _handle_query_similar_courses(
+        self,
+        course_id: str,
+        organization_id: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Execute similar course retrieval via SimilarCourseService.
+
+        FR-1: query must be non-empty.
+        FR-2: Results scoped to session's organization (enforced by service).
+        FR-3: Returns shaped results with excerpts, tone, template breakdown.
+        FR-4: Empty results are non-fatal.
+        FR-10: Idempotent read — no mutations.
+        """
+        from app.services.ai.similar_course_service import (
+            SimilarCourseService,
+            FeatureDisabledError,
+            SessionValidationError,
+        )
+
+        query = (payload.get("query") or "").strip()
+        if not query:
+            raise ToolError("VALIDATION_ERROR", "query is required and must not be empty", 400)
+
+        max_results = payload.get("max_results", 5)
+        filters = payload.get("filters")
+
+        service = SimilarCourseService(self.db)
+
+        try:
+            result = await service.query_similar_courses(
+                session_id=payload.get("session_id", ""),
+                query=query,
+                max_results=max_results,
+                filters=filters,
+            )
+            return {"status": "success", "data": result}
+
+        except FeatureDisabledError as exc:
+            return self._error_response(
+                ToolError("FEATURE_DISABLED", str(exc), 404)
+            )
+        except SessionValidationError as exc:
+            return self._error_response(
+                ToolError(exc.code, exc.message, exc.http_status)
+            )
 
     # ── Helpers ───────────────────────────────────────────────────
 

@@ -39,7 +39,7 @@ Your capabilities:
 - Propose new pages with validated template types
 - Propose updates to existing pages
 - Validate course content against template rules
-- Search for similar courses for style guidance
+- Search for similar courses for style and tone guidance (via query_similar_courses tool)
 
 IMPORTANT RULES:
 1. NEVER mutate data directly — always create proposals first
@@ -47,6 +47,13 @@ IMPORTANT RULES:
 3. Always fetch current state — never trust conversation history
 4. For destructive actions — always require explicit user confirmation
 5. Stay within the session's course scope — do not access other courses
+6. The `query_similar_courses` tool returns example courses for tone and structural
+   reference ONLY. Do NOT derive API contracts, validation rules, template schemas,
+   or configuration values from these results. Always rely on the tool definitions,
+   template contracts, and schemas provided in your system prompt for authoritative
+   specifications.
+7. If `query_similar_courses` returns empty results, continue generation without
+   examples. Quality may be slightly lower but this should not block progress.
 
 Available template types: text-content, tabs, accordion, click-reveal, final-assessment
 """
@@ -329,8 +336,40 @@ class ChatOrchestrator:
             return result.model_dump()
 
         if tool_name == "query_similar_courses":
-            # Minimal — just return empty in mock
-            return {"courses": [], "total_count": 0}
+            # Real retrieval via SimilarCourseService (US-BKND-AI-015)
+            from app.services.ai.similar_course_service import (
+                SimilarCourseService,
+                FeatureDisabledError,
+            )
+            try:
+                service = SimilarCourseService(self.db)
+                result = await service.query_similar_courses(
+                    session_id=session_id,
+                    query=args.get("query", ""),
+                    max_results=args.get("max_results", 5),
+                    filters=args.get("filters"),
+                    user_id=user_id,
+                )
+                return result
+            except FeatureDisabledError:
+                return {
+                    "courses": [],
+                    "total_count": 0,
+                    "message": "Similar course retrieval is not enabled. "
+                               "Proceeding without examples.",
+                    "retrieval_tier_used": "none",
+                }
+            except Exception as exc:
+                logger.warning(
+                    "Similar course retrieval failed (non-fatal): %s", exc
+                )
+                return {
+                    "courses": [],
+                    "total_count": 0,
+                    "message": "Similar course retrieval temporarily unavailable. "
+                               "Proceeding without examples.",
+                    "retrieval_tier_used": "none",
+                }
 
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -613,7 +652,15 @@ class ChatOrchestrator:
             f"3. Always fetch current state — never trust conversation history\n"
             f"4. For destructive actions — always require explicit user confirmation\n"
             f"5. Stay within the session's course scope — do not access other courses\n"
-            f"6. Reference pages by their title or position, not by internal IDs\n"
+            f"6. The `query_similar_courses` tool returns example courses for tone and\n"
+            f"   structural reference ONLY. Do NOT derive API contracts, validation\n"
+            f"   rules, template schemas, or configuration values from these results.\n"
+            f"   Always rely on the tool definitions, template contracts, and schemas\n"
+            f"   provided in your system prompt for authoritative specifications.\n"
+            f"7. If `query_similar_courses` returns empty results, continue generation\n"
+            f"   without examples. Quality may be slightly lower but should not block\n"
+            f"   progress.\n"
+            f"8. Reference pages by their title or position, not by internal IDs\n"
         )
 
     async def _load_course_context(
@@ -694,6 +741,47 @@ class ChatOrchestrator:
                         "page_id": {"type": "string", "description": "The page ID to fetch"},
                     },
                     "required": ["session_id", "page_id"],
+                },
+            ),
+            ToolDef(
+                name="query_similar_courses",
+                description=(
+                    "Search for similar courses within your organization to use as "
+                    "examples for tone, structure, and pedagogical patterns. Results "
+                    "are NOT authoritative for API contracts, validation rules, or "
+                    "schema definitions."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {
+                            "type": "string",
+                            "description": "Active AI session ID",
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "Natural language query describing the desired course style, topic, or structure",
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "default": 5,
+                            "minimum": 1,
+                            "maximum": 20,
+                        },
+                        "filters": {
+                            "type": "object",
+                            "properties": {
+                                "template_types": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "min_pages": {"type": "integer"},
+                                "max_pages": {"type": "integer"},
+                                "language": {"type": "string"},
+                            },
+                        },
+                    },
+                    "required": ["session_id", "query"],
                 },
             ),
             ToolDef(

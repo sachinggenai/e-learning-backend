@@ -1,0 +1,235 @@
+"""Similar Course Retrieval Service — US-BKND-AI-015.
+
+Orchestrates three-tier retrieval with automatic fallback.
+Feature-flag gated. Session-scoped for tenant isolation.
+
+Matcher: Constructor takes db: AsyncSession only (matches AISessionService,
+AIProposalService, etc.)
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.repositories.ai_session_repo import AISessionRepository
+from app.repositories.similar_course_repo import SimilarCourseRepository
+from app.services.ai.embedding_provider import (
+    EmbeddingProvider,
+    EmbeddingError,
+    get_embedding_provider,
+)
+
+logger = logging.getLogger("ai_authoring")
+
+
+class FeatureDisabledError(Exception):
+    """Feature flag is off."""
+    def __init__(self):
+        super().__init__(
+            "Similar course retrieval is not enabled. "
+            "Set FEATURE_SIMILAR_COURSE_RETRIEVAL=true to enable."
+        )
+
+
+class SessionValidationError(Exception):
+    """AI session is invalid, expired, or not owned by caller."""
+    def __init__(self, code: str, message: str, http_status: int = 401):
+        self.code = code
+        self.message = message
+        self.http_status = http_status
+        super().__init__(message)
+
+
+class SimilarCourseService:
+    """Orchestrates similar course retrieval with tiered fallback.
+
+    Constructor mirrors all existing AI services:
+        __init__(self, db: AsyncSession)
+    """
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+    ):
+        self.db = db
+        self.session_repo = AISessionRepository(db)
+        self.retrieval_repo = SimilarCourseRepository(db)
+        self.embedding_provider = embedding_provider or get_embedding_provider()
+
+    # ── Public API ─────────────────────────────────────────────────
+
+    async def query_similar_courses(
+        self,
+        session_id: str,
+        query: str,
+        max_results: int = 5,
+        filters: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Execute tiered retrieval and return shaped results.
+
+        Called by: ai_tools.py router, ToolExecutor, ChatOrchestrator.
+        All three consumers use this single method.
+
+        Args:
+            session_id: Active AI session ID (validated, org scope resolved).
+            query: Natural language query string.
+            max_results: 1-20, clamped.
+            filters: Optional dict with template_types, min_pages, max_pages, language.
+            user_id: Optional — if provided, session.user_id must match (ownership check).
+
+        Returns:
+            {"courses": [...], "total_count": N, "message": "...", "retrieval_tier_used": "tier1|2|3|none"}
+
+        Raises:
+            FeatureDisabledError: Flag off.
+            SessionValidationError: Invalid/expired/wrong-owner session.
+
+        Tier fallback: Tier-1 (pgvector) → Tier-2 (full-text) → Tier-3 (keyword) → empty.
+        Empty results are NON-FATAL — the AI agent is instructed to continue without examples.
+        """
+        # ── 0. Feature flag ─────────────────────────────────
+        from app.utils.feature_flags import is_feature_enabled
+        if not is_feature_enabled("similar_course_retrieval"):
+            raise FeatureDisabledError()
+
+        # ── 1. Validate session ─────────────────────────────
+        session = await self.session_repo.get_active(session_id)
+        if session is None:
+            # Distinguish "expired" vs "never existed"
+            existing = await self.session_repo.get(session_id)
+            if existing is not None and existing.is_expired():
+                raise SessionValidationError(
+                    "SESSION_EXPIRED",
+                    "Session has expired. Please create a new session.",
+                    440,
+                )
+            raise SessionValidationError(
+                "SESSION_INVALID", "Session not found or expired.", 401
+            )
+
+        if user_id is not None and session.user_id != user_id:
+            raise SessionValidationError(
+                "PERMISSION_DENIED",
+                "Session does not belong to the authenticated user.",
+                403,
+            )
+
+        organization_id = session.organization_id
+
+        # ── 2. Normalize inputs ─────────────────────────────
+        query = query.strip()
+        if not query:
+            return self._empty_result("Query is empty.", "none")
+
+        max_results = max(1, min(max_results, 20))
+
+        # ── 3. Tiered retrieval ─────────────────────────────
+        raw_results: list[dict] = []
+        tier_used = "tier1"
+
+        # Tier 1: Vector search
+        try:
+            embedding = await self.embedding_provider.embed(query)
+            raw_results = await self.retrieval_repo.search_vector(
+                embedding, organization_id, max_results
+            )
+        except Exception as exc:
+            logger.info("Tier-1 unavailable (degrading): %s", exc)
+            raw_results = []
+
+        # Tier 2: Full-text search
+        if not raw_results:
+            tier_used = "tier2"
+            try:
+                raw_results = await self.retrieval_repo.search_fulltext(
+                    query, organization_id, max_results
+                )
+            except Exception as exc:
+                logger.warning("Tier-2 failed (degrading): %s", exc)
+                raw_results = []
+
+        # Tier 3: Keyword search
+        if not raw_results:
+            tier_used = "tier3"
+            try:
+                raw_results = await self.retrieval_repo.search_keyword(
+                    query, organization_id, max_results
+                )
+            except Exception as exc:
+                logger.error("Tier-3 failed — all tiers exhausted: %s", exc)
+                raw_results = []
+
+        # ── 4. Empty after all tiers ────────────────────────
+        if not raw_results:
+            return self._empty_result("No similar courses found.", tier_used)
+
+        # ── 5. Enrich ───────────────────────────────────────
+        enriched = await self.retrieval_repo.enrich_results(raw_results, query)
+
+        # ── 6. Post-filter ──────────────────────────────────
+        if filters:
+            enriched = self._apply_filters(enriched, filters)
+
+        # ── 7. Slice ────────────────────────────────────────
+        top = enriched[:max_results]
+
+        return {
+            "courses": top,
+            "total_count": len(top),
+            "message": (
+                f"Found {len(top)} similar course(s)."
+                if top else "No similar courses found."
+            ),
+            "retrieval_tier_used": tier_used,
+        }
+
+    # ── Filters (in-memory, cheap — result sets ≤20) ─────────────────
+
+    def _apply_filters(
+        self, results: list[dict], filters: Dict[str, Any]
+    ) -> list[dict]:
+        """Post-filter enriched results by template_types, min_pages, max_pages, language."""
+        filtered = results
+
+        template_types = filters.get("template_types")
+        if isinstance(template_types, list) and template_types:
+            filtered = [
+                r for r in filtered
+                if any(
+                    tt in r.get("template_breakdown", {})
+                    for tt in template_types
+                )
+            ]
+
+        min_pages = filters.get("min_pages")
+        if isinstance(min_pages, int) and min_pages > 0:
+            filtered = [r for r in filtered if r.get("page_count", 0) >= min_pages]
+
+        max_pages = filters.get("max_pages")
+        if isinstance(max_pages, int) and max_pages > 0:
+            filtered = [r for r in filtered if r.get("page_count", 0) <= max_pages]
+
+        language = filters.get("language")
+        if isinstance(language, str) and language:
+            filtered = [r for r in filtered if r.get("language") == language]
+
+        return filtered
+
+    # ── Empty result (FR-4: non-fatal) ──────────────────────────────
+
+    @staticmethod
+    def _empty_result(message: str, tier: str) -> Dict[str, Any]:
+        return {
+            "courses": [],
+            "total_count": 0,
+            "message": (
+                f"{message} Generation can continue without examples. "
+                "Consider providing explicit tone and structure guidance "
+                "in your prompt."
+            ),
+            "retrieval_tier_used": tier,
+        }

@@ -101,6 +101,14 @@ class AIConfig:
     session_cleanup_interval_minutes: int = 15
     rate_limit_create_session_per_hour: int = 20
 
+    # ── Similar Course Retrieval / RAG (US-BKND-AI-015) ────────
+    enable_pgvector: bool = False
+    embedding_provider_name: str = "mock"
+    embedding_model: str = "text-embedding-ada-002"
+    embedding_dimension: int = 1536
+    similar_course_max_results: int = 20
+    similar_course_cache_ttl_minutes: int = 60
+
     # Model registry (built at init)
     _model_registry: Dict[str, ModelConfig] = field(default_factory=dict)
 
@@ -288,6 +296,13 @@ def load_ai_config() -> AIConfig:
         max_active_sessions_per_user=_env_int("AI_MAX_ACTIVE_SESSIONS", 5),
         session_cleanup_interval_minutes=_env_int("AI_SESSION_CLEANUP_INTERVAL_MINUTES", 15),
         rate_limit_create_session_per_hour=_env_int("AI_RATE_LIMIT_CREATE_SESSION_PER_HOUR", 20),
+        # ── Similar Course Retrieval / RAG (US-BKND-AI-015) ────
+        enable_pgvector=_env_bool("ENABLE_PGVECTOR", False),
+        embedding_provider_name=os.getenv("EMBEDDING_PROVIDER", "mock").lower(),
+        embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002"),
+        embedding_dimension=_env_int("EMBEDDING_DIMENSION", 1536),
+        similar_course_max_results=_env_int("SIMILAR_COURSE_MAX_RESULTS", 20),
+        similar_course_cache_ttl_minutes=_env_int("SIMILAR_COURSE_CACHE_TTL_MINUTES", 60),
     )
     return _ai_config
 

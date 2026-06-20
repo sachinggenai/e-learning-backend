@@ -721,6 +721,7 @@ class QuerySimilarCoursesRequest(BaseModel):
     session_id: str = Field(..., min_length=1, max_length=128)
     query: str = Field(..., min_length=1, max_length=500)
     max_results: int = Field(default=5, ge=1, le=20)
+    filters: Optional[dict] = Field(default=None)
 
 
 @router.post("/tools/query_similar_courses")
@@ -732,120 +733,39 @@ async def query_similar_courses(
 ):
     """Search for similar courses within the organization (US-BKND-AI-015).
 
-    Uses tier-3 keyword search (ILIKE) for MVP. Results are for style/tone
-    guidance only — never authoritative for API contracts or schemas.
+    Uses three-tier retrieval: pgvector → full-text → keyword.
+    Results are for style/tone guidance only — never authoritative
+    for API contracts or schemas.
     """
-    from app.repositories.ai_session_repo import AISessionRepository
+    from app.services.ai.similar_course_service import (
+        SimilarCourseService,
+        FeatureDisabledError,
+        SessionValidationError,
+    )
 
-    srepo = AISessionRepository(db)
-    session = await srepo.get_active(body.session_id)
-    if session is None:
-        return ai_error("SESSION_INVALID", "Session not found or expired.", status=401)
-
-    # Load all courses in the same org (tenant isolation)
-    from app.repositories.course_repo import CourseRepository
-    from app.repositories.page_component_repo import PageRepository
-
-    crepo = CourseRepository(db)
-    prepo = PageRepository(db)
+    service = SimilarCourseService(db)
 
     try:
-        all_courses = await crepo.list()
+        result = await service.query_similar_courses(
+            session_id=body.session_id,
+            query=body.query,
+            max_results=body.max_results,
+            filters=body.filters,
+            user_id=user.user_id,
+        )
+        return {"status": "ok", **result}
+
+    except FeatureDisabledError as exc:
+        return ai_error("FEATURE_DISABLED", str(exc), status=404)
+    except SessionValidationError as exc:
+        return ai_error(exc.code, exc.message, status=exc.http_status)
     except Exception:
-        return {"status": "ok", "courses": [], "total_count": 0,
-                "message": "No similar courses found.", "retrieval_tier_used": "tier3"}
-
-    # Score courses by keyword match on title and description
-    query_terms = body.query.lower().split()
-    scored = []
-
-    for course in all_courses:
-        title = (course.title or "").lower()
-        desc = (course.description or "").lower()
-        text = title + " " + desc
-
-        score = 0
-        for term in query_terms:
-            if term in title:
-                score += 3  # Title match weighted higher
-            elif term in desc:
-                score += 1
-
-        if score > 0:
-            # Get pages for template breakdown
-            try:
-                pages = await prepo.list_by_course(course.course_id)
-                page_count = len(pages)
-                template_counts: dict = {}
-                excerpts: list = []
-                for p in pages[:3]:  # Max 3 excerpts
-                    ttype = "text-content"
-                    if hasattr(p, 'layout') and isinstance(p.layout, dict):
-                        ttype = p.layout.get("templateType", "text-content")
-                    template_counts[ttype] = template_counts.get(ttype, 0) + 1
-                    # Extract text snippet from first component
-                    snippet = ""
-                    if p.components and hasattr(p.components[0], 'data'):
-                        cdata = p.components[0].data or {}
-                        content = cdata.get("content", "") or cdata.get("title", "")
-                        snippet = content[:200] if isinstance(content, str) else ""
-                    if snippet:
-                        excerpts.append({
-                            "template_type": ttype,
-                            "title": p.title,
-                            "text_snippet": snippet,
-                        })
-            except Exception:
-                page_count = 0
-                template_counts = {}
-                excerpts = []
-
-            # Normalize score to 0.0-1.0
-            max_score = len(query_terms) * 3
-            relevance = min(score / max(max_score, 1), 1.0)
-
-            scored.append({
-                "course_id": course.course_id,
-                "title": course.title or "Untitled",
-                "relevance_score": round(relevance, 3),
-                "match_summary": f"Matched {score} keyword(s) from query",
-                "page_count": page_count,
-                "template_breakdown": template_counts,
-                "sample_excerpts": excerpts,
-                "tone_notes": _infer_tone_notes(course),
-                "language": "en",
-                "created_at": course.created_at.isoformat() if course.created_at else None,
-            })
-
-    # Sort by relevance, limit
-    scored.sort(key=lambda c: c["relevance_score"], reverse=True)
-    top = scored[:body.max_results]
-
-    return {
-        "status": "ok",
-        "courses": top,
-        "total_count": len(top),
-        "message": f"Found {len(top)} similar course(s)." if top
-                   else "No similar courses found.",
-        "retrieval_tier_used": "tier3",
-    }
-
-
-def _infer_tone_notes(course) -> str:
-    """Infer basic tone/style notes from course metadata."""
-    notes = []
-    title = (course.title or "").lower()
-    if any(w in title for w in ["safety", "compliance", "regulatory"]):
-        notes.append("formal, compliance-oriented")
-    if any(w in title for w in ["onboarding", "welcome", "intro"]):
-        notes.append("conversational, welcoming")
-    if any(w in title for w in ["training", "workshop", "learn"]):
-        notes.append("instructional, hands-on")
-    if any(w in title for w in ["assessment", "quiz", "test"]):
-        notes.append("assessment-focused, evaluative")
-    if not notes:
-        notes.append("neutral, instructional")
-    return ", ".join(notes)
+        logger.exception("Unexpected error in query_similar_courses")
+        return ai_error(
+            "SERVER_ERROR",
+            "An unexpected error occurred while searching for similar courses.",
+            status=503,
+        )
 
 
 # ── Validation endpoint (US-BKND-AI-005) ────────────────────────

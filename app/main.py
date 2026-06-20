@@ -94,6 +94,7 @@ async def lifespan(app: FastAPI):
         import app.models.ai_models  # noqa: F401 — AI sessions, proposals, audit, etc.
         import app.models.ai_admin_override  # noqa: F401 — admin override audit trail
         import app.models.ai_safety_event  # noqa: F401 — safety events
+        import app.models.course_embedding  # noqa: F401 — US-BKND-AI-015 embeddings
 
         # Create tables that don't exist yet (non-destructive)
         async with engine.begin() as conn:
@@ -223,6 +224,7 @@ if _ai_config.ai_authoring_enabled:
         "ai_ingestion": "ai_ingestion",
         "ai_confirmations": "ai_confirmations",
         "ai_admin": "ai_admin",
+        "ai_similar_courses": "ai_similar_courses",  # US-BKND-AI-015
     }
     for _name, _module in _ai_routers.items():
         try:

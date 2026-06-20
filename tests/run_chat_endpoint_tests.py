@@ -135,10 +135,11 @@ async def main():
 
     # 13. Tool definitions
     tool_defs = orch._build_tool_definitions()
-    check("builds 6 tool defs", len(tool_defs) == 6)
+    check("builds 7 tool defs", len(tool_defs) == 7)
     tool_names = {td.name for td in tool_defs}
-    for expected in ["list_pages", "fetch_page", "propose_create_page",
-                     "propose_update_page", "propose_delete_page", "validate_course"]:
+    for expected in ["list_pages", "fetch_page", "query_similar_courses",
+                     "propose_create_page", "propose_update_page",
+                     "propose_delete_page", "validate_course"]:
         check(f"has {expected}", expected in tool_names)
 
     # 14. All tools have valid JSON Schema
