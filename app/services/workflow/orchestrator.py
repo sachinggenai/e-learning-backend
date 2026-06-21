@@ -59,6 +59,7 @@ class WorkflowOrchestrator:
         poll_interval_seconds: float = 1.0,
         heartbeat_interval_seconds: float = 5.0,
         max_concurrency: int = 4,
+        stale_threshold_seconds: int = 30,
     ):
         self.worker_id = worker_id or os.getenv(
             "WORKFLOW_WORKER_ID", f"worker-{_get_hostname()}"
@@ -66,6 +67,7 @@ class WorkflowOrchestrator:
         self.poll_interval = poll_interval_seconds
         self.heartbeat_interval = heartbeat_interval_seconds
         self.max_concurrency = max_concurrency
+        self.stale_threshold_seconds = stale_threshold_seconds
         self._active_jobs: Dict[uuid.UUID, asyncio.Task] = {}
         self._running = False
         # B1 FIX: Use shared singleton — NOT a new StepRegistry()
@@ -323,6 +325,8 @@ class WorkflowOrchestrator:
                         job.job_id, current_state_name, "retry",
                         {"attempt": attempt, "error": step_result.error},
                     )
+                    # Persist partial progress so step resumes from last success
+                    await repo.update_checkpoint(job.job_id, checkpoint)
                     await repo.increment_retry(job.job_id)
                     return  # Exit; poll loop re-locks on next cycle
                 else:
@@ -374,7 +378,7 @@ class WorkflowOrchestrator:
         """Reclaim jobs orphaned by a previous worker process crash."""
         async with SessionLocal() as session:
             repo = WorkflowRepository(session)
-            stale_threshold = int(os.getenv("WORKFLOW_STALE_THRESHOLD", "30"))
+            stale_threshold = self.stale_threshold_seconds
 
             stale = await repo.find_stale_running_jobs(stale_threshold)
             for job in stale:

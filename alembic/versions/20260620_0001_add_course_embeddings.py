@@ -24,22 +24,48 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ── course_embeddings ─────────────────────────────────────
-    op.execute("""
-        CREATE TABLE IF NOT EXISTS course_embeddings (
-            id                  SERIAL PRIMARY KEY,
-            embedding_record_id VARCHAR(64) UNIQUE NOT NULL,
-            course_record_id    INTEGER NOT NULL
-                REFERENCES courses(id) ON DELETE CASCADE,
-            organization_id     VARCHAR(64) NOT NULL DEFAULT 'default',
-            embedding           JSONB,
-            content_hash        VARCHAR(64) NOT NULL,
-            chunk_count         INTEGER NOT NULL DEFAULT 1,
-            embedding_model     VARCHAR(100) NOT NULL DEFAULT 'text-embedding-ada-002',
-            is_stale            BOOLEAN NOT NULL DEFAULT FALSE,
-            created_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-            updated_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
-        )
-    """)
+    # Use pgvector's native 'vector' type if extension available, otherwise JSONB fallback.
+    conn = op.get_bind()
+    ext_check = conn.execute(
+        sa.text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+    ).scalar()
+
+    if ext_check:
+        # pgvector available: use native vector(1536) type
+        op.execute("""
+            CREATE TABLE IF NOT EXISTS course_embeddings (
+                id                  SERIAL PRIMARY KEY,
+                embedding_record_id VARCHAR(64) UNIQUE NOT NULL,
+                course_record_id    INTEGER NOT NULL
+                    REFERENCES courses(id) ON DELETE CASCADE,
+                organization_id     VARCHAR(64) NOT NULL DEFAULT 'default',
+                embedding           vector(1536),
+                content_hash        VARCHAR(64) NOT NULL,
+                chunk_count         INTEGER NOT NULL DEFAULT 1,
+                embedding_model     VARCHAR(100) NOT NULL DEFAULT 'text-embedding-ada-002',
+                is_stale            BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
+                updated_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
+            )
+        """)
+    else:
+        # pgvector not available: JSONB fallback (graceful degradation)
+        op.execute("""
+            CREATE TABLE IF NOT EXISTS course_embeddings (
+                id                  SERIAL PRIMARY KEY,
+                embedding_record_id VARCHAR(64) UNIQUE NOT NULL,
+                course_record_id    INTEGER NOT NULL
+                    REFERENCES courses(id) ON DELETE CASCADE,
+                organization_id     VARCHAR(64) NOT NULL DEFAULT 'default',
+                embedding           JSONB,
+                content_hash        VARCHAR(64) NOT NULL,
+                chunk_count         INTEGER NOT NULL DEFAULT 1,
+                embedding_model     VARCHAR(100) NOT NULL DEFAULT 'text-embedding-ada-002',
+                is_stale            BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
+                updated_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
+            )
+        """)
     op.execute("""
         CREATE INDEX IF NOT EXISTS ix_course_embeddings_embedding_record_id
             ON course_embeddings (embedding_record_id)
@@ -58,11 +84,7 @@ def upgrade() -> None:
             WHERE is_stale = FALSE
     """)
 
-    # Conditional pgvector ANN index
-    conn = op.get_bind()
-    ext_check = conn.execute(
-        sa.text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
-    ).scalar()
+    # Conditional pgvector ANN index (only if pgvector extension available)
     if ext_check:
         op.execute("""
             CREATE INDEX IF NOT EXISTS ix_course_embeddings_vector

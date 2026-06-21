@@ -90,13 +90,13 @@ async def generate_pages_step(
     """Generate page content via LLM for each page in the approved plan.
 
     Integration points (all existing — no changes needed):
-        - LLMClient.generate()
+        - LLMClient.chat()
         - ModelTierRouter.classify_task()
-        - CostTracker.record_usage()
-        - ValidationEngine
+        - CostTracker.record()
+        - TemplateValidationEngine
     """
     import json as _json
-    from app.services.ai.llm_client import LLMClient
+    from app.services.ai.llm_client import LLMClient, LLMMessage
     from app.services.ai.model_tier_router import ModelTierRouter, ModelTier
     from app.services.ai.cost_tracker import CostTracker
 
@@ -115,7 +115,7 @@ async def generate_pages_step(
     temperature = generation_options.get("temperature", 0.3)
     max_tokens = generation_options.get("max_tokens_per_page", 4096)
 
-    llm_client = LLMClient(model=model_name, temperature=temperature, max_tokens=max_tokens)
+    llm_client = LLMClient(model=model_name)
     tier_router = ModelTierRouter()
     cost_tracker = CostTracker()
 
@@ -131,19 +131,21 @@ async def generate_pages_step(
             llm_client.model = os.getenv("AI_PLANNER_MODEL", "claude-haiku-4-20250514")
 
         try:
-            response = await llm_client.generate(prompt)
+            response = await llm_client.chat(
+                messages=[LLMMessage(role="user", content=prompt)],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
 
             # Cost tracking: record after each LLM call
-            if hasattr(response, 'usage'):
-                cost_tracker.record_usage(
-                    user_id=input_data.get("user_id", ""),
-                    model=llm_client.model,
-                    input_tokens=response.usage.input_tokens,
-                    output_tokens=response.usage.output_tokens,
-                    metadata={
-                        "workflow_job_id": str(job_id),
-                        "workflow_type": "course_generation",
-                    },
+            if hasattr(response, 'token_usage') and response.token_usage:
+                cost_tracker.record(
+                    session_id=str(job_id),
+                    user_id=input_data.get("user_id", "system"),
+                    tenant_id=input_data.get("organization_id", ""),
+                    model_id=model_name,
+                    input_tokens=response.token_usage.get("input_tokens", 0),
+                    output_tokens=response.token_usage.get("output_tokens", 0),
                 )
 
             page_content = _parse_llm_response(response)
@@ -206,12 +208,14 @@ async def validate_course_step(
     step_config: Dict[str, Any],
 ) -> StepResult:
     """Cross-page validation: schema compliance, navigation, assessment presence."""
-    from app.services.ai.validation_engine import ValidationEngine
+    from app.services.ai.validation_engine import TemplateValidationEngine, ValidationResult
+    from app.services.ai.template_contracts import AITemplateContractsService
 
     pages_state = checkpoint.get("pages_state", {})
     results = pages_state.get("results", [])
 
-    engine = ValidationEngine()
+    contracts = AITemplateContractsService()
+    engine = TemplateValidationEngine(contracts_service=contracts)
     course_structure = {
         "pages": [
             {
@@ -225,14 +229,18 @@ async def validate_course_step(
     }
 
     try:
-        valid, issues = await engine.validate_course_structure(course_structure)
-        if not valid:
+        result = await engine.validate(
+            template_type="course_structure",
+            data=course_structure,
+            scope="full",
+        )
+        if result.status == "error":
             return StepResult(
                 success=False,
                 error={
                     "code": "COURSE_VALIDATION_FAILED",
-                    "message": str(issues),
-                    "issues": issues,
+                    "message": "; ".join(m.message for m in result.messages),
+                    "issues": [m.model_dump() for m in result.messages],
                 },
             )
     except Exception as exc:
@@ -273,14 +281,22 @@ async def create_batch_proposal_step(
     async with SessionLocal() as session:
         svc = AIProposalService(session)
         try:
-            batch = await svc.create_batch_proposal(
-                course_id=import_job.get("course_id", ""),
-                pages=[r.get("content") for r in results],
-                session_id=str(job_id),
-                user_id=input_data.get("user_id", ""),
-            )
+            proposals = []
+            for r in results:
+                proposal = await svc.create_proposal(
+                    session_id=str(job_id),
+                    user_id=input_data.get("user_id", "system"),
+                    organization_id=input_data.get("organization_id", ""),
+                    course_id=import_job.get("course_id", ""),
+                    operation="create_page",
+                    resource_type="page",
+                    data=r.get("content", {}),
+                )
+                proposals.append(proposal)
+
             checkpoint["result"] = {
-                "batch_proposal_id": getattr(batch, "batch_id", str(job_id)),
+                "proposals": proposals,
+                "batch_proposal_id": str(job_id),
                 "pages_generated": len(results),
                 "course_preview_url": None,
             }

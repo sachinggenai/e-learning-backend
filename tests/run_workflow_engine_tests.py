@@ -305,7 +305,7 @@ async def test_step_registration_course_generation():
 
 
 async def test_step_registration_scorm_export():
-    """WF-STEP-02: All 5 scorm_export steps registered."""
+    """WF-STEP-02: All 4 scorm_export steps registered (complete handled by orchestrator)."""
     import app.services.workflow  # noqa: F401
     r = get_default_registry()
     steps = r.registered_steps
@@ -314,7 +314,6 @@ async def test_step_registration_scorm_export():
         ("scorm_export", "generate_manifest"),
         ("scorm_export", "package_assets"),
         ("scorm_export", "create_zip"),
-        ("scorm_export", "complete"),
     ]
     for key in expected:
         check(f"WF-STEP-02: {key[0]}.{key[1]}", key in steps,
@@ -322,11 +321,11 @@ async def test_step_registration_scorm_export():
 
 
 async def test_step_registration_total_count():
-    """WF-STEP-03: Exactly 9 step functions registered."""
+    """WF-STEP-03: Exactly 8 step functions registered (complete handled by orchestrator)."""
     import app.services.workflow  # noqa: F401
     r = get_default_registry()
     count = len(r.registered_steps)
-    check("WF-STEP-03: 9 steps total", count == 9, f"got {count}")
+    check("WF-STEP-03: 8 steps total", count == 8, f"got {count}")
 
 
 async def test_step_functions_are_callable():

@@ -137,8 +137,11 @@ async def lifespan(app: FastAPI):
                     from app.services.workflow.orchestrator import WorkflowOrchestrator
                     import app.services.workflow  # noqa: F401 — trigger step registration
                     orchestrator = WorkflowOrchestrator(
-                        worker_id=os.getenv("WORKFLOW_WORKER_ID"),  # None → auto-gen
-                        max_concurrency=int(os.getenv("WORKFLOW_MAX_CONCURRENCY", "4")),
+                        worker_id=ai_cfg.workflow_worker_id,
+                        poll_interval_seconds=ai_cfg.workflow_poll_interval,
+                        heartbeat_interval_seconds=ai_cfg.workflow_heartbeat_interval,
+                        max_concurrency=ai_cfg.workflow_max_concurrency,
+                        stale_threshold_seconds=ai_cfg.workflow_stale_threshold,
                     )
                     app.state.workflow_orchestrator = orchestrator
                     await orchestrator.start()
@@ -150,6 +153,20 @@ async def lifespan(app: FastAPI):
                     logger.info("Workflow engine DISABLED (feature flag off)")
             except Exception:
                 logger.exception("Workflow engine failed to start — degraded mode")
+
+            # ── Embedding Worker (US-PEND-020) ──────────────────
+            try:
+                from app.workers.embedding_worker import EmbeddingWorker
+                embedding_worker = EmbeddingWorker(
+                    poll_interval_seconds=float(
+                        os.getenv("EMBEDDING_WORKER_INTERVAL", "300")
+                    ),
+                    batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "10")),
+                )
+                app.state.embedding_worker = embedding_worker
+                await embedding_worker.start()
+            except Exception:
+                logger.exception("Embedding worker failed to start — degraded mode")
         except Exception:
             logger.exception(
                 "Error loading AI configuration — AI features will be unavailable"
@@ -159,6 +176,9 @@ async def lifespan(app: FastAPI):
 
     yield
     # ── Shutdown ─────────────────────────────
+    if hasattr(app.state, 'embedding_worker'):
+        await app.state.embedding_worker.stop()
+        logger.info("Embedding worker STOPPED")
     if hasattr(app.state, 'workflow_orchestrator'):
         orchestrator = app.state.workflow_orchestrator
         await orchestrator.stop()
@@ -265,6 +285,16 @@ if _ai_config.ai_authoring_enabled:
                 "Failed to mount AI router '%s' — AI features degraded",
                 _name,
             )
+
+# ── WebSocket Router (US-PEND-030) ────────────────────────────
+try:
+    from app.routers.ws_collaboration import router as ws_router
+    app.include_router(ws_router)
+    logger.info("WebSocket collaboration router mounted")
+except ImportError:
+    logger.info("WebSocket router skipped — redis not installed")
+except Exception:
+    logger.exception("WebSocket router failed to mount — degraded mode")
 
 app.include_router(api_router)
 

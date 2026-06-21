@@ -52,8 +52,9 @@ def upgrade() -> None:
         sa.Column("input", JSONB(), nullable=False),
         sa.Column("result", JSONB(), nullable=True),
         sa.Column("error", JSONB(), nullable=True),
-        sa.Column("checkpoint_data", JSONB(), nullable=False, server_default="{}"),
-        sa.Column("progress", sa.REAL(), nullable=False, server_default="0.0"),
+        sa.Column("checkpoint_data", JSONB(), nullable=False,
+                  server_default=sa.text("'{}'::jsonb")),
+        sa.Column("progress", sa.Float(), nullable=False, server_default="0.0"),
         sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("max_retries", sa.Integer(), nullable=False, server_default="3"),
         sa.Column("current_retry_state", sa.String(128), nullable=True),
@@ -67,7 +68,7 @@ def upgrade() -> None:
         sa.Column("webhook_sent_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("priority", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("created_by_user_id", sa.String(64), nullable=True),
-        sa.Column("session_id", UUID(), nullable=True),
+        sa.Column("session_id", sa.String(64), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True),
                   server_default=sa.text("(NOW() + INTERVAL '24 hours')")),
     )
@@ -95,14 +96,16 @@ def upgrade() -> None:
     # Foreign keys
     op.create_foreign_key("fk_wf_jobs_type", "workflow_jobs",
                           "workflow_type_definitions", ["workflow_type"], ["workflow_type"])
-    # Conditional FK — ai_sessions may not exist yet (created via Base.metadata.create_all)
+    # Conditional FK — ai_sessions may not exist yet (created via Base.metadata.create_all).
+    # References ai_sessions.session_id (String business ID), not ai_sessions.id (Integer PK).
+    # Application layer enforces referential integrity if FK is absent at migration time.
     conn = op.get_bind()
     ai_sessions_exists = conn.execute(
         sa.text("SELECT 1 FROM information_schema.tables WHERE table_name = 'ai_sessions'")
     ).scalar()
     if ai_sessions_exists:
         op.create_foreign_key("fk_wf_jobs_session", "workflow_jobs",
-                              "ai_sessions", ["session_id"], ["id"], ondelete="SET NULL")
+                              "ai_sessions", ["session_id"], ["session_id"], ondelete="SET NULL")
 
     # ── workflow_job_events ──────────────────────────────────
     op.create_table(

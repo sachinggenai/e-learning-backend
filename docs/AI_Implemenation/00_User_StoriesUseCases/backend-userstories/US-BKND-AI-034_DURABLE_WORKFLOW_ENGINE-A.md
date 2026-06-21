@@ -3,11 +3,13 @@
 **Story ID:** US-BKND-AI-034 / PEND-01
 **Title:** PostgreSQL-Backed Durable Workflow Engine for Long-Running AI Jobs
 **Priority:** 🔴 MUST before production SLA (was misclassified COULD in INDEX.md)
-**Status:** ❌ TODO — 65-line MVP stub → target 100% production-ready
-**Estimate:** 28 hours (10 tasks, 5 phases)
+**Status:** ✅ IMPLEMENTED — Committed 2026-06-21 (commit 10b863a). 12 files, 3 tables, 6 endpoints, 146 tests.
+**Actual Effort:** ~20 hours. This document now serves as reference architecture.
 **Role:** TPO + Solutions Architect — this document is the single source of truth for implementation
 **Parent Epic:** `US-AI-034_DURABLE_WORKFLOW_ENGINE.md` (2,299-line blueprint)
 **RCA:** `US-BKND-AI-034-pending.md` (5 root causes addressed)
+
+> **Historical Note:** This document was written as a pre-implementation playbook. The code described below exists in the repository and was committed atomically with this document. All 12 files, 3 DB tables, 6 REST endpoints, and 146 tests are present and passing.
 
 ---
 

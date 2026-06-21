@@ -408,12 +408,142 @@ class ExportValidator:
 def validate_course_for_export(course_data: Dict[str, Any]) -> ExportValidationResult:
     """
     Convenience function to validate a course for export.
-    
+
     Args:
         course_data: Course dictionary with pages, components, assets
-        
+
     Returns:
         ExportValidationResult with validation status
     """
     validator = ExportValidator()
     return validator.validate(course_data)
+
+
+# ── AI Content-Specific SCORM Validation (US-PEND-023) ──────────
+
+# SCORM 1.2 allowed HTML tags (conservative set for LMS compatibility)
+ALLOWED_SCORM_HTML_TAGS = {
+    "a", "b", "br", "cite", "code", "dd", "dfn", "div", "dl", "dt",
+    "em", "h1", "h2", "h3", "h4", "h5", "h6", "i", "img", "li",
+    "ol", "p", "pre", "small", "span", "strong", "sub", "sup",
+    "table", "tbody", "td", "th", "thead", "tr", "u", "ul",
+}
+
+
+class AI_SCORMValidator:
+    """Validates AI-generated content for SCORM 1.2 compliance.
+
+    Checks:
+    1. XML character escaping (AI may generate unescaped &, <, >)
+    2. HTML tag safety (unknown tags may break SCORM player)
+    3. Content completeness (empty pages, missing titles)
+    4. Manifest validity against SCORM 1.2 XSD (when xmlschema available)
+
+    Usage:
+        validator = AI_SCORMValidator()
+        result = await validator.validate_ai_content(pages)
+        if result["errors"]:
+            logger.warning("SCORM validation found issues")
+    """
+
+    def __init__(self):
+        self._xsd_schema = None  # Lazy-loaded
+
+    async def validate_ai_content(self, pages: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Validate AI-generated pages for SCORM compatibility.
+
+        Args:
+            pages: List of page dicts with 'title', 'template_type', 'content'/'data'.
+
+        Returns:
+            {"valid": bool, "errors": [...], "warnings": [...]}
+        """
+        import re
+        errors = []
+        warnings = []
+
+        for i, page in enumerate(pages or []):
+            title = page.get("title", f"Page {i}")
+            content = page.get("content", page.get("data", {}))
+            html = self._extract_html(content)
+
+            if not html or not html.strip():
+                warnings.append({
+                    "code": "EMPTY_PAGE",
+                    "message": f"Page {i} ('{title}') has no content",
+                    "severity": "warning",
+                    "page_index": i,
+                })
+                continue
+
+            # Check 1: Unescaped XML characters
+            unescaped = re.findall(r'&(?!amp;|lt;|gt;|quot;|apos;)', html)
+            if unescaped:
+                errors.append({
+                    "code": "UNESCAPED_XML",
+                    "message": f"Page {i} ('{title}'): {len(unescaped)} unescaped XML character(s) found",
+                    "severity": "error",
+                    "page_index": i,
+                    "sample": unescaped[:5],
+                })
+
+            # Check 2: Unknown HTML tags
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(html, "html.parser")
+                for tag in soup.find_all():
+                    if tag.name not in ALLOWED_SCORM_HTML_TAGS:
+                        warnings.append({
+                            "code": "UNKNOWN_HTML_TAG",
+                            "message": f"Page {i} ('{title}'): tag '<{tag.name}>' may not render in SCORM player",
+                            "severity": "warning",
+                            "page_index": i,
+                            "tag": tag.name,
+                        })
+            except Exception:
+                pass  # HTML parsing is best-effort
+
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+        }
+
+    async def validate_manifest(self, manifest_xml: str) -> Dict[str, Any]:
+        """Validate imsmanifest.xml against SCORM 1.2 XSD schema.
+
+        Requires xmlschema>=3.0.0. Returns empty errors if not installed.
+        """
+        try:
+            import xmlschema
+            if self._xsd_schema is None:
+                # SCORM 1.2 XSD from ADL (cached after first load)
+                self._xsd_schema = xmlschema.XMLSchema(
+                    "https://raw.githubusercontent.com/adlnet/SCORM-1.2/main/schemas/adlcp_rootv1p2.xsd"
+                )
+            self._xsd_schema.validate(manifest_xml)
+            return {"valid": True, "errors": []}
+        except ImportError:
+            logger.warning("xmlschema not installed — skipping XSD validation")
+            return {"valid": True, "errors": [], "skipped": "xmlschema not installed"}
+        except Exception as exc:
+            return {
+                "valid": False,
+                "errors": [{"code": "XSD_VALIDATION_FAILED", "message": str(exc)}],
+            }
+
+    @staticmethod
+    def _extract_html(content: Any) -> str:
+        """Extract HTML string from page content dict or json string."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, dict):
+            # Try common HTML container fields
+            for key in ("html", "content", "body", "text"):
+                val = content.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val
+            # If no html field, serialize the dict as HTML-like text
+            import json
+            return json.dumps(content, default=str)
+        return str(content or "")

@@ -74,8 +74,8 @@ class FeatureFlagService:
             ),
             'durable_workflow_engine': FeatureFlag(
                 name='durable_workflow_engine',
-                enabled=False,
-                description='Enable PostgreSQL-backed durable workflow engine for long-running AI jobs (course generation, SCORM export)',
+                enabled=True,
+                description='Enable PostgreSQL-backed durable workflow engine for long-running AI jobs (course generation, SCORM export). Disable with FEATURE_DURABLE_WORKFLOW_ENGINE=false in .env',
                 environments=[Environment.DEVELOPMENT, Environment.QA, Environment.STAGING, Environment.PRODUCTION]
             ),
             'advanced_scorm': FeatureFlag(

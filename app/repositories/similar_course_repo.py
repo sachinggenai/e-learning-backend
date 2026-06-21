@@ -572,3 +572,20 @@ class SimilarCourseRepository:
             .limit(limit)
         )
         return list((await self.session.execute(q)).scalars().all())
+
+    async def find_courses_without_embeddings(self, limit: int = 10) -> list:
+        """Find courses that don't have an embedding yet — US-PEND-020.
+
+        Returns CourseRecord objects (has .id, .course_id, .title, .organization_id).
+        """
+        from app.models.persisted_course import CourseRecord
+        from app.models.course_embedding import CourseEmbedding
+
+        subq = select(CourseEmbedding.course_record_id)
+        q = (
+            select(CourseRecord)
+            .where(CourseRecord.id.not_in(subq))
+            .limit(limit)
+        )
+        result = await self.session.execute(q)
+        return list(result.scalars().all())

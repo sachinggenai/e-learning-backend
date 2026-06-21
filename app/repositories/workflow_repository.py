@@ -313,6 +313,25 @@ class WorkflowRepository:
         await self.session.commit()
         return result.scalar_one_or_none()
 
+    async def update_checkpoint(
+        self, job_id: uuid.UUID, checkpoint_data: Dict[str, Any]
+    ) -> None:
+        """Persist checkpoint data without changing status/state.
+
+        Called before increment_retry() so the step resumes from
+        the last successful position instead of restarting from page 0.
+        """
+        stmt = (
+            update(WorkflowJob)
+            .where(WorkflowJob.job_id == job_id)
+            .values(
+                checkpoint_data=checkpoint_data,
+                updated_at=datetime.utcnow(),
+            )
+        )
+        await self.session.execute(stmt)
+        await self.session.commit()
+
     # ═══════════════════════════════════════════════════════════════
     # Events
     # ═══════════════════════════════════════════════════════════════

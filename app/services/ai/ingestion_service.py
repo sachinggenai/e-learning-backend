@@ -83,11 +83,33 @@ class AIIngestionService:
         # Detect type
         detected = ext.lstrip(".")
 
-        # Inline extraction for text formats
+        # Inline extraction for text formats + PDF/DOCX
         extracted = None
         source_meta = None
         if detected in ("txt", "md"):
             extracted, source_meta = self._extract_text(content, filename, detected)
+        elif detected in ("pdf", "docx"):
+            # Save file to temp location for extraction
+            import tempfile
+            import os as _os
+            suffix = f".{detected}"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            try:
+                from app.services.ai.document_extractor import DocumentExtractor
+                extractor = DocumentExtractor()
+                mime = self._mime_for(f".{detected}")
+                full_text = await extractor.extract(tmp_path, mime)
+                extracted, source_meta = self._extract_text(
+                    full_text.encode("utf-8"), filename, "md"
+                )
+            except Exception as exc:
+                logger.warning("Document extraction failed for %s: %s", filename, exc)
+                extracted = None
+                source_meta = {"title": filename}
+            finally:
+                _os.unlink(tmp_path)  # Clean up temp file
 
         # Create job
         now = datetime.utcnow()

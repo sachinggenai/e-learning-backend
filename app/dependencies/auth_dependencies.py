@@ -18,4 +18,18 @@ See: docs/AI_Implemenation/00_User_StoriesUseCases/backend-userstories/US-BKND-A
 from app.services.ai.mock_auth import get_current_user  # noqa: F401
 from app.services.ai.mock_authorization import require_admin  # noqa: F401
 
-__all__ = ["get_current_user", "require_admin"]
+# WebSocket auth: reuses mock auth but accepts token as string (query param)
+async def get_current_user_ws(token: str):
+    """Verify JWT token for WebSocket connections — US-PEND-030.
+
+    WebSocket connections pass the token as ?token=eyJ... query parameter
+    because browsers do not support custom headers on WebSocket upgrade.
+    """
+    from app.models.user_context import UserContext
+    # For mock auth: token is the user_id directly
+    return UserContext(
+        user_id=token,
+        username=token,
+        tenant_id="default",
+        roles=[],
+    )

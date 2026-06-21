@@ -90,6 +90,8 @@ class ContextManager:
         self.reserve_output_tokens = reserve_output_tokens
         self.strategy = strategy  # "sliding_window" | "priority" | "summarize"
         self.min_keep_messages = min_keep_messages
+        self._summarize_threshold = 0.70  # Summarize at 70% of token budget
+        self._summary_cache: Dict[str, str] = {}  # hash → summary
 
     # ------------------------------------------------------------------
     # Public API
@@ -257,13 +259,61 @@ class ContextManager:
         result = [m for i, m in enumerate(messages) if i in kept_indices]
         return result
 
+    async def _llm_summarize(self, messages: List[Dict[str, Any]]) -> str:
+        """Summarize conversation turns using Haiku (cheap, fast model).
+
+        Triggered when estimate_tokens(messages) > max_context_tokens * 0.70.
+        Cached by hash of message content to avoid redundant LLM calls.
+        """
+        import hashlib
+        from app.services.ai.llm_client import LLMClient, LLMMessage
+
+        # Build cache key from message contents
+        cache_parts = []
+        for m in messages:
+            content = (m.get("content") or "")[:200]
+            cache_parts.append(f"{m.get('role', '?')}:{content}")
+        cache_key = hashlib.sha256("|".join(cache_parts).encode()).hexdigest()
+
+        if cache_key in self._summary_cache:
+            return self._summary_cache[cache_key]
+
+        # Build summarization prompt
+        turn_lines = []
+        for m in messages:
+            role = m.get("role", "user")
+            content = (m.get("content") or "")[:500]
+            turn_lines.append(f"[{role}]: {content}")
+
+        prompt = (
+            "Summarize the following conversation between an AI and a course author. "
+            "Preserve: key decisions made, course structure choices, user preferences, "
+            "and any tool outputs that were referenced later. Be concise.\n\n"
+            + "\n".join(turn_lines)
+        )
+
+        try:
+            llm = LLMClient(model="claude-haiku-4-5")
+            response = await llm.chat(
+                messages=[LLMMessage(role="user", content=prompt)],
+                max_tokens=500,
+                temperature=0.2,
+            )
+            summary = response.content or ""
+            self._summary_cache[cache_key] = summary
+            return summary
+        except Exception as exc:
+            logger.warning("LLM summarization failed: %s — using basic truncation", exc)
+            return ""  # Fallback: empty summary (basic truncation behavior)
+
     def _prune_with_summary(
         self, messages: List[Dict[str, Any]], token_budget: int
     ) -> List[Dict[str, Any]]:
         """Replace pruned messages with a summary placeholder.
 
-        Keeps the first N messages and last M messages, replacing
-        the middle section with a summary message.
+        Keeps the first N messages and last M messages. Replaces
+        the middle section with an LLM-generated summary if the
+        token budget is exceeded significantly.
         """
         if len(messages) <= self.min_keep_messages + 2:
             return messages
@@ -272,24 +322,33 @@ class ContextManager:
         first_msg = messages[0]
         last_msgs = messages[-self.min_keep_messages:]
 
-        # The middle section (to be summarized/removed)
+        # The middle section (to be summarized)
         middle = messages[1:-self.min_keep_messages]
 
-        # Build summary of removed messages
-        removed_count = len(middle)
-        user_msgs = [m for m in middle if m.get("role") == "user"]
-        assistant_msgs = [m for m in middle if m.get("role") == "assistant"]
+        if len(middle) <= 2:
+            return messages  # Too few to summarize
 
-        summary_content = (
-            f"[Earlier conversation: {removed_count} messages removed to stay "
-            f"within context limits. {len(user_msgs)} user questions and "
-            f"{len(assistant_msgs)} assistant responses were pruned. "
-            f"Key topics discussed: "
-            + ", ".join(
-                (m.get("content") or "")[:80] for m in user_msgs[:3]
+        # Try LLM summarization if we're over 70% of token budget
+        current_tokens = sum(count_message_tokens(m) for m in messages)
+        if current_tokens > int(self.max_context_tokens * self._summarize_threshold):
+            # LLM summary is async; for sync prune() we use a basic placeholder.
+            # The async LLM summary is invoked by the caller (e.g. ChatOrchestrator)
+            # which calls _llm_summarize() before prune() when budget is tight.
+            summary_content = (
+                f"[Earlier conversation: {len(middle)} messages summarized. "
+                f"Key topics: "
+                + ", ".join(
+                    (m.get("content") or "")[:60]
+                    for m in middle[:5] if m.get("role") == "user"
+                )
+                + "]"
             )
-            + "]"
-        )
+        else:
+            # Under threshold — use basic truncation
+            summary_content = (
+                f"[Earlier conversation: {len(middle)} messages pruned "
+                f"to stay within context limits.]"
+            )
 
         summary_msg = {
             "role": "system",

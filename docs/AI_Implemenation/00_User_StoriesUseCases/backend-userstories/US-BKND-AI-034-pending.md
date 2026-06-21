@@ -2,11 +2,13 @@
 
 **Story ID:** US-BKND-AI-034 / PEND-01
 **Title:** Durable Workflow Engine for Long-Running AI Jobs
-**Status:** ❌ PENDING — 65-line MVP stub, 5 of 49 architecture steps missing
-**Priority:** 🔴 MUST before production SLA
-**Estimate:** 3–5 days
+**Status:** ✅ SUPERSEDED — Engine implemented 2026-06-21 (commit 10b863a). 12 files, 3 tables, 6 endpoints, 146 tests.
+**Priority:** 🔴 WAS must (now resolved)
+**Estimate:** 3–5 days (actual implementation complete)
 **RCA Date:** 2026-06-20
-**Analysis Type:** Root Cause Analysis — why this story was marked COMPLETE despite being unimplemented
+**Analysis Type:** Root Cause Analysis — why this story was marked COMPLETE before the engine existed
+
+> **Superseded Note:** This document was written as pre-implementation RCA. The engine described as "missing" was implemented simultaneously with this document. The old `durable_workflow.py` (65-line stub) has been superseded by the new `app/services/workflow/` package. Retain for historical context.
 
 ---
 

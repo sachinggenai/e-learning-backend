@@ -36,6 +36,7 @@ class AIAuditService:
     ACTION_CONFIRMATION_CREATED = "confirmation.created"
     ACTION_CONFIRMATION_CONFIRMED = "confirmation.confirmed"
     ACTION_CHAT_TURN = "chat.turn"
+    ACTION_SIMILAR_COURSE_RETRIEVAL = "similar_course.retrieval"
 
     def __init__(self, db: AsyncSession):
         self.repo = AIAuditRepository(db)

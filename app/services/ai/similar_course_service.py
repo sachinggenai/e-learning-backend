@@ -8,7 +8,9 @@ AIProposalService, etc.)
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+import time
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,11 +129,16 @@ class SimilarCourseService:
 
         max_results = max(1, min(max_results, 20))
 
-        # ── 3. Tiered retrieval ─────────────────────────────
+        # ── 3. Tiered retrieval with per-tier timing ──────────
         raw_results: list[dict] = []
         tier_used = "tier1"
+        t0_total = time.perf_counter()
+        tier1_ms = 0.0
+        tier2_ms = 0.0
+        tier3_ms = 0.0
 
         # Tier 1: Vector search
+        t0 = time.perf_counter()
         try:
             embedding = await self.embedding_provider.embed(query)
             raw_results = await self.retrieval_repo.search_vector(
@@ -140,10 +147,12 @@ class SimilarCourseService:
         except Exception as exc:
             logger.info("Tier-1 unavailable (degrading): %s", exc)
             raw_results = []
+        tier1_ms = (time.perf_counter() - t0) * 1000
 
         # Tier 2: Full-text search
         if not raw_results:
             tier_used = "tier2"
+            t0 = time.perf_counter()
             try:
                 raw_results = await self.retrieval_repo.search_fulltext(
                     query, organization_id, max_results
@@ -151,10 +160,12 @@ class SimilarCourseService:
             except Exception as exc:
                 logger.warning("Tier-2 failed (degrading): %s", exc)
                 raw_results = []
+            tier2_ms = (time.perf_counter() - t0) * 1000
 
         # Tier 3: Keyword search
         if not raw_results:
             tier_used = "tier3"
+            t0 = time.perf_counter()
             try:
                 raw_results = await self.retrieval_repo.search_keyword(
                     query, organization_id, max_results
@@ -162,6 +173,39 @@ class SimilarCourseService:
             except Exception as exc:
                 logger.error("Tier-3 failed — all tiers exhausted: %s", exc)
                 raw_results = []
+            tier3_ms = (time.perf_counter() - t0) * 1000
+
+        # ── 3a. Audit: log retrieval event with per-tier metrics ──
+        try:
+            from app.services.ai.audit_service import AIAuditService
+            audit = AIAuditService(self.db)
+            query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
+            await audit.log(
+                session_id=session_id,
+                user_id=user_id or session.user_id,
+                organization_id=organization_id,
+                course_id="",  # Retrieval is not course-specific
+                action=AIAuditService.ACTION_SIMILAR_COURSE_RETRIEVAL,
+                target_type="retrieval",
+                details={
+                    "tier_used": int(tier_used[-1]),  # 1, 2, or 3
+                    "result_count": len(raw_results),
+                    "query_hash": query_hash,
+                    "embedding_model": (
+                        self.embedding_provider.model_name
+                        if hasattr(self.embedding_provider, 'model_name')
+                        else "unknown"
+                    ),
+                    "latency": {
+                        "tier1_ms": round(tier1_ms, 2),
+                        "tier2_ms": round(tier2_ms, 2),
+                        "tier3_ms": round(tier3_ms, 2),
+                        "total_ms": round((time.perf_counter() - t0_total) * 1000, 2),
+                    },
+                },
+            )
+        except Exception as exc:
+            logger.warning("Audit logging failed (non-fatal): %s", exc)
 
         # ── 4. Empty after all tiers ────────────────────────
         if not raw_results:

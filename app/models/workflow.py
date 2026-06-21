@@ -138,9 +138,9 @@ class WorkflowJob(Base):
 
     # ── User context ───────────────────────────────────────
     created_by_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    session_id: Mapped[Optional[_uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("ai_sessions.id", ondelete="SET NULL"),
+    session_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        ForeignKey("ai_sessions.session_id", ondelete="SET NULL"),
         nullable=True,
     )
 

@@ -269,7 +269,10 @@ async def cancel_workflow(job_id: uuid.UUID):
 
     success = await orchestrator.cancel_job(job_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to cancel job")
+        raise HTTPException(
+            status_code=409,
+            detail="Job cannot be cancelled. It may have already completed or been cancelled by another request."
+        )
 
     return CancelJobResponse(
         job_id=str(job_id),
@@ -300,7 +303,10 @@ async def retry_workflow(
     repo = WorkflowRepository(session)
     updated = await repo.increment_retry(job_id)
     if not updated:
-        raise HTTPException(status_code=500, detail="Failed to retry job")
+        raise HTTPException(
+            status_code=409,
+            detail="Job cannot be retried. It may no longer be in a failed state."
+        )
 
     return RetryJobResponse(
         job_id=str(job_id),

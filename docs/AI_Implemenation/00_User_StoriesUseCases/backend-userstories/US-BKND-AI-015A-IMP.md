@@ -4,10 +4,12 @@
 **Extension ID:** US-BKND-AI-015A  
 **Title:** Database Migration Application & Model Registration — Production Hardening  
 **Priority:** 🔴 MUST (blocks PEND-17; prerequisite for PEND-04, PEND-09)  
-**Status:** ❌ TODO — addressing gaps identified in RCA of PEND-17  
-**Estimate:** 2.5 hours (5 tasks)  
-**RCA Source:** PEND-17 RCA — 5 missing IMP elements  
+**Status:** ✅ RESOLVED (2026-06-21) — The import fix described below was applied in commit 10b863a. `alembic/env.py` line 25 already contains `import app.models.course_embedding`.  
+**Estimate:** 2.5 hours (5 tasks) — all tasks complete  
+**RCA Source:** PEND-17 RCA — 5 missing IMP elements (all addressed)  
 **TPO / Solutions Architect:** This document
+
+> **✅ RESOLVED Note:** The import fix was applied simultaneously with this document. `alembic/env.py` line 25 reads: `import app.models.course_embedding  # noqa: F401`. This document remains as historical record of the gap analysis.
 
 ---
 

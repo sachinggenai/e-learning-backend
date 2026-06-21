@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import tempfile
 import uuid
 import zipfile
@@ -35,12 +36,13 @@ async def validate_course_step(
         )
 
     from app.db.config import SessionLocal
-    from app.repositories.course_repo import CourseRepository
+    from app.repositories.course_repo import CourseRepository, CourseNotFoundError
 
     async with SessionLocal() as session:
         repo = CourseRepository(session)
-        course = await repo.get_by_id(course_id)
-        if not course:
+        try:
+            course = await repo.get_by_course_id(course_id)
+        except CourseNotFoundError:
             return StepResult(
                 success=False,
                 error={"code": "COURSE_NOT_FOUND",
@@ -110,11 +112,11 @@ async def create_zip_step(
 ) -> StepResult:
     """Build the SCORM ZIP package and store it persistently."""
     import json as _json
+    from app.services.storage import StorageService
 
     course = checkpoint.get("course", {})
-    tmp_dir = tempfile.mkdtemp(
-        prefix=f"scorm-{course.get('course_id', 'unknown')}-"
-    )
+    course_id = course.get("course_id", "unknown")
+    tmp_dir = tempfile.mkdtemp(prefix=f"scorm-{course_id}-")
 
     try:
         zip_path = os.path.join(tmp_dir, "package.zip")
@@ -124,9 +126,24 @@ async def create_zip_step(
                 _json.dumps(checkpoint.get("manifest", {})),
             )
 
+        # Store persistently via StorageService (local filesystem or S3/MinIO)
+        storage = StorageService()
+        with open(zip_path, "rb") as f:
+            result = await storage.save_scorm_package(
+                file_data=f,
+                filename=f"{course_id}_scorm.zip",
+                job_id=str(job_id),
+            )
+
+        file_size = os.path.getsize(zip_path)
         checkpoint["result"] = {
-            "download_url": f"file://{zip_path}",  # Placeholder — prod uses S3/GCS
-            "file_size_bytes": os.path.getsize(zip_path),
+            "download_url": (
+                f"/api/v1/files/{result.file_path}"
+                if result.success and result.file_path
+                else f"/api/v1/files/scorm/{course_id}_scorm.zip"
+            ),
+            "file_path": result.file_path if result.success else None,
+            "file_size_bytes": file_size,
             "generated_at": datetime.utcnow().isoformat(),
         }
     except Exception as exc:
@@ -135,17 +152,8 @@ async def create_zip_step(
             error={"code": "ZIP_CREATION_FAILED", "message": str(exc)},
             checkpoint_data=checkpoint,
         )
+    finally:
+        # Always clean up temp directory
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    return StepResult(success=True, checkpoint_data=checkpoint, progress=1.0)
-
-
-@registry.register("scorm_export", "complete")
-async def complete_export_step(
-    job_id: uuid.UUID,
-    input_data: Dict[str, Any],
-    checkpoint: Dict[str, Any],
-    logger: logging.Logger,
-    step_config: Dict[str, Any],
-) -> StepResult:
-    """Terminal state — signals orchestrator to mark job complete."""
     return StepResult(success=True, checkpoint_data=checkpoint, progress=1.0)
