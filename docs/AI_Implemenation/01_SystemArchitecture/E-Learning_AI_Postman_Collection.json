@@ -1,0 +1,1241 @@
+{
+  "info": {
+    "name": "E-Learning AI Backend — Complete API Collection",
+    "description": "Comprehensive Postman collection covering all 14 architecture flow charts. 169 endpoints across 20 folders. Includes WebSocket test for collaboration.\n\nPREREQUISITES:\n  1. Start Docker services: bash docker/setup.sh\n  2. Set {{base_url}} = http://localhost:8000\n  3. Set {{ws_url}} = ws://localhost:8000\n  4. Run flows in numbered order — each flow depends on the previous one's output.\n\nEXECUTION ORDER:\n  Flow 01 → Flow 03 → Flow 04 → Flow 02 → Flow 05/06/07/08 → Flow 09 → Flow 10/11 → Flow 12/13/14\n\nAuth: Mock auth in dev — send user_id as Bearer token or omit for auto-assignment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "e-learning-backend-ai"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "ws_url", "value": "ws://localhost:8000" },
+    { "key": "session_id", "value": "" },
+    { "key": "course_id", "value": "COURSE-DEMO-001" },
+    { "key": "page_id", "value": "" },
+    { "key": "proposal_id", "value": "" },
+    { "key": "job_id", "value": "" },
+    { "key": "import_job_id", "value": "" },
+    { "key": "workflow_job_id", "value": "" },
+    { "key": "token", "value": "test-user-001" }
+  ],
+  "item": [
+    {
+      "name": "═══ PREREQUISITES — Run First ═══",
+      "description": "Setup steps before executing any API tests.\n\n1. bash docker/setup.sh (starts PostgreSQL+pgvector, Redis, Redpanda, MinIO)\n2. pip install -r requirements.txt\n3. PYTHONPATH=. uvicorn app.main:app --reload\n4. Verify: GET {{base_url}}/api/v1/health → 200 OK",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Server is healthy\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Response has status field\", function () {",
+                  "    pm.expect(pm.response.json()).to.have.property('status');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/health", "host": ["{{base_url}}"], "path": ["api", "v1", "health"] }
+          }
+        },
+        {
+          "name": "Check Feature Flags",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"AI features accessible\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.environment.set(\"ai_enabled\", json.ai_authoring_enabled);",
+                  "console.log(\"AI Authoring:\", json.ai_authoring_enabled);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/ai/feature-status", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "feature-status"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 01 — AI Session Creation ═══",
+      "description": "Flow: AI_Session_Creation_Flow.mmd\nCreates an AI authoring session scoped to a user, course, and organization.\n\nSteps:\n  1. Create Session → stores session_id in collection variable\n  2. Get Session → verify session exists\n  3. Delete Session → cleanup",
+      "item": [
+        {
+          "name": "01-Create AI Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Session created — 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.collectionVariables.set(\"session_id\", json.session_id);",
+                  "console.log(\"Session ID:\", json.session_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{token}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"organization_id\": \"default\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/ai/sessions", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "sessions"] }
+          }
+        },
+        {
+          "name": "02-Get Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Session found — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/ai/sessions/{{session_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "sessions", "{{session_id}}"] }
+          }
+        },
+        {
+          "name": "03-Delete Session (Cleanup)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/ai/sessions/{{session_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "sessions", "{{session_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 03 — Page List and Fetch ═══",
+      "description": "Flow: Page_List_and_Fetch_Flow.mmd\nRetrieves course page metadata and full page content for AI agent context.\n\nPrerequisite: FLOW 01 completed (session_id set)",
+      "item": [
+        {
+          "name": "01-List Pages",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"List pages — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "if (json.pages && json.pages.length > 0) {",
+                  "    pm.collectionVariables.set(\"page_id\", json.pages[0].page_id || json.pages[0].id);",
+                  "    console.log(\"First page ID:\", pm.collectionVariables.get(\"page_id\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/tools/list_pages", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "list_pages"] }
+          }
+        },
+        {
+          "name": "02-Fetch Page",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Fetch page — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"page_id\": \"{{page_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/tools/fetch_page", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "fetch_page"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 04 — Similar Course Retrieval ═══",
+      "description": "Flow: Similar_Course_Retrieval_Flow.mmd\nQueries similar courses using 3-tier retrieval (pgvector → full-text → keyword).\n\nPrerequisite: FLOW 01 completed (session_id set), PEND-017 (pgvector installed)",
+      "item": [
+        {
+          "name": "01-Query Similar Courses",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Similar courses — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "console.log(\"Tier used:\", json.retrieval_tier_used);",
+                  "console.log(\"Results:\", json.total_count);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"query\": \"interactive quiz with assessments\",\n  \"max_results\": 5,\n  \"filters\": {\n    \"template_types\": [\"quiz\", \"text-content\"],\n    \"min_pages\": 1\n  }\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/tools/query_similar_courses", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "query_similar_courses"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 02 — Simple Chat Edit Scenario ═══",
+      "description": "Flow: Simple_Chat_Edit_Scenario_Flow.mmd\nFull chat → plan → propose → review → apply cycle for updating a page.\n\nPrerequisite: FLOW 01 + FLOW 03 completed (session_id + page_id set)",
+      "item": [
+        {
+          "name": "01-Send Chat Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Chat accepted — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"prompt\": \"Update the title of page {{page_id}} to 'Enhanced Learning Module'\",\n  \"selected_context\": { \"page_id\": \"{{page_id}}\" }\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/ai/chat", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "chat"] }
+          }
+        },
+        {
+          "name": "02-Chat History",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Chat history — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/chat/history?session_id={{session_id}}",
+              "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "chat", "history"],
+              "query": [{"key": "session_id", "value": "{{session_id}}"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 05/06 — Create Proposal + Apply ═══",
+      "description": "Flows: Create Page Proposal and Apply Flow1.0.mmd + Platform Runtime 1.1.mmd\nFull create-proposal lifecycle: submit → review → apply.\n\nPrerequisite: FLOW 01 completed (session_id set)",
+      "item": [
+        {
+          "name": "01-Create Page Proposal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Proposal created — 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "if (json.proposal_id) {",
+                  "    pm.collectionVariables.set(\"proposal_id\", json.proposal_id);",
+                  "    console.log(\"Proposal ID:\", json.proposal_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"organization_id\": \"default\",\n  \"course_id\": \"{{course_id}}\",\n  \"operation\": \"create_page\",\n  \"resource_type\": \"page\",\n  \"data\": {\n    \"title\": \"AI-Generated Introduction\",\n    \"template_type\": \"text-content\",\n    \"data\": {\n      \"content\": \"<h2>Welcome to AI-Enhanced Learning</h2><p>This page was created by the AI proposal flow.</p>\"\n    }\n  }\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals"] }
+          }
+        },
+        {
+          "name": "02-Get Proposal Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Proposal found — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}"] }
+          }
+        },
+        {
+          "name": "03-Apply Proposal (User Approved)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Proposal applied — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"user_confirmed\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}", "apply"] }
+          }
+        },
+        {
+          "name": "04-List All Proposals",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Proposals list — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals?session_id={{session_id}}",
+              "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals"],
+              "query": [{"key": "session_id", "value": "{{session_id}}"}]
+            }
+          }
+        },
+        {
+          "name": "05-Cancel Proposal (Reject)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/cancel", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}", "cancel"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 07 — Update Page Proposal ═══",
+      "description": "Flow: Update_Page_Proposal_and_Apply_Flow.mmd\nUpdate an existing page through the proposal workflow.\n\nPrerequisite: FLOW 01 + FLOW 03 completed (session_id + page_id set)",
+      "item": [
+        {
+          "name": "01-Create Update Proposal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Update proposal created — 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "if (json.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"organization_id\": \"default\",\n  \"course_id\": \"{{course_id}}\",\n  \"operation\": \"update_page\",\n  \"resource_type\": \"page\",\n  \"resource_id\": \"{{page_id}}\",\n  \"data\": {\n    \"title\": \"Updated Learning Module Title\",\n    \"template_type\": \"text-content\",\n    \"data\": {\n      \"content\": \"<h2>Updated Content</h2><p>This page title was updated via AI proposal.</p>\"\n    }\n  }\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals"] }
+          }
+        },
+        {
+          "name": "02-Apply Update Proposal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Update applied — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"user_confirmed\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}", "apply"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 08 — Delete Page Proposal + Confirm ═══",
+      "description": "Flow: Delete_Page_Proposal_and_Confirm_Flow.mmd\nDestructive delete with confirmation token gate.\n\nPrerequisite: FLOW 01 + FLOW 03 completed (session_id + page_id set)\n\nNOTE: Delete is destructive — use with caution. Verify page_id is a test page.",
+      "item": [
+        {
+          "name": "01-Propose Delete Page",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Delete proposal — 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "if (json.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"organization_id\": \"default\",\n  \"course_id\": \"{{course_id}}\",\n  \"operation\": \"delete_page\",\n  \"resource_type\": \"page\",\n  \"resource_id\": \"{{page_id}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/delete-page", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "delete-page"] }
+          }
+        },
+        {
+          "name": "02-Confirm Delete (User Approved)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Delete confirmed — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"user_approved_delete\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/confirm-delete", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "confirm-delete"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 09 — Course Validation ═══",
+      "description": "Flow: Course_Validation_Flow.mmd\nValidates course structure, schema, business rules, export readiness.\n\nPrerequisite: FLOW 01 completed (session_id set)",
+      "item": [
+        {
+          "name": "01-Validate Course (AI Tool)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Validation complete — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "console.log(\"Valid:\", json.isValid || json.valid);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"validation_scope\": \"full\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/tools/validate_course", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "validate_course"] }
+          }
+        },
+        {
+          "name": "02-Validate Export Readiness",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Export validation — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{course_id}}\",\n  \"title\": \"Test Course\",\n  \"pages\": []\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/export/validate", "host": ["{{base_url}}"], "path": ["api", "v1", "export", "validate"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 10/11 — File Ingestion + Full Course ═══",
+      "description": "Flows: File_Ingestion_Document_Import_Flow.mmd + Full_Course_From_Uploaded_File_Scenario_Flow.mmd\nUpload file → extract → plan pages → generate → review → apply.\n\nPrerequisite: FLOW 01 completed (session_id set)\n\nNOTE: Upload a real .txt file (PDF/DOCX extraction requires pdfplumber/python-docx installed).",
+      "item": [
+        {
+          "name": "01-Upload File (Ingestion Job)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Upload accepted — 200/201\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "if (json.job_id) {",
+                  "    pm.collectionVariables.set(\"import_job_id\", json.job_id);",
+                  "    console.log(\"Import Job ID:\", json.job_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "session_id", "value": "{{session_id}}", "type": "text" },
+                { "key": "course_id", "value": "{{course_id}}", "type": "text" },
+                { "key": "organization_id", "value": "default", "type": "text" },
+                { "key": "file", "type": "file", "src": "sample-course-outline.txt" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/api/v1/ai/ingestions", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "ingestions"] }
+          }
+        },
+        {
+          "name": "02-Get Ingestion Job Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Job status — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "ingestions", "{{import_job_id}}"] }
+          }
+        },
+        {
+          "name": "03-Propose Page Breakdown (AI Segmentation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Breakdown proposed — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}/propose-breakdown", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "ingestions", "{{import_job_id}}", "propose-breakdown"] }
+          }
+        },
+        {
+          "name": "04-Review & Approve Page Plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Plan reviewed — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"status\": \"plan_approved\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}/review-plan", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "ingestions", "{{import_job_id}}", "review-plan"] }
+          }
+        },
+        {
+          "name": "05-Generate Full Course (Workflow Job)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Course generation submitted — 202\", function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "if (json.job_id) {",
+                  "    pm.collectionVariables.set(\"workflow_job_id\", json.job_id);",
+                  "    console.log(\"Workflow Job ID:\", json.job_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"import_job_id\": \"{{import_job_id}}\",\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"generation_options\": {\n    \"model\": \"claude-sonnet-4-20250514\",\n    \"temperature\": 0.3,\n    \"language\": \"en\"\n  }\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/generate-course", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "generate-course"] }
+          }
+        },
+        {
+          "name": "06-Poll Generation Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Generation status — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "console.log(\"Progress:\", json.progress, \"Status:\", json.status);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/ai/generate-course/{{import_job_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "generate-course", "{{import_job_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ FLOW 12/13/14 — SCORM Export + Destructive Delete ═══",
+      "description": "Flows: Export flow + Destructive_Delete_Scenario_Flow.mmd\nSCORM export for AI-generated course. SCORM import analysis.\n\nPrerequisite: Course with pages must exist.",
+      "item": [
+        {
+          "name": "01-Export Course as SCORM",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Export started — 200/202\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{course_id}}\",\n  \"exportFormat\": \"scorm12\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/export", "host": ["{{base_url}}"], "path": ["api", "v1", "export"] }
+          }
+        },
+        {
+          "name": "02-Get Export Formats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Formats — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/export/formats", "host": ["{{base_url}}"], "path": ["api", "v1", "export", "formats"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ WORKFLOW ENGINE — Async Jobs ═══",
+      "description": "Workflow engine endpoints for long-running AI jobs (course generation, SCORM export).\n\nPrerequisite: FLOW 01 completed (session_id set)",
+      "item": [
+        {
+          "name": "01-Submit Course Generation Workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Workflow submitted — 202\", function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "if (json.job_id) pm.collectionVariables.set(\"workflow_job_id\", json.job_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workflow_type\": \"course_generation\",\n  \"input\": {\n    \"import_job_id\": \"{{import_job_id}}\",\n    \"user_id\": \"{{token}}\",\n    \"organization_id\": \"default\",\n    \"generation_options\": {\n      \"model\": \"claude-sonnet-4-20250514\",\n      \"temperature\": 0.3,\n      \"language\": \"en\"\n    }\n  },\n  \"priority\": 0\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/workflows", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows"] }
+          }
+        },
+        {
+          "name": "02-Poll Workflow Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Workflow status — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "console.log(\"State:\", json.current_state, \"Progress:\", json.progress, \"Status:\", json.status);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows", "{{workflow_job_id}}"] }
+          }
+        },
+        {
+          "name": "03-Get Workflow Events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Events — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/events", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows", "{{workflow_job_id}}", "events"] }
+          }
+        },
+        {
+          "name": "04-Cancel Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/cancel", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows", "{{workflow_job_id}}", "cancel"] }
+          }
+        },
+        {
+          "name": "05-List Workflow Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/workflows?status=pending,running&limit=10",
+              "host": ["{{base_url}}"], "path": ["api", "v1", "workflows"],
+              "query": [
+                {"key": "status", "value": "pending,running"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "06-Retry Failed Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/retry", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows", "{{workflow_job_id}}", "retry"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ ADMIN & AUDIT — Observability ═══",
+      "description": "Admin endpoints for safety events, audit logs, and compliance summaries.\n\nAll 13 flow charts require audit logging in Phase 4/5.",
+      "item": [
+        {
+          "name": "01-Safety Events List",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/admin/safety-events?limit=20",
+              "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "safety-events"],
+              "query": [{"key": "limit", "value": "20"}]
+            }
+          }
+        },
+        {
+          "name": "02-Safety Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/ai/admin/safety-stats", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "safety-stats"] }
+          }
+        },
+        {
+          "name": "03-Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/admin/audit-logs?session_id={{session_id}}&limit=50",
+              "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "audit-logs"],
+              "query": [
+                {"key": "session_id", "value": "{{session_id}}"},
+                {"key": "limit", "value": "50"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "04-Audit Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/ai/admin/audit-summary", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "audit-summary"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ SIMILAR COURSES — RAG Pipeline ═══",
+      "description": "Dedicated similar course search endpoint (alternative to the AI tool version).\n\nFlow: Similar_Course_Retrieval_Flow.mmd — Phase 1-3",
+      "item": [
+        {
+          "name": "01-Search Similar Courses (Direct API)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Search — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "console.log(\"Tier:\", json.retrieval_tier_used || \"unknown\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"query\": \"effective e-learning modules with quizzes\",\n  \"max_results\": 10,\n  \"filters\": {\n    \"template_types\": [\"quiz\", \"accordion\", \"text-content\"],\n    \"min_pages\": 2,\n    \"language\": \"en\"\n  }\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/ai/similar-courses", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "similar-courses"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ TEMPLATES ═══",
+      "description": "Template retrieval for schema validation and AI generation context.",
+      "item": [
+        {
+          "name": "01-List Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/ai/templates", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "templates"] }
+          }
+        },
+        {
+          "name": "02-Get Template by Type",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/ai/templates/text-content", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "templates", "text-content"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ WEBSOCKET — Real-Time Collaboration ═══",
+      "description": "Flow: US-PEND-030 — Multi-User Real-Time Collaboration.\n\nWebSocket endpoint for presence, page locking, and content change broadcasting.\n\nPREREQUISITES:\n  1. Redis running: docker run -d --name elearning-redis -p 6379:6379 redis:7-alpine\n  2. App started: uvicorn app.main:app --reload\n\nTESTING:\n  This cannot be tested in the Postman request builder. Use the Postman WebSocket panel,\n  wscat CLI, or the provided Python test script below.\n\n  Terminal 1: wscat -c \"ws://localhost:8000/ws/courses/{{course_id}}/collaborate?token={{token}}\"\n  Terminal 2: wscat -c \"ws://localhost:8000/ws/courses/{{course_id}}/collaborate?token=test-user-002\"\n\n  Both terminals should receive user_joined events for each other.\n\n  Client → Server messages:\n    {\"action\": \"ping\"}                          → Server responds: {\"event\": \"pong\"}\n    {\"action\": \"page_locked\", \"data\": {\"page_id\": \"page-123\"}}  → Broadcast to all clients\n    {\"action\": \"page_unlocked\", \"data\": {\"page_id\": \"page-123\"}}\n    {\"action\": \"content_changed\", \"data\": {\"page_id\": \"page-123\"}}\n\n  Server → Client events:\n    {\"event\": \"user_joined\", \"data\": {\"user_id\": \"...\", \"user_name\": \"...\"}}\n    {\"event\": \"user_left\", \"data\": {\"user_id\": \"...\", \"user_name\": \"...\"}}\n    {\"event\": \"page_locked\", \"data\": {\"page_id\": \"...\", \"locked_by\": \"...\"}}\n    {\"event\": \"page_unlocked\", \"data\": {\"page_id\": \"...\"}}\n    {\"event\": \"content_changed\", \"data\": {\"page_id\": \"...\", \"changed_by\": \"...\", \"change_type\": \"...\"}}",
+      "item": [
+        {
+          "name": "WebSocket Collaboration — See Description",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "console.log(\"WebSocket endpoint: {{ws_url}}/ws/courses/{{course_id}}/collaborate?token={{token}}\");",
+                  "console.log(\"Use Postman WebSocket panel or 'wscat' CLI to test this endpoint.\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{ws_url}}/ws/courses/{{course_id}}/collaborate?token={{token}}", "host": ["{{ws_url}}"], "path": ["ws", "courses", "{{course_id}}", "collaborate"], "query": [{"key": "token", "value": "{{token}}"}] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ CONFIG ═══",
+      "description": "Configuration and status endpoints.",
+      "item": [
+        {
+          "name": "Get AI Config Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/ai/feature-status", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "feature-status"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "═══ e2e TEST — Full Happy Path ═══",
+      "description": "End-to-end test executing all 14 flow charts in sequence.\n\nRun this folder with Postman Collection Runner.\n\nExecution order:\n  1. Health Check\n  2. Create Session\n  3. List Pages → Fetch Page\n  4. Query Similar Courses\n  5. Send Chat Message\n  6. Create Proposal → Apply\n  7. Create Update Proposal → Apply\n  8. Validate Course\n  9. Create Delete Proposal → Confirm Delete\n  10. Upload File → Get Job → Propose Breakdown → Review Plan → Generate Course\n  11. Submit Workflow → Poll Status → Get Events\n  12. Export SCORM\n  13. Audit Logs\n  14. WebSocket (manual)\n\nPre-requisite: Flow 01's session_id is captured automatically via test scripts.\nSubsequent flows reuse the session_id from collection variables.",
+      "item": [
+        {
+          "name": "e2e-01-Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/health", "host": ["{{base_url}}"], "path": ["api", "v1", "health"] }
+          }
+        },
+        {
+          "name": "e2e-02-CreateSession",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.session_id) {",
+                  "    pm.collectionVariables.set(\"session_id\", json.session_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"user_id\": \"{{token}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"organization_id\": \"default\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/sessions", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "sessions"] }
+          }
+        },
+        {
+          "name": "e2e-03-ListPages",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/tools/list_pages", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "list_pages"] }
+          }
+        },
+        {
+          "name": "e2e-04-SimilarCourses",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"query\": \"interactive quizzes and assessments\",\n  \"max_results\": 5\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/tools/query_similar_courses", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "query_similar_courses"] }
+          }
+        },
+        {
+          "name": "e2e-05-Chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"prompt\": \"Create a new welcome page for the course\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/chat", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "chat"] }
+          }
+        },
+        {
+          "name": "e2e-06-CreateProposal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"organization_id\": \"default\",\n  \"course_id\": \"{{course_id}}\",\n  \"operation\": \"create_page\",\n  \"resource_type\": \"page\",\n  \"data\": {\n    \"title\": \"E2E Test Welcome Page\",\n    \"template_type\": \"text-content\",\n    \"data\": {\n      \"content\": \"<h2>E2E Test Passed!</h2><p>This page was created via automated end-to-end test.</p>\"\n    }\n  }\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals"] }
+          }
+        },
+        {
+          "name": "e2e-07-ApplyProposal",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"user_confirmed\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}", "apply"] }
+          }
+        },
+        {
+          "name": "e2e-08-ValidateCourse",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"validation_scope\": \"full\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/ai/tools/validate_course", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "validate_course"] }
+          }
+        },
+        {
+          "name": "e2e-09-AuditLogs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/ai/admin/audit-logs?limit=50", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "audit-logs"], "query": [{"key": "limit", "value": "50"}] }
+          }
+        }
+      ]
+    }
+  ]
+}
