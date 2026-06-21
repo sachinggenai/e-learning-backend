@@ -159,12 +159,72 @@ The 25% is: a basic keyword-search endpoint exists, the orchestrator recognizes 
 
 ---
 
-## 8. References
+## 8. Secondary RCA: PEND-17 — Migration Not Applied (Post-Implementation Gap)
+
+**Date Discovered:** 2026-06-20 (during re-implementation via IMP doc)  
+**Status:** ✅ Resolved (dev environment)  
+**Root Cause:** IMP doc verification used code-only check instead of database verification
+
+### 8.1 What Happened
+
+The full US-BKND-AI-015 implementation (June 20) created all 7 new files correctly, including the Alembic migration `20260620_0001_add_course_embeddings.py`. However, the migration was **never executed** against any database. Three sub-gaps caused this:
+
+### 8.2 5-Why — PEND-17
+
+| # | Why | Answer | Evidence |
+|---|-----|--------|----------|
+| **1** | Why wasn't the migration applied? | `alembic upgrade head` was never executed | Migration file existed but `alembic current` was never run |
+| **2** | Why wasn't `alembic upgrade head` executed? | No PostgreSQL was reachable in the dev environment | `DATABASE_URL=NOT SET`, `POSTGRES_HOST=NOT SET` |
+| **3** | Why didn't the missing database block implementation? | IMP doc pre-flight checklist never verified DB connectivity; T-02 verification used Python import check instead of actual `alembic upgrade head` | IMP doc §0.5: git/imports/uvicorn checked — no DB check. §12.3 Verify: `Base.metadata.create_all` passes without DB |
+| **4** | Why did the IMP doc use a code-only verification? | The IMP doc's "Verify T-02" block (§12.3) ran a Python snippet that imports `CourseEmbeddingRecord` and calls `Base.metadata.create_all()` — which succeeds even with no database (silent no-op) | The Python check verifies the ORM model is importable, NOT that tables exist in PostgreSQL |
+| **5** | Why wasn't this caught in final verification? | Phase E (final verification) runs `run_similar_course_tests.py` which uses mocks — it never hits a real database. The migration apply step is in Phase B (T-02), and the final phase never re-verifies DB table existence. | `run_similar_course_tests.py`: all 22 tests use `AsyncMock`, `MagicMock`, `patch` — zero real DB calls |
+
+### 8.3 Additional Gap: alembic/env.py Model Registration
+
+| Gap | Detail |
+|-----|--------|
+| **What** | `alembic/env.py` imports all ORM models so `Base.metadata` knows about every table — but `import app.models.course_embedding` was missing |
+| **Impact** | `alembic revision --autogenerate` would not detect `CourseEmbeddingRecord` or `CourseSimilarityCache`. Future autogenerate migrations would miss these tables even after the migration is applied. |
+| **Why missed** | The IMP doc §3.2 correctly added the import to `app/main.py` (line 97) for the `create_all()` path, but never mentioned `alembic/env.py` also needs the import for the migration path |
+| **Fix** | Added `import app.models.course_embedding  # noqa: F401` to `alembic/env.py` line 25 (commit: `ba8793b`) |
+
+### 8.4 Resolution
+
+| Step | Action | Result |
+|------|--------|--------|
+| 1 | Added `import app.models.course_embedding` to `alembic/env.py` | ✅ Both tables now visible to `Base.metadata` |
+| 2 | Set `DATABASE_URL` to Docker PostgreSQL | ✅ Connected to `elearning-postgres:5432` |
+| 3 | Ran 6-step migration lifecycle | ✅ `alembic upgrade head` → `downgrade -1` → `upgrade head` all passed |
+| 4 | Verified tables exist | ✅ `course_embeddings` + `course_similarity_cache` with 8 indexes |
+| 5 | Updated documentation | ✅ `US-BKND-AI-015A-IMP.md` created (532 lines), `PENDING_TASKS_REPORT.md` updated |
+
+---
+
+## 9. Updated Status (Post-Implementation)
+
+| Component | Before (Jun 15) | After Implementation (Jun 20) |
+|-----------|-----------------|------------------------------|
+| Code (7 new + 8 modified files) | 0% | ✅ **100%** — all 15 files exist and import correctly |
+| Migration file | 0% | ✅ **Created** — `20260620_0001_add_course_embeddings.py` |
+| Migration applied (dev) | 0% | ✅ **Applied** — `alembic current → 20260620_0001 (head)` |
+| Migration applied (QA/staging/prod) | 0% | ❌ **Pending** — part of deployment pipeline |
+| `alembic/env.py` model registration | 0% | ✅ **Fixed** — `import app.models.course_embedding` added |
+| Tests | 0% | ✅ **22/22 passing** — `run_similar_course_tests.py` |
+| Regression | N/A | ✅ **688/688 passing across 19 suites** — zero regressions |
+| Documentation | Partial (spec only) | ✅ **Complete** — IMP doc (2,991L), RCA (this doc), Pending Tasks (386L), 015A Extension (532L) |
+| **Overall** | **25%** | **✅ 100% (code) / 95% (deployment)** |
+
+---
+
+## 10. References
 
 - [US-BKND-AI-015 Enriched Spec](US-BKND-AI-015_enriched.md) — 1037-line story specification with full code
 - [US-BKND-AI-015 Pending Items](US-BKND-AI-015-pending.md) — Detailed gap analysis
+- [US-BKND-AI-015-IMP.md](US-BKND-AI-015-IMP.md) — 2,991-line standalone implementation playbook
+- [US-BKND-AI-015A-IMP.md](US-BKND-AI-015A-IMP.md) — 532-line migration/database layer extension
 - [INDEX.md](INDEX.md) — Shows US-BKND-AI-015 as COMPLETE in Sprint 4
-- [VALIDATION_REPORT.md](../01_SystemArchitecture/VALIDATION_REPORT.md) — Correctly identifies Advanced RAG at 25%
+- [VALIDATION_REPORT.md](../01_SystemArchitecture/VALIDATION_REPORT.md) — Re-validated: 96% → 98% compliance
+- [PENDING_TASKS_REPORT.md](../01_SystemArchitecture/PENDING_TASKS_REPORT.md) — 17 pending items, PEND-17 resolved
 - [RESEARCH_AUDIT.md](../RESEARCH_AUDIT.md) — GAP-8 flagged US-AI-015 as ⚠️ pre-implementation
-- [PRODUCTION_READY_AI_AUTHORING_ARCHITECTURE.md](../01_SystemArchitecture/PRODUCTION_READY_AI_AUTHORING_ARCHITECTURE.md) — §7 RAG strategy, §10 phased roadmap (no RAG chunk)
-- Commits: `f93257f` (specs + INDEX), `f6d4f1b` (17-story implementation), `2406e8f` ("100% complete"), `3da5ba7` (validation report)
+- [PRODUCTION_READY_AI_AUTHORING_ARCHITECTURE.md](../01_SystemArchitecture/PRODUCTION_READY_AI_AUTHORING_ARCHITECTURE.md) — §7 RAG strategy, §10 phased roadmap
+- Commits: `f93257f` (specs + INDEX), `f6d4f1b` (17-story impl), `2406e8f` ("100%"), `3da5ba7` (validation), `ba8793b` (015 implementation + re-validation)

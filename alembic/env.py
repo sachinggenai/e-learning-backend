@@ -22,6 +22,7 @@ import app.models.branching        # noqa: F401 — BranchRule, BranchEvent
 import app.models.social           # noqa: F401 — Discussion, PeerReview, Poll, Team
 import app.models.interaction_event  # noqa: F401 — InteractionEventRecord
 import app.models.ai_models  # noqa: F401 — AISessionRecord, AIProposalRecord, etc.
+import app.models.course_embedding  # noqa: F401 — US-BKND-AI-015: CourseEmbeddingRecord, CourseSimilarityCache
 
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

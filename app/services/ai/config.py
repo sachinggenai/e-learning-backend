@@ -109,6 +109,16 @@ class AIConfig:
     similar_course_max_results: int = 20
     similar_course_cache_ttl_minutes: int = 60
 
+    # ── Durable Workflow Engine (US-BKND-AI-034) ──────────
+    workflow_enabled: bool = True
+    workflow_worker_id: str = "worker-1"
+    workflow_max_concurrency: int = 4
+    workflow_poll_interval: float = 1.0
+    workflow_heartbeat_interval: float = 5.0
+    workflow_lock_timeout_ms: int = 5000
+    workflow_stale_threshold: int = 30
+    workflow_max_duration_seconds: int = 86400
+
     # Model registry (built at init)
     _model_registry: Dict[str, ModelConfig] = field(default_factory=dict)
 
@@ -303,6 +313,15 @@ def load_ai_config() -> AIConfig:
         embedding_dimension=_env_int("EMBEDDING_DIMENSION", 1536),
         similar_course_max_results=_env_int("SIMILAR_COURSE_MAX_RESULTS", 20),
         similar_course_cache_ttl_minutes=_env_int("SIMILAR_COURSE_CACHE_TTL_MINUTES", 60),
+        # ── Durable Workflow Engine (US-BKND-AI-034) ──────
+        workflow_enabled=_env_bool("WORKFLOW_ENABLED", True),
+        workflow_worker_id=os.getenv("WORKFLOW_WORKER_ID", "worker-1"),
+        workflow_max_concurrency=_env_int("WORKFLOW_MAX_CONCURRENCY", 4),
+        workflow_poll_interval=float(os.getenv("WORKFLOW_POLL_INTERVAL", "1.0")),
+        workflow_heartbeat_interval=float(os.getenv("WORKFLOW_HEARTBEAT_INTERVAL", "5.0")),
+        workflow_lock_timeout_ms=_env_int("WORKFLOW_LOCK_TIMEOUT_MS", 5000),
+        workflow_stale_threshold=_env_int("WORKFLOW_STALE_THRESHOLD", 30),
+        workflow_max_duration_seconds=_env_int("WORKFLOW_MAX_DURATION_SECONDS", 86400),
     )
     return _ai_config
 

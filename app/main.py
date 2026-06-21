@@ -95,6 +95,7 @@ async def lifespan(app: FastAPI):
         import app.models.ai_admin_override  # noqa: F401 — admin override audit trail
         import app.models.ai_safety_event  # noqa: F401 — safety events
         import app.models.course_embedding  # noqa: F401 — US-BKND-AI-015 embeddings
+        import app.models.workflow  # noqa: F401 — US-BKND-AI-034 workflow engine
 
         # Create tables that don't exist yet (non-destructive)
         async with engine.begin() as conn:
@@ -128,6 +129,27 @@ async def lifespan(app: FastAPI):
                 )
             else:
                 logger.info("AI authoring DISABLED")
+
+            # ── Workflow Engine (US-BKND-AI-034) ──────────────────
+            try:
+                from app.utils.feature_flags import is_feature_enabled
+                if is_feature_enabled("durable_workflow_engine"):
+                    from app.services.workflow.orchestrator import WorkflowOrchestrator
+                    import app.services.workflow  # noqa: F401 — trigger step registration
+                    orchestrator = WorkflowOrchestrator(
+                        worker_id=os.getenv("WORKFLOW_WORKER_ID"),  # None → auto-gen
+                        max_concurrency=int(os.getenv("WORKFLOW_MAX_CONCURRENCY", "4")),
+                    )
+                    app.state.workflow_orchestrator = orchestrator
+                    await orchestrator.start()
+                    logger.info(
+                        "Workflow engine STARTED (worker=%s, concurrency=%d)",
+                        orchestrator.worker_id, orchestrator.max_concurrency,
+                    )
+                else:
+                    logger.info("Workflow engine DISABLED (feature flag off)")
+            except Exception:
+                logger.exception("Workflow engine failed to start — degraded mode")
         except Exception:
             logger.exception(
                 "Error loading AI configuration — AI features will be unavailable"
@@ -136,7 +158,11 @@ async def lifespan(app: FastAPI):
         logger.exception("Error during startup seeding — continuing anyway")
 
     yield
-    # ── Shutdown (nothing needed) ────────────
+    # ── Shutdown ─────────────────────────────
+    if hasattr(app.state, 'workflow_orchestrator'):
+        orchestrator = app.state.workflow_orchestrator
+        await orchestrator.stop()
+        logger.info("Workflow engine STOPPED")
 
 
 app = FastAPI(
@@ -225,6 +251,7 @@ if _ai_config.ai_authoring_enabled:
         "ai_confirmations": "ai_confirmations",
         "ai_admin": "ai_admin",
         "ai_similar_courses": "ai_similar_courses",  # US-BKND-AI-015
+        "ai_workflows": "workflows",  # US-BKND-AI-034
     }
     for _name, _module in _ai_routers.items():
         try:

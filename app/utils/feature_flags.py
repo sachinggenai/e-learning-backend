@@ -72,6 +72,12 @@ class FeatureFlagService:
                 description='Enable AI similar course retrieval (RAG) for pedagogical examples and tone references',
                 environments=[Environment.DEVELOPMENT, Environment.QA],
             ),
+            'durable_workflow_engine': FeatureFlag(
+                name='durable_workflow_engine',
+                enabled=False,
+                description='Enable PostgreSQL-backed durable workflow engine for long-running AI jobs (course generation, SCORM export)',
+                environments=[Environment.DEVELOPMENT, Environment.QA, Environment.STAGING, Environment.PRODUCTION]
+            ),
             'advanced_scorm': FeatureFlag(
                 name='advanced_scorm',
                 enabled=False,

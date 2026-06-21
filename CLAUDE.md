@@ -2,7 +2,7 @@
 
 ## Branch: `demo-course-AI`
 
-All backend AI user stories (47/47) are implemented and pushed. 662 tests across 18 test suites. To resume work, read the commits on this branch — they contain the full implementation history.
+All backend AI user stories (47/47) are implemented and pushed. 834 tests across 20 test suites. To resume work, read the commits on this branch — they contain the full implementation history.
 
 ### Key Git Commits (recent first, on demo-course-AI)
 
@@ -40,8 +40,14 @@ The AI subsystem lives under `app/services/ai/`, `app/routers/ai_*.py`, `app/mod
 - `dead_letter_queue.py` — Failure classification + exponential backoff retry
 - `model_tier_router.py` — Planner (haiku) vs Generator (sonnet) task routing
 - `policy_engine.py` — Rule-based auto-apply decisions
-- `durable_workflow.py` — Checkpoint/retry workflow engine
+- `durable_workflow.py` — MVP checkpoint/retry (65-line stub, superseded by workflow engine below)
 - `job_status_service.py` — Async job tracking + course-level operations
+- `workflow/` (package) — **NEW (US-BKND-AI-034):** PostgreSQL-backed durable workflow engine
+  - `orchestrator.py` — Background asyncio poll loop, state machine, crash recovery
+  - `step_registry.py` — Shared singleton decorator-based registry (B1 fix)
+  - `types.py` — StepResult dataclass, WorkflowStatus enum
+  - `steps/course_generation.py` — 4 states: validate_input → generate_pages → validate_course → create_batch_proposal
+  - `steps/scorm_export.py` — 5 states: validate_course → generate_manifest → package_assets → create_zip → complete
 - `audit_query_service.py` — Filtered audit log querying + compliance summaries
 - Plus: `config.py`, `diff_engine.py`, `error_envelope.py`, `idempotency_service.py`, `outbox_service.py`, `audit_service.py`, `session_service.py`, `ingestion_service.py`, `template_contracts.py`, `tool_executor.py`, `validation_engine.py`, mock services
 
@@ -52,6 +58,7 @@ The AI subsystem lives under `app/services/ai/`, `app/routers/ai_*.py`, `app/mod
 - `ai_admin.py` — safety-events, audit-logs, audit-summary, safety-stats
 - `ai_ingestion.py` — upload + generate-course + review-plan
 - `ai_sessions.py`, `ai_config.py`, `ai_templates.py`, `ai_tools.py`
+- `workflows.py` — **NEW (US-BKND-AI-034):** 6 endpoints (submit, status, cancel, retry, events, list)
 
 **Middleware** (`app/middleware/`):
 - `ai_telemetry.py` — Trace ID propagation + request timing
@@ -59,12 +66,13 @@ The AI subsystem lives under `app/services/ai/`, `app/routers/ai_*.py`, `app/mod
 
 **Models** (`app/models/`):
 - `ai_models.py` — 8 ORM models (sessions, proposals, confirmation tokens, audit, outbox, chat turns, idempotency, ingestion jobs)
+- `workflow.py` — 3 ORM models (type definitions, jobs with heartbeat/locking, job events)
 - `ai_admin_override.py` — Admin bypass audit trail
 - `ai_safety_event.py` — Safety event persistence
 
 ### Test Suite
 
-18 standalone test runners in `tests/run_*.py`. Each is a self-contained script that runs independently:
+20 standalone test runners in `tests/run_*.py`. Each is a self-contained script that runs independently:
 
 ```
 tests/run_confirmation_token_tests.py    (67 tests)
@@ -85,9 +93,10 @@ tests/run_e2e_regression_tests.py        (28 tests)
 tests/run_audit_admin_tests.py           (16 tests)
 tests/run_job_course_ops_tests.py        (10 tests)
 tests/run_final_stories_tests.py         (19 tests)
+tests/run_workflow_engine_tests.py       (146 tests)
 ```
 
-All 662 tests pass. Run individually with `PYTHONPATH=. python tests/run_<name>.py`.
+All 834 tests pass. Run individually with `PYTHONPATH=. python tests/run_<name>.py`.
 
 Note: pytest segfaults in this environment (exit code 139) — use the standalone runners or run with PowerShell.
 
