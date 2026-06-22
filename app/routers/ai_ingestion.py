@@ -14,7 +14,7 @@ from app.services.ai.error_envelope import ai_error
 from app.services.ai.ingestion_service import AIIngestionService, IngestionError
 
 logger = logging.getLogger("ai_authoring")
-router = APIRouter(prefix="/api/v1/ai", tags=["AI - Ingestion"])
+router = APIRouter(prefix="/ai", tags=["AI - Ingestion"])
 
 
 @router.post("/ingestions")

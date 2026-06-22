@@ -47,7 +47,7 @@ class EmbeddingWorker:
 
     async def start(self) -> None:
         """Start the worker background task. Disables itself if pgvector unavailable."""
-        if not self._is_pgvector_available():
+        if not await self._is_pgvector_available():
             logger.info("EmbeddingWorker: pgvector not available — worker disabled")
             return
 
@@ -110,18 +110,22 @@ class EmbeddingWorker:
                             continue
 
                         course_text = self._build_course_text(record)
-                        # Use asyncio.to_thread for blocking encode()
-                        vector = await asyncio.to_thread(
-                            model.encode, course_text
-                        )
+                        # Get embedding (async for EmbeddingProvider, sync for SentenceTransformer)
+                        if hasattr(model, 'embed'):
+                            vector = await model.embed(course_text)
+                        else:
+                            vector = await asyncio.to_thread(model.encode, course_text)
                         content_hash = hashlib.sha256(
                             course_text.encode()
                         ).hexdigest()
 
+                        # Normalize to list (numpy array → .tolist(), list → passthrough)
+                        embedding_list = vector.tolist() if hasattr(vector, 'tolist') else vector
+
                         await repo.upsert_embedding(
                             course_record_id=course_pk,
                             organization_id=org_id,
-                            embedding=vector.tolist(),
+                            embedding=embedding_list,
                             content_hash=content_hash,
                             embedding_model=self._model_name(),
                         )
@@ -142,19 +146,25 @@ class EmbeddingWorker:
         return processed
 
     def _get_model(self):
-        """Lazy-load the sentence-transformer model (cached after first load).
-
-        Uses asyncio.to_thread because model.encode() is CPU-bound.
+        """Lazy-load the embedding model. Falls back to MockEmbeddingProvider if
+        sentence-transformers is not installed.
         """
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-            logger.info("Loading embedding model: %s", model_name)
-            self._model = SentenceTransformer(model_name)
+            try:
+                from sentence_transformers import SentenceTransformer
+                model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+                logger.info("Loading embedding model: %s", model_name)
+                self._model = SentenceTransformer(model_name)
+            except ImportError:
+                logger.info("sentence-transformers not installed — using MockEmbeddingProvider")
+                from app.services.ai.embedding_provider import get_embedding_provider
+                self._model = get_embedding_provider()
         return self._model
 
     def _model_name(self) -> str:
-        return os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        if hasattr(self._model, 'model_name'):
+            return self._model.model_name
+        return os.getenv("EMBEDDING_MODEL", "mock-embedding")
 
     @staticmethod
     def _build_course_text(record) -> str:
@@ -166,10 +176,13 @@ class EmbeddingWorker:
         return ' '.join(filter(None, parts))
 
     @staticmethod
-    def _is_pgvector_available() -> bool:
+    async def _is_pgvector_available() -> bool:
         """Check if pgvector extension is installed."""
         try:
-            from app.repositories.similar_course_repo import _pgvector_available
-            return _pgvector_available()
+            from app.db.config import SessionLocal
+            from app.repositories.similar_course_repo import SimilarCourseRepository
+            async with SessionLocal() as session:
+                repo = SimilarCourseRepository(session)
+                return await repo._pgvector_available()
         except Exception:
             return False

@@ -22,6 +22,7 @@ TODO(AUTH): All routes depend on mock auth (US-BKND-AI-PR01).
 """
 
 import logging
+from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +42,7 @@ from app.repositories.ai_session_repo import AISessionRepository
 
 logger = logging.getLogger("ai_authoring")
 
-router = APIRouter(prefix="/api/v1/ai", tags=["AI - Tools"])
+router = APIRouter(prefix="/ai", tags=["AI - Tools"])
 
 
 # ── Helper ────────────────────────────────────────────────────────

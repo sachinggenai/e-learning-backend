@@ -22,7 +22,7 @@ from app.models.user_context import UserContext
 from app.services.ai.template_contracts import AITemplateContractsService
 from app.services.ai.error_envelope import ai_error, AIErrorCode
 
-router = APIRouter(prefix="/api/v1/ai", tags=["AI - Templates"])
+router = APIRouter(prefix="/ai", tags=["AI - Templates"])
 
 
 @router.get("/templates")

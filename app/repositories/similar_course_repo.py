@@ -525,7 +525,7 @@ class SimilarCourseRepository:
         if existing is not None:
             if existing.content_hash == content_hash:
                 return existing
-            existing.embedding = {"dim": len(embedding), "vec": embedding}
+            existing.embedding = embedding  # pgvector stores as native vector type
             existing.content_hash = content_hash
             existing.embedding_model = embedding_model
             existing.is_stale = False
@@ -537,7 +537,7 @@ class SimilarCourseRepository:
         record = CourseEmbeddingRecord(
             course_record_id=course_record_id,
             organization_id=organization_id,
-            embedding={"dim": len(embedding), "vec": embedding},
+            embedding=embedding,  # pgvector stores native list[float]
             content_hash=content_hash,
             embedding_model=embedding_model,
             is_stale=False,
@@ -579,9 +579,9 @@ class SimilarCourseRepository:
         Returns CourseRecord objects (has .id, .course_id, .title, .organization_id).
         """
         from app.models.persisted_course import CourseRecord
-        from app.models.course_embedding import CourseEmbedding
+        from app.models.course_embedding import CourseEmbeddingRecord
 
-        subq = select(CourseEmbedding.course_record_id)
+        subq = select(CourseEmbeddingRecord.course_record_id)
         q = (
             select(CourseRecord)
             .where(CourseRecord.id.not_in(subq))

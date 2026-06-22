@@ -19,10 +19,10 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    String, DateTime, Integer, Boolean, ForeignKey, Index,
+    String, DateTime, Integer, Boolean, ForeignKey, Index, JSON,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from app.models.base import Base
 
@@ -54,9 +54,9 @@ class CourseEmbeddingRecord(Base):
         String(64), default="default", index=True
     )
 
-    # ── Vector data (JSONB: {"dim": 1536, "vec": [...]}) ────
-    embedding: Mapped[Optional[dict]] = mapped_column(
-        JSONB, nullable=True
+    # ── Vector data (pgvector native vector(1536)) ──
+    embedding: Mapped[Optional[list]] = mapped_column(
+        Vector(1536), nullable=True
     )
 
     # ── Staleness tracking ───────────────────────────────────

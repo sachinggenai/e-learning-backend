@@ -25,7 +25,7 @@ from app.services.ai.similar_course_service import (
 from app.services.ai.error_envelope import ai_error
 
 logger = logging.getLogger("ai_authoring")
-router = APIRouter(prefix="/api/v1/ai", tags=["AI - Similar Courses"])
+router = APIRouter(prefix="/ai", tags=["AI - Similar Courses"])
 
 
 class SimilarCourseQueryRequest(BaseModel):

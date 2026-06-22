@@ -47,7 +47,7 @@ from app.services.ai.session_service import (
     SessionClosedError,
 )
 
-router = APIRouter(prefix="/api/v1/ai", tags=["AI - Sessions"])
+router = APIRouter(prefix="/ai", tags=["AI - Sessions"])
 
 
 def _get_client_ip(request: Request) -> str:

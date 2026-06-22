@@ -25,7 +25,7 @@ from app.services.ai.proposal_service import (
 from app.repositories.ai_session_repo import AISessionRepository
 
 logger = logging.getLogger("ai_authoring")
-router = APIRouter(prefix="/api/v1/ai", tags=["AI - Proposals"])
+router = APIRouter(prefix="/ai", tags=["AI - Proposals"])
 
 
 def _get_client_ip(request: Request) -> str:

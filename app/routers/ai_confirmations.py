@@ -29,7 +29,7 @@ from app.services.ai.error_envelope import ai_error, AIErrorCode
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/ai", tags=["AI - Confirmations"])
+router = APIRouter(prefix="/ai", tags=["AI - Confirmations"])
 
 
 def _get_client_ip(request: Request) -> str:

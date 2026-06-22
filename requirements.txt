@@ -28,6 +28,9 @@ lxml>=5.0.0
 sentence-transformers>=3.0.0
 scikit-learn>=1.5.0
 
+# ── Vector Database (US-PEND-017) ──────────────────
+pgvector>=0.4.0
+
 # ── Document Extraction (US-PEND-021) ──────────────
 pdfplumber>=0.10.0
 python-docx>=1.0.0

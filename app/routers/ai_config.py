@@ -7,7 +7,7 @@ from fastapi import APIRouter
 
 from app.services.ai.config import get_ai_config
 
-router = APIRouter(prefix="/api/v1/ai", tags=["AI - Configuration"])
+router = APIRouter(prefix="/ai", tags=["AI - Configuration"])
 
 
 @router.get("/feature-status")
