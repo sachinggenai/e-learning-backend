@@ -293,7 +293,7 @@ class ContextManager:
         )
 
         try:
-            llm = LLMClient(model="claude-haiku-4-5")
+            llm = LLMClient(model=os.getenv("AI_PLANNER_MODEL", "deepseek-v4-flash"))
             response = await llm.chat(
                 messages=[LLMMessage(role="user", content=prompt)],
                 max_tokens=500,

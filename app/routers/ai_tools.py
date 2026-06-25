@@ -114,7 +114,7 @@ async def list_pages(
 ):
     """List all pages in the session's course with metadata.
 
-    Returns ordered page metadata: page_id, title, template_type, order,
+    Returns ordered page metadata: page_id, title,need template_type, order,
     page_etag (SHA-256 hash for staleness detection), and timestamps.
 
     FR-3: Each page includes page_etag for staleness detection.

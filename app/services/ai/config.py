@@ -64,8 +64,8 @@ class AIConfig:
     anthropic_api_key: Optional[str] = None
 
     # Model routing
-    primary_model_id: str = "claude-sonnet-4-20250514"
-    fallback_model_id: str = "claude-haiku-4-20250514"
+    primary_model_id: str = "deepseek-v4-pro[1m]"
+    fallback_model_id: str = "deepseek-v4-flash"
 
     # Token budgets
     max_input_tokens: int = 8000
@@ -97,7 +97,7 @@ class AIConfig:
     outbox_retry_max: int = 3
 
     # ── Session limits (US-BKND-AI-006) ───────────────────────
-    max_active_sessions_per_user: int = 5
+    max_active_sessions_per_user: int = 500
     session_cleanup_interval_minutes: int = 15
     rate_limit_create_session_per_hour: int = 20
 
@@ -133,6 +133,30 @@ class AIConfig:
         easier updates. Add more models as they become available.
         """
         return {
+            # ── DeepSeek models (primary) ──────────────────────────
+            "deepseek-v4-pro[1m]": ModelConfig(
+                id="deepseek-v4-pro[1m]",
+                provider="anthropic",
+                api_model_name="deepseek-v4-pro[1m]",
+                tier=ModelTier.GENERATOR,
+                max_tokens=8192,
+                cost_per_1k_input_tokens=0.001,
+                cost_per_1k_output_tokens=0.005,
+                supports_tool_calling=True,
+                supports_structured_output=True,
+            ),
+            "deepseek-v4-flash": ModelConfig(
+                id="deepseek-v4-flash",
+                provider="anthropic",
+                api_model_name="deepseek-v4-flash",
+                tier=ModelTier.PLANNER,
+                max_tokens=4096,
+                cost_per_1k_input_tokens=0.0003,
+                cost_per_1k_output_tokens=0.0015,
+                supports_tool_calling=True,
+                supports_structured_output=True,
+            ),
+            # ── Claude models (fallback) ──────────────────────────
             "claude-sonnet-4-20250514": ModelConfig(
                 id="claude-sonnet-4-20250514",
                 provider="anthropic",
@@ -277,12 +301,12 @@ def load_ai_config() -> AIConfig:
     _ai_config = AIConfig(
         ai_authoring_enabled=_env_bool("AI_AUTHORING_ENABLED", False),
         environment=os.getenv("ENVIRONMENT", "development").lower(),
-        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"),
         primary_model_id=os.getenv(
-            "AI_PRIMARY_MODEL", "claude-sonnet-4-20250514"
+            "AI_PRIMARY_MODEL", "deepseek-v4-pro[1m]"
         ),
         fallback_model_id=os.getenv(
-            "AI_FALLBACK_MODEL", "claude-haiku-4-20250514"
+            "AI_FALLBACK_MODEL", "deepseek-v4-flash"
         ),
         max_input_tokens=_env_int("AI_MAX_INPUT_TOKENS", 8000),
         max_output_tokens=_env_int("AI_MAX_OUTPUT_TOKENS", 4096),

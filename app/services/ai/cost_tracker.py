@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
+    # ── DeepSeek models (primary) ──────────────────────────
+    "deepseek-v4-pro[1m]":  {"input": 1.00, "output": 5.00, "cache_read": 0.10, "cache_write": 1.25},
+    "deepseek-v4-flash":    {"input": 0.30, "output": 1.50, "cache_read": 0.03, "cache_write": 0.30},
+    # ── Claude models (fallback) ──────────────────────────
     "claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75},
     "claude-haiku-4-20250514": {"input": 0.80, "output": 4.00, "cache_read": 0.08, "cache_write": 1.00},
     "claude-opus-4-20250514":  {"input": 15.00, "output": 75.00, "cache_read": 1.50, "cache_write": 18.75},

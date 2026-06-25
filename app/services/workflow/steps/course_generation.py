@@ -110,7 +110,7 @@ async def generate_pages_step(
     start_index = len(results)
 
     model_name = generation_options.get(
-        "model", os.getenv("AI_GENERATION_MODEL", "claude-sonnet-4-20250514")
+        "model", os.getenv("AI_GENERATION_MODEL", "deepseek-v4-pro[1m]")
     )
     temperature = generation_options.get("temperature", 0.3)
     max_tokens = generation_options.get("max_tokens_per_page", 4096)
@@ -128,7 +128,7 @@ async def generate_pages_step(
             f"generate page content for template {page.get('template_type', 'unknown')}"
         )
         if tier == ModelTier.PLANNER:
-            llm_client.model = os.getenv("AI_PLANNER_MODEL", "claude-haiku-4-20250514")
+            llm_client.model = os.getenv("AI_PLANNER_MODEL", "deepseek-v4-flash")
 
         try:
             response = await llm_client.chat(

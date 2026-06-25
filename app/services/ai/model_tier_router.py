@@ -40,16 +40,16 @@ GENERATOR_TASKS = {
     "assessment", "quiz", "question",
 }
 
-# Model mapping per tier
+# Model mapping per tier (default: DeepSeek via Anthropic-compatible API)
 DEFAULT_TIER_MODELS: Dict[str, str] = {
-    ModelTier.PLANNER.value: "claude-haiku-4-20250514",
-    ModelTier.GENERATOR.value: "claude-sonnet-4-20250514",
+    ModelTier.PLANNER.value: "deepseek-v4-flash",
+    ModelTier.GENERATOR.value: "deepseek-v4-pro[1m]",
 }
 
 # Cost comparison (per 1M tokens input)
 TIER_COSTS: Dict[str, float] = {
-    ModelTier.PLANNER.value: 0.80,     # Haiku
-    ModelTier.GENERATOR.value: 3.00,   # Sonnet
+    ModelTier.PLANNER.value: 0.30,     # DeepSeek Flash
+    ModelTier.GENERATOR.value: 1.00,   # DeepSeek Pro
 }
 
 

@@ -125,6 +125,15 @@ class SimilarCourseService:
         # ── 2. Normalize inputs ─────────────────────────────
         query = query.strip()
         if not query:
+            # ── Trace: empty query (non-retrieval) ──────────────────
+            from app.services.ai.session_tracer import SessionTracer as _Tracer2
+            _t2 = _Tracer2(self.db)
+            await _t2.start_span(
+                session_id=session_id,
+                trace_type="rag_retrieval",
+                operation="query_similar_courses",
+                input_payload={"query": query, "max_results": max_results},
+            )
             return self._empty_result("Query is empty.", "none")
 
         max_results = max(1, min(max_results, 20))
@@ -136,6 +145,22 @@ class SimilarCourseService:
         tier1_ms = 0.0
         tier2_ms = 0.0
         tier3_ms = 0.0
+
+        # ── Session trace: RAG retrieval start ──────────────────────
+        from app.services.ai.session_tracer import SessionTracer
+        tracer = SessionTracer(self.db)
+        rag_span = await tracer.start_span(
+            session_id=session_id,
+            trace_type="rag_retrieval",
+            operation="query_similar_courses",
+            input_payload={
+                "query": query,
+                "max_results": max_results,
+                "filters": filters,
+                "organization_id": organization_id,
+            },
+            metadata={"embedding_provider": type(self.embedding_provider).__name__},
+        )
 
         # Tier 1: Vector search
         t0 = time.perf_counter()
@@ -209,6 +234,19 @@ class SimilarCourseService:
 
         # ── 4. Empty after all tiers ────────────────────────
         if not raw_results:
+            await tracer.end_span(
+                rag_span,
+                output_payload={
+                    "results": [],
+                    "total_count": 0,
+                    "retrieval_tier_used": tier_used,
+                    "tier_latency_ms": {
+                        "tier1": tier1_ms, "tier2": tier2_ms, "tier3": tier3_ms,
+                    },
+                },
+                latency_ms=(time.perf_counter() - t0_total) * 1000,
+                metadata={"tier_used": tier_used},
+            )
             return self._empty_result("No similar courses found.", tier_used)
 
         # ── 5. Enrich ───────────────────────────────────────
@@ -220,6 +258,31 @@ class SimilarCourseService:
 
         # ── 7. Slice ────────────────────────────────────────
         top = enriched[:max_results]
+
+        # ── Trace: RAG retrieval complete ────────────────────
+        await tracer.end_span(
+            rag_span,
+            output_payload={
+                "results": [
+                    {
+                        "courseId": r.get("courseId", r.get("course_id", "")),
+                        "title": r.get("title", ""),
+                        "relevance_score": r.get("relevance_score", 0),
+                        "page_count": r.get("page_count", 0),
+                    }
+                    for r in top
+                ],
+                "total_count": len(top),
+                "retrieval_tier_used": tier_used,
+                "tier_latency_ms": {
+                    "tier1": round(tier1_ms, 2),
+                    "tier2": round(tier2_ms, 2),
+                    "tier3": round(tier3_ms, 2),
+                },
+            },
+            latency_ms=round((time.perf_counter() - t0_total) * 1000, 2),
+            metadata={"tier_used": tier_used},
+        )
 
         return {
             "courses": top,

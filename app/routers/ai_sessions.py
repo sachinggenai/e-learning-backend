@@ -25,7 +25,7 @@ is implemented, the Depends(get_current_user) import path won't change.
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.config import get_session
+from app.db.config import get_session as get_db_session
 from app.dependencies.auth_dependencies import get_current_user
 from app.models.user_context import UserContext
 from app.schemas.ai_session import (
@@ -73,7 +73,7 @@ async def create_session(
     body: CreateSessionRequest,
     request: Request,
     user: UserContext = Depends(get_current_user),
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new AI authoring session scoped to a course.
 
@@ -150,7 +150,7 @@ async def create_session(
 async def get_session(
     session_id: str,
     user: UserContext = Depends(get_current_user),
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get session metadata and current course state.
 
@@ -215,7 +215,7 @@ async def get_session(
 async def delete_session(
     session_id: str,
     user: UserContext = Depends(get_current_user),
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Close (soft-delete) an AI authoring session.
 

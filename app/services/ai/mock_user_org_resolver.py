@@ -61,6 +61,8 @@ async def get_organization_settings(org_id: str) -> dict:
         "ai_rate_limit_calls_per_day": 500,
         "ai_monthly_cost_cap_usd": 500.0,
         "ai_allowed_models": [
+            "deepseek-v4-pro[1m]",
+            "deepseek-v4-flash",
             "claude-sonnet-4-20250514",
             "claude-haiku-4-20250514",
         ],

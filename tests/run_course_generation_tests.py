@@ -40,7 +40,7 @@ async def main():
          "source_excerpt": "This is source material about Python."},
         {}, 0,
     )
-    check("generates text-content", page["template_type"] == "text-content")
+    check("normalizes text-content to content-text", page["template_type"] == "content-text")
     check("has components", len(page["components"]) > 0)
     check("has title", "Introduction" in page["title"])
     comp = page["components"][0]
@@ -71,7 +71,7 @@ async def main():
         {"title": "Discover", "template_type": "click-reveal", "source_excerpt": "Reveal content"},
         {}, 3,
     )
-    check("generates click-reveal", page["template_type"] == "click-reveal")
+    check("normalizes click-reveal to accordion", page["template_type"] == "accordion")
     comp = page["components"][0]
     items = comp.get("data", {}).get("items", [])
     check("click-reveal has items", len(items) > 0)
@@ -107,7 +107,7 @@ async def main():
     ]
     pages = await gen._generate_pages(plan, {})
     check("generates all pages", len(pages) == 3)
-    check("page 0 is text-content", pages[0]["template_type"] == "text-content")
+    check("page 0 normalizes to content-text", pages[0]["template_type"] == "content-text")
     check("page 1 is accordion", pages[1]["template_type"] == "accordion")
     check("page 2 is assessment", pages[2]["template_type"] == "final-assessment")
 

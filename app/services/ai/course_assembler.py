@@ -23,16 +23,18 @@ from app.models.page_component import PageRecord, ComponentRecord
 logger = logging.getLogger(__name__)
 
 
-# Template-type to component-type mapping for assembly
+# Template-type to component-type mapping for assembly.
+# Maps both canonical BUILTIN_TEMPLATE_TYPES and legacy/AI-generated aliases.
 TEMPLATE_TO_COMPONENT = {
-    "text-content": "text-content",
+    "content-text": "content-text",
+    "text-content": "content-text",       # Legacy alias
     "tabs": "tabs",
     "accordion": "accordion",
-    "click-reveal": "click-reveal",
+    "click-reveal": "accordion",          # Legacy → canonical accordion
     "final-assessment": "final-assessment",
 }
 
-VALID_COMPONENT_TYPES = set(TEMPLATE_TO_COMPONENT.values())
+VALID_COMPONENT_TYPES = {"content-text", "text-content", "tabs", "accordion", "click-reveal", "final-assessment"}
 
 
 class AssemblyError(Exception):
@@ -83,7 +85,7 @@ class CourseAssembler:
         """
         # Validate
         title = (page_spec.get("title") or "Untitled")[:self.MAX_TITLE_LENGTH]
-        template_type = page_spec.get("template_type", "text-content")
+        template_type = page_spec.get("template_type", "content-text")
         components_data = page_spec.get("components", [])
 
         # Determine order
@@ -106,7 +108,7 @@ class CourseAssembler:
         # Create component records
         component_ids = []
         for i, comp_data in enumerate(components_data):
-            comp_type = comp_data.get("component_type", "text-content")
+            comp_type = comp_data.get("component_type", "content-text")
             comp_type = self._map_component_type(comp_type)
 
             component = ComponentRecord(
@@ -161,11 +163,11 @@ class CourseAssembler:
         if page_spec.get("title"):
             page.title = page_spec["title"][:self.MAX_TITLE_LENGTH]
 
-        # Update layout/template
+        # Update layout/template — must reassign full dict for SQLAlchemy JSON mutation tracking
         if page_spec.get("template_type"):
-            if not page.layout:
-                page.layout = {}
-            page.layout["templateType"] = page_spec["template_type"]
+            layout = dict(page.layout or {})
+            layout["templateType"] = page_spec["template_type"]
+            page.layout = layout
 
         # Replace components if requested
         components_data = page_spec.get("components", [])
@@ -179,7 +181,7 @@ class CourseAssembler:
             # Create new components
             for i, comp_data in enumerate(components_data):
                 comp_type = self._map_component_type(
-                    comp_data.get("component_type", "text-content")
+                    comp_data.get("component_type", "content-text")
                 )
                 component = ComponentRecord(
                     page_id=page_id,
@@ -282,8 +284,8 @@ class CourseAssembler:
                     "order_index": p.order_index,
                     "layout": p.layout,
                     "template_type": (
-                        p.layout.get("templateType", "text-content")
-                        if isinstance(p.layout, dict) else "text-content"
+                        p.layout.get("templateType", "content-text")
+                        if isinstance(p.layout, dict) else "content-text"
                     ),
                     "components": [
                         {
@@ -346,12 +348,11 @@ class CourseAssembler:
 
     def _map_component_type(self, comp_type: str) -> str:
         """Map a component type to its canonical DB value."""
-        if comp_type in VALID_COMPONENT_TYPES:
-            return comp_type
-        # Try template-to-component mapping
+        # Normalize through TEMPLATE_TO_COMPONENT first
         mapped = TEMPLATE_TO_COMPONENT.get(comp_type)
         if mapped:
             return mapped
+        # Unknown type — reject
         raise AssemblyError(
             "INVALID_COMPONENT_TYPE",
             f"Unknown component type: '{comp_type}'. Valid types: {sorted(VALID_COMPONENT_TYPES)}",

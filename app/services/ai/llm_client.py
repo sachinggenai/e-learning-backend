@@ -153,8 +153,8 @@ class LLMClient:
         timeout: int = REQUEST_TIMEOUT_SECONDS,
     ):
         self.provider = provider
-        self.model = model or os.getenv("AI_PRIMARY_MODEL", "claude-sonnet-4-20250514")
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
+        self.model = model or os.getenv("AI_PRIMARY_MODEL", "deepseek-v4-pro[1m]")
+        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN", "")
         self.max_retries = max_retries
         self.timeout = timeout
 
@@ -240,7 +240,11 @@ class LLMClient:
         try:
             import anthropic
 
-            client = anthropic.AsyncAnthropic(api_key=self.api_key)
+            base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+            client_kwargs = {"api_key": self.api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+            client = anthropic.AsyncAnthropic(**client_kwargs)
 
             # Build API messages
             api_messages = []
@@ -316,7 +320,11 @@ class LLMClient:
             import anthropic
             import time
 
-            client = anthropic.AsyncAnthropic(api_key=self.api_key)
+            base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+            client_kwargs = {"api_key": self.api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+            client = anthropic.AsyncAnthropic(**client_kwargs)
 
             api_messages = []
             for msg in messages:

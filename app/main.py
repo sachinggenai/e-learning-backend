@@ -75,7 +75,7 @@ _ORIGIN_REGEX = _get_origin_regex()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(application: FastAPI):
     """Startup / shutdown lifecycle hook."""
     # ── Startup ──────────────────────────────
     try:
@@ -143,7 +143,7 @@ async def lifespan(app: FastAPI):
                         max_concurrency=ai_cfg.workflow_max_concurrency,
                         stale_threshold_seconds=ai_cfg.workflow_stale_threshold,
                     )
-                    app.state.workflow_orchestrator = orchestrator
+                    application.state.workflow_orchestrator = orchestrator
                     await orchestrator.start()
                     logger.info(
                         "Workflow engine STARTED (worker=%s, concurrency=%d)",
@@ -163,7 +163,7 @@ async def lifespan(app: FastAPI):
                     ),
                     batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "10")),
                 )
-                app.state.embedding_worker = embedding_worker
+                application.state.embedding_worker = embedding_worker
                 await embedding_worker.start()
             except Exception:
                 logger.exception("Embedding worker failed to start — degraded mode")
@@ -176,11 +176,11 @@ async def lifespan(app: FastAPI):
 
     yield
     # ── Shutdown ─────────────────────────────
-    if hasattr(app.state, 'embedding_worker'):
-        await app.state.embedding_worker.stop()
+    if hasattr(application.state, 'embedding_worker'):
+        await application.state.embedding_worker.stop()
         logger.info("Embedding worker STOPPED")
-    if hasattr(app.state, 'workflow_orchestrator'):
-        orchestrator = app.state.workflow_orchestrator
+    if hasattr(application.state, 'workflow_orchestrator'):
+        orchestrator = application.state.workflow_orchestrator
         await orchestrator.stop()
         logger.info("Workflow engine STOPPED")
 
@@ -272,6 +272,7 @@ if _ai_config.ai_authoring_enabled:
         "ai_admin": "ai_admin",
         "ai_similar_courses": "ai_similar_courses",  # US-BKND-AI-015
         "ai_workflows": "workflows",  # US-BKND-AI-034
+        "ai_tracing": "ai_tracing",  # Session trace endpoint
     }
     for _name, _module in _ai_routers.items():
         try:

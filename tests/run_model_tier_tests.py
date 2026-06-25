@@ -27,10 +27,10 @@ def main():
     check("empty message -> planner", router.classify_task(user_message="") == ModelTier.PLANNER)
 
     print("\n=== Model Resolution ===")
-    check("planner model is haiku", router.get_model_for_tier(ModelTier.PLANNER) == "claude-haiku-4-20250514")
-    check("generator model is sonnet", router.get_model_for_tier(ModelTier.GENERATOR) == "claude-sonnet-4-20250514")
+    check("planner model is flash", router.get_model_for_tier(ModelTier.PLANNER) == "deepseek-v4-flash")
+    check("generator model is pro", router.get_model_for_tier(ModelTier.GENERATOR) == "deepseek-v4-pro[1m]")
     model = router.get_model_for_task(tool_name="propose_create_page")
-    check("get_model_for_task returns sonnet", model == "claude-sonnet-4-20250514")
+    check("get_model_for_task returns pro", model == "deepseek-v4-pro[1m]")
 
     print("\n=== Cost Savings ===")
     r0 = ModelTierRouter()
@@ -57,8 +57,8 @@ def main():
     check("custom generator", r2.get_model_for_tier(ModelTier.GENERATOR) == "custom-opus")
 
     print("\n=== Default Tier Models ===")
-    check("default planner haiku", "haiku" in DEFAULT_TIER_MODELS["planner"])
-    check("default generator sonnet", "sonnet" in DEFAULT_TIER_MODELS["generator"])
+    check("default planner flash", "flash" in DEFAULT_TIER_MODELS["planner"])
+    check("default generator deepseek", "deepseek" in DEFAULT_TIER_MODELS["generator"])
 
     print(f"\n{'='*60}")
     print(f"RESULTS: {passed} passed, {failed} failed")

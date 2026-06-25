@@ -20,6 +20,8 @@ from enum import Enum
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.course import normalize_template_type
+
 logger = logging.getLogger(__name__)
 
 
@@ -91,9 +93,33 @@ class CourseGenerator:
             raise GenerationError("IMPORT_JOB_NOT_FOUND",
                                   f"Import job '{import_job_id}' not found.", 404)
 
+        # Guard: job must be in plan_approved state
+        if job.status not in ("plan_approved", "generated"):
+            raise GenerationError(
+                "INVALID_STATE",
+                f"Job must be in 'plan_approved' or 'generated' state, currently '{job.status}'. "
+                "Approve the page plan before generating content.",
+                400,
+            )
+
         # Check plan is approved
-        plan = job.extracted_sections or []
-        if not plan:
+        raw = job.extracted_sections or {}
+        if not raw:
+            raise GenerationError("EMPTY_PAGE_PLAN",
+                                  "The import job has no approved page plan.", 400)
+
+        # Handle both formats:
+        #   (A) Legacy list: [{"heading": ..., "content_preview": ..., ...}, ...]
+        #   (B) Approved plan dict: {"plan": [...], "approved": true, ...}
+        if isinstance(raw, dict) and "plan" in raw:
+            plan = raw["plan"]
+        elif isinstance(raw, list):
+            plan = raw
+        else:
+            raise GenerationError("EMPTY_PAGE_PLAN",
+                                  "The import job has no approved page plan.", 400)
+
+        if not isinstance(plan, list) or len(plan) == 0:
             raise GenerationError("EMPTY_PAGE_PLAN",
                                   "The import job has no approved page plan.", 400)
 
@@ -102,10 +128,10 @@ class CourseGenerator:
         for section in plan:
             if isinstance(section, dict):
                 pages.append({
-                    "title": section.get("title", "Untitled"),
-                    "template_type": section.get("template_type", "text-content"),
+                    "title": section.get("proposed_title") or section.get("title", "Untitled"),
+                    "template_type": section.get("suggested_template_type") or section.get("template_type", "content-text"),
                     "order": section.get("order", len(pages)),
-                    "source_excerpt": section.get("content", section.get("text", "")),
+                    "source_excerpt": section.get("content_preview") or section.get("content", section.get("text", "")),
                 })
 
         if not pages:
@@ -151,14 +177,14 @@ class CourseGenerator:
         }
 
         # Store course data in the import job's metadata
-        try:
-            job.source_metadata = job.source_metadata or {}
-            if isinstance(job.source_metadata, dict):
-                job.source_metadata["generated_course"] = course_data
-                job.source_metadata["generation_status"] = GenerationStatus.READY_FOR_REVIEW.value
-            job.status = "analyzed"  # Move past extraction to ready
-        except Exception:
-            pass
+        # IMPORTANT: reassign the entire dict to trigger SQLAlchemy mutation tracking
+        meta = dict(job.source_metadata or {})
+        meta["generated_course"] = course_data
+        meta["generation_status"] = GenerationStatus.READY_FOR_REVIEW.value
+        job.source_metadata = meta
+        job.status = "generated"  # Distinct state: course generated, ready for review/apply
+        self.db.add(job)
+        await self.db.commit()
 
         return {
             "job_id": import_job_id,
@@ -213,6 +239,132 @@ class CourseGenerator:
         }
 
     # ------------------------------------------------------------------
+    # Phase: Apply Generated Course
+    # ------------------------------------------------------------------
+
+    async def apply_generated_course(
+        self,
+        import_job_id: str,
+        user_id: str,
+        organization_id: str = "",
+    ) -> Dict[str, Any]:
+        """Apply a generated course: create Course + Pages + Components in DB.
+
+        Reads the generated_course from the job's source_metadata, creates
+        all records in a single transaction, and marks the job as committed.
+
+        Returns the final course with all created pages and components.
+        """
+        job = await self._get_import_job(import_job_id)
+        if job is None:
+            raise GenerationError("IMPORT_JOB_NOT_FOUND",
+                                  f"Import job '{import_job_id}' not found.", 404)
+
+        meta = job.source_metadata or {}
+        if not isinstance(meta, dict):
+            raise GenerationError("NO_GENERATED_COURSE",
+                                  "No generated course data found in import job.", 400)
+
+        course_data = meta.get("generated_course")
+        if not course_data or not isinstance(course_data, dict):
+            raise GenerationError("NO_GENERATED_COURSE",
+                                  "No generated course data found. Run generation first.", 400)
+
+        gen_status = meta.get("generation_status", "")
+        if gen_status != "ready_for_review":
+            raise GenerationError("COURSE_NOT_READY",
+                                  f"Course is not ready for apply. Current status: {gen_status}", 400)
+
+        pages_data = course_data.get("pages", [])
+        if not pages_data:
+            raise GenerationError("NO_PAGES",
+                                  "Generated course has no pages to apply.", 400)
+
+        course_title = course_data.get("title", job.detected_type or "Generated Course")
+        course_description = course_data.get("description", "")
+        course_id = job.course_id or f"COURSE-{import_job_id[:8]}"
+
+        # ── Create (or update) the CourseRecord FIRST ──────────────────
+        # Must exist before pages are flushed to satisfy FK constraint.
+        from app.repositories.course_repo import CourseRepository
+
+        course_repo = CourseRepository(self.db)
+        await course_repo.upsert(
+            course_id=course_id,
+            title=course_title,
+            description=course_description or "",
+            data={"source_import_job_id": import_job_id},
+            status="draft",
+        )
+
+        # ── Now create pages and components ────────────────────────────
+        from app.models.page_component import PageRecord, ComponentRecord
+        from app.repositories.page_component_repo import PageRepository
+        import uuid as _uuid
+
+        page_repo = PageRepository(self.db)
+
+        created_pages = []
+        for i, p in enumerate(pages_data):
+            page_id = str(_uuid.uuid4())
+            page = PageRecord(
+                page_id=page_id,
+                course_id=course_id,
+                title=p.get("title", f"Page {i + 1}"),
+                order_index=p.get("order", i),
+                layout={
+                    "templateType": p.get("template_type", "content-text"),
+                },
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+
+            # Create components for this page
+            components = p.get("components", [])
+            for j, comp in enumerate(components):
+                component = ComponentRecord(
+                    component_id=str(_uuid.uuid4()),
+                    page_id=page_id,
+                    component_type=comp.get("component_type", "content-text"),
+                    order_index=comp.get("order_index", j),
+                    data=comp.get("data", {}),
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow(),
+                )
+                page.components.append(component)
+
+            self.db.add(page)
+            created_pages.append(page)
+
+        await self.db.commit()
+
+        # Mark job as committed — build new dict for mutation tracking
+        final_meta = dict(job.source_metadata or {})
+        final_meta["generation_status"] = "completed"
+        final_meta["applied_at"] = datetime.utcnow().isoformat()
+        final_meta["applied_pages"] = len(created_pages)
+        job.source_metadata = final_meta
+        job.status = "completed"
+        self.db.add(job)
+        await self.db.commit()
+
+        return {
+            "course_id": course_id,
+            "course_title": course_title,
+            "pages_created": len(created_pages),
+            "pages": [
+                {
+                    "page_id": p.page_id,
+                    "title": p.title,
+                    "order": p.order_index,
+                    "template_type": (p.layout or {}).get("templateType", "content-text"),
+                    "component_count": len(p.components),
+                }
+                for p in created_pages
+            ],
+        }
+
+    # ------------------------------------------------------------------
     # Phase 1: Page Content Generation
     # ------------------------------------------------------------------
 
@@ -243,9 +395,10 @@ class CourseGenerator:
 
         components = []
 
-        if template_type == "text-content":
+        # Accept both old (legacy) and new (canonical) type names for backward compat
+        if template_type in ("text-content", "content-text"):
             components.append({
-                "component_type": "text-content",
+                "component_type": "content-text",
                 "order_index": 0,
                 "data": {
                     "content": (
@@ -285,9 +438,10 @@ class CourseGenerator:
                 },
             })
 
-        elif template_type == "click-reveal":
+        elif template_type in ("click-reveal",):
+            # Legacy type — normalizes to accordion; items shape is compatible
             components.append({
-                "component_type": "click-reveal",
+                "component_type": "accordion",
                 "order_index": 0,
                 "data": {
                     "items": [
@@ -307,25 +461,31 @@ class CourseGenerator:
                     "passing_score": 80,
                     "questions": [
                         {
+                            "id": f"q-{index}-1",
+                            "type": "mcq",
                             "question": f"What is the main topic of {title}?",
-                            "options": ["Option A", "Option B", "Option C", "Option D"],
-                            "correct_index": 0,
+                            "options": [
+                                {"id": "opt-a", "text": "Option A — Correct", "isCorrect": True},
+                                {"id": "opt-b", "text": "Option B", "isCorrect": False},
+                                {"id": "opt-c", "text": "Option C", "isCorrect": False},
+                                {"id": "opt-d", "text": "Option D", "isCorrect": False},
+                            ],
                         },
                     ],
                 },
             })
 
         else:
-            # Default to text-content
+            # Default to content-text
             components.append({
-                "component_type": "text-content",
+                "component_type": "content-text",
                 "order_index": 0,
                 "data": {"content": f"<h2>{title}</h2>\n<p>Content for {title.lower()}.</p>"},
             })
 
         return {
             "title": title,
-            "template_type": template_type,
+            "template_type": normalize_template_type(template_type),
             "order": page.get("order", index),
             "components": components,
             "source_excerpt": source[:500] if source else "",

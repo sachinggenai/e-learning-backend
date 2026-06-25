@@ -363,6 +363,39 @@ class PersistedCourseExportValidationError(Exception):
     """Raised when stored course data cannot be exported safely."""
 
 
+# Shared type normalization map for both page/component and TemplateRecord export paths.
+# Maps legacy/AI-generated types → canonical BUILTIN_TEMPLATE_TYPES.
+_TYPE_NORMALIZATION_MAP: dict[str, str] = {
+    "text-content": "content-text",
+    "text-with-media": "content-text",
+    "content-media": "content-text",
+    "content-audio": "content-text",
+    "content-image": "content-text",
+    "click-reveal": "accordion",       # Aligns with SCORM runtime (accordion-family transform)
+    "interactive": "content-text",
+    "video": "content-video",
+    "quiz": "mcq",
+    # Canonical types (identity mapping for safe pass-through)
+    "content-text": "content-text",
+    "accordion": "accordion",
+    "tabs": "tabs",
+    "final-assessment": "final-assessment",
+    "content-video": "content-video",
+    "mcq": "mcq",
+    "welcome": "welcome",
+    "summary": "summary",
+}
+
+
+def _normalize_component_type_to_template_type(comp_type: str) -> str:
+    """Map AI-generated component types to valid Course BUILTIN_TEMPLATE_TYPES.
+
+    Built-in types: welcome, content-video, mcq, content-text, summary,
+    final-assessment, tabs, accordion, video, quiz
+    """
+    return _TYPE_NORMALIZATION_MAP.get(comp_type, "content-text")
+
+
 def _component_data_with_content(comp_type: str, data: dict) -> dict:
     """
     Ensure component data has a 'content' key for legacy Course model validation.
@@ -416,6 +449,14 @@ def _component_data_with_content(comp_type: str, data: dict) -> dict:
         panels = data.get("panels") or []
         out["content"] = " ".join(
             f"{p.get('title', '')} {p.get('body', '')}" for p in panels
+        ).strip() or comp_type
+
+    elif comp_type == "click-reveal":
+        # Legacy type: data uses items: [{title, content}]
+        # Synthesize content from items for backward-compatible export
+        items = data.get("items") or []
+        out["content"] = " ".join(
+            f"{item.get('title', '')} {item.get('content', '')}" for item in items
         ).strip() or comp_type
 
     else:
@@ -494,13 +535,7 @@ def _map_template_record(template_record) -> dict:
     raw_content = template_payload.get("content")
     template_type = template_record.template_type
 
-    legacy_type_map = {
-        "video": "content-video",
-        "quiz": "mcq",
-        "content-image": "content-text",
-        "interactive": "content-text",
-    }
-    normalized_type = legacy_type_map.get(template_type, template_type)
+    normalized_type = _TYPE_NORMALIZATION_MAP.get(template_type, template_type)
 
     mapped_data = {
         "content": _extract_text_content(
@@ -799,9 +834,10 @@ async def export_persisted_course(
             course_data["templates"] = []
             for pg in db_pages:
                 for comp in comp_map.get(pg.page_id, []):
+                    normalized_type = _normalize_component_type_to_template_type(comp.component_type)
                     course_data["templates"].append({
                         "id": comp.component_id,
-                        "type": comp.component_type,
+                        "type": normalized_type,
                         "title": pg.title,
                         "order": len(course_data["templates"]),
                         "pageId": pg.page_id,

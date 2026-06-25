@@ -112,10 +112,71 @@ class ChatOrchestrator:
         # Use sanitized prompt
         prompt = safety_result.sanitized_text or prompt
 
+        # ── Route to LLM when AI is configured ──────────────────
+        api_key = self.config.anthropic_api_key
+        if api_key and self.config.ai_authoring_enabled:
+            return await self._process_with_llm(
+                session_id, user_id, prompt, course_id, safety
+            )
+
+        # ── Fallback: mock intent parsing (no LLM) ──────────────
+        return await self._process_mock(
+            session_id, user_id, prompt, course_id, safety
+        )
+
+    async def _process_with_llm(
+        self,
+        session_id: str,
+        user_id: str,
+        prompt: str,
+        course_id: str,
+        safety: Any,
+    ) -> Dict[str, Any]:
+        """Production path: run the full LLM interaction loop."""
+        import time
+        t0 = time.monotonic()
+
+        llm_result = await self.run_llm_loop(
+            session_id=session_id,
+            user_id=user_id,
+            prompt=prompt,
+            course_id=course_id,
+        )
+
+        content = llm_result.get("content", "")
+        tool_calls = llm_result.get("tool_calls", [])
+        proposals = llm_result.get("proposals", [])
+        token_usage = llm_result.get("token_usage", {})
+        latency_ms = int((time.monotonic() - t0) * 1000)
+
+        # ── Safety: Output guard ──────────────────────────────
+        output_safety = safety.scan_output(content)
+        if not output_safety.allowed:
+            content = output_safety.sanitized_text or content
+
+        return {
+            "role": "assistant",
+            "content": content,
+            "tool_calls": tool_calls,
+            "proposals": proposals,
+            "intent": llm_result.get("intent", "unknown"),
+            "token_usage": token_usage,
+            "latency_ms": latency_ms,
+            "safety_input_warnings": safety.scan_input(prompt).warnings,
+        }
+
+    async def _process_mock(
+        self,
+        session_id: str,
+        user_id: str,
+        prompt: str,
+        course_id: str,
+        safety: Any,
+    ) -> Dict[str, Any]:
+        """Mock path: keyword-based intent parsing, no LLM."""
         tool_calls = []
         proposals = []
 
-        # In mock mode: parse intent and route to tools
         intent = self._parse_intent(prompt)
 
         # Execute tools based on intent
@@ -129,7 +190,6 @@ class ChatOrchestrator:
                     "status": "success",
                     "result": result,
                 })
-                # Collect proposals from propose_* tools
                 if "proposal_id" in result:
                     proposals.append({
                         "proposal_id": result.get("proposal_id"),
@@ -145,10 +205,8 @@ class ChatOrchestrator:
                     "error": str(e),
                 })
 
-        # Build response
         response_content = self._build_response(prompt, intent, tool_calls, proposals)
 
-        # ── Safety: Output guard (US-BKND-AI-025) ──────────────
         output_safety = safety.scan_output(response_content)
         if not output_safety.allowed:
             response_content = output_safety.sanitized_text or response_content
@@ -159,7 +217,7 @@ class ChatOrchestrator:
             "tool_calls": tool_calls,
             "proposals": proposals,
             "intent": intent.get("intent", "unknown"),
-            "safety_input_warnings": safety_result.warnings,
+            "safety_input_warnings": safety.scan_input(prompt).warnings,
         }
 
     def _parse_intent(self, prompt: str) -> Dict[str, Any]:
@@ -471,12 +529,30 @@ class ChatOrchestrator:
 
         # 5. Determine provider
         provider = LLMProvider.MOCK
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        api_key = self.config.anthropic_api_key
         if api_key and self.config.ai_authoring_enabled:
             provider = LLMProvider.ANTHROPIC
 
         client = LLMClient(provider=provider)
         executor = ToolExecutor(self.db)
+
+        # ── Session tracing (US-BKND-AI-TRACE) ──────────────────────
+        from app.services.ai.session_tracer import SessionTracer
+        tracer = SessionTracer(self.db)
+        orchestrator_span = await tracer.start_span(
+            session_id=session_id,
+            trace_type="orchestrator",
+            operation="interaction_loop",
+            input_payload={
+                "prompt": prompt,
+                "course_id": course_id,
+                "model": client.model,
+                "provider": provider.value,
+                "max_tool_rounds": max_tool_rounds,
+                "tool_count": len(tool_defs),
+                "tool_names": [t.name for t in tool_defs],
+            },
+        )
 
         # 6. Run the interaction loop
         tool_calls_log: List[Dict[str, Any]] = []
@@ -490,6 +566,26 @@ class ChatOrchestrator:
         for round_num in range(max_tool_rounds):
             import time
             start = time.time()
+
+            # ── Trace: LLM request ──────────────────────────────────
+            llm_span = await tracer.start_span(
+                session_id=session_id,
+                trace_type="llm_request",
+                operation="chat",
+                parent_span_id=orchestrator_span["span_id"],
+                trace_id=orchestrator_span["trace_id"],
+                input_payload={
+                    "round": round_num + 1,
+                    "message_count": len(messages),
+                    "system_prompt": system_prompt[:500] if system_prompt else None,
+                    "tool_count": len(tool_defs),
+                    "max_tokens": 4096,
+                    "temperature": 0.7,
+                },
+                model=client.model,
+                metadata={"round": round_num + 1},
+            )
+
             response = await client.chat(
                 messages=messages,
                 tools=tool_defs,
@@ -499,6 +595,21 @@ class ChatOrchestrator:
 
             total_input_tokens += response.token_usage.get("input", 0)
             total_output_tokens += response.token_usage.get("output", 0)
+
+            # ── Trace: LLM response ─────────────────────────────────
+            await tracer.end_span(
+                llm_span,
+                output_payload={
+                    "content": (response.content or "")[:1000],
+                    "tool_calls": [
+                        {"name": tc.get("name"), "id": tc.get("id")}
+                        for tc in (response.tool_calls or [])
+                    ],
+                    "stop_reason": response.stop_reason,
+                },
+                token_usage=response.token_usage,
+                latency_ms=response.latency_ms,
+            )
 
             # If the LLM produced text content (final response), we're done
             if response.content and not response.tool_calls:
@@ -517,6 +628,21 @@ class ChatOrchestrator:
                     tool_input = tc.get("input", {})
                     tool_call_id = tc.get("id", f"call_{tool_name}_{round_num}")
 
+                    # ── Trace: tool call start ──────────────────────
+                    tool_span = await tracer.start_span(
+                        session_id=session_id,
+                        trace_type="tool_call",
+                        operation=tool_name,
+                        parent_span_id=orchestrator_span["span_id"],
+                        trace_id=orchestrator_span["trace_id"],
+                        input_payload={
+                            "tool_call_id": tool_call_id,
+                            "params": tool_input,
+                            "round": round_num + 1,
+                        },
+                        metadata={"round": round_num + 1},
+                    )
+
                     # Execute the tool
                     try:
                         exec_result = await executor.execute(
@@ -526,6 +652,17 @@ class ChatOrchestrator:
                         )
                         output = exec_result.get("data", exec_result)
                         is_error = exec_result.get("status") == "error"
+
+                        # ── Trace: tool result ──────────────────────
+                        await tracer.end_span(
+                            tool_span,
+                            output_payload={
+                                "result": output if not is_error else None,
+                                "error": exec_result.get("message") if is_error else None,
+                            },
+                            status="error" if is_error else "success",
+                            error_message=exec_result.get("message") if is_error else None,
+                        )
 
                         tool_calls_log.append({
                             "tool_call_id": tool_call_id,
@@ -549,6 +686,13 @@ class ChatOrchestrator:
                     except Exception as exc:
                         is_error = True
                         output = {"error": str(exc)}
+                        # Trace failed tool execution
+                        await tracer.end_span(
+                            tool_span,
+                            output_payload={"error": str(exc)},
+                            status="error",
+                            error_message=str(exc),
+                        )
                         tool_calls_log.append({
                             "tool_call_id": tool_call_id,
                             "tool_name": tool_name,
@@ -599,6 +743,22 @@ class ChatOrchestrator:
                 "I've performed several actions to help with your request. "
                 "Let me know if you'd like me to refine anything or make additional changes."
             )
+
+        # ── Close orchestrator trace span ─────────────────────────
+        await tracer.end_span(
+            orchestrator_span,
+            output_payload={
+                "final_content": (final_content or "")[:500],
+                "tool_calls_made": len(tool_calls_log),
+                "proposals_created": len(proposals),
+                "loop_rounds": round_num + 1,
+            },
+            token_usage={
+                "input": total_input_tokens,
+                "output": total_output_tokens,
+            },
+            latency_ms=latency_ms,
+        )
 
         return {
             "role": "assistant",

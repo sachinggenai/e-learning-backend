@@ -4,7 +4,7 @@ File upload and ingestion job endpoints for AI document processing.
 """
 
 import logging
-from fastapi import APIRouter, Depends, Request, UploadFile, File, Form
+from fastapi import APIRouter, Body, Depends, Request, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.config import get_session
@@ -118,16 +118,16 @@ from typing import Optional as Opt, List
 
 
 class ProposePageBreakdownRequest(BaseModel):
-    """Request body for propose_page_breakdown."""
+    """Request body for propose_page_breakdown. job_id is in the URL path."""
     session_id: str = Field(..., min_length=1, max_length=128)
-    job_id: str = Field(..., min_length=1, max_length=128)
+    job_id: str = Field(default="", min_length=0, max_length=128)
     max_pages: int = Field(default=50, ge=1, le=100)
 
 
 class ReviewPagePlanRequest(BaseModel):
-    """Request body for review_page_plan."""
+    """Request body for review_page_plan. job_id is in the URL path."""
     session_id: str = Field(..., min_length=1, max_length=128)
-    job_id: str = Field(..., min_length=1, max_length=128)
+    job_id: str = Field(default="", min_length=0, max_length=128)
     approved: bool = Field(default=True)
     modifications: List[dict] = Field(default_factory=list)
 
@@ -144,25 +144,72 @@ async def propose_page_breakdown(
     US-BKND-AI-017: Maps extracted sections to proposed pages with
     suggested template types. For MVP, each section becomes one page.
     The LLM-driven segmentation will be added in US-BKND-AI-023.
+
+    Idempotent: if the job already has a plan (from a prior run), returns
+    the existing plan without regenerating.
     """
     svc = AIIngestionService(db)
     job = await svc.get_job(job_id)
     if job is None:
         return ai_error("NOT_FOUND", f"Ingestion job '{job_id}' not found.", status=404)
-    if job.status != "analyzed":
-        return ai_error("INVALID_STATE",
-            f"Job must be in 'analyzed' state, currently '{job.status}'.", status=400)
 
-    sections = job.extracted_sections or []
-    if not sections:
+    # ── Idempotency: return existing plan if already generated ─────
+    existing_plan = None
+    raw = job.extracted_sections or {}
+    if isinstance(raw, dict) and "plan" in raw:
+        existing_plan = raw["plan"]
+
+    if existing_plan and job.status in ("completed", "plan_approved", "generated", "page_plan_ready"):
+        return {
+            "status": "ok",
+            "job_id": job.job_id,
+            "plan": existing_plan,
+            "total_proposed": len(existing_plan),
+            "source_sections": raw.get("total_sections", len(existing_plan)),
+            "validation": {
+                "valid": True,
+                "coverage": 1.0,
+                "errors": [],
+                "warnings": [],
+            },
+            "idempotent": True,
+            "message": "Returning existing plan (job already processed).",
+        }
+
+    # ── State guard: only allow regeneration from fresh states ─────
+    if job.status not in ("analyzed", "uploaded"):
+        return ai_error(
+            "INVALID_STATE",
+            f"Job must be in 'analyzed' state to propose a breakdown, "
+            f"currently '{job.status}'. Upload a new file to start fresh, "
+            f"or re-process an existing job by re-uploading the source document.",
+            status=400,
+        )
+
+    if not raw:
         return ai_error("NO_CONTENT",
             "No extracted sections found. Upload a document with extractable text.", status=422)
+
+    # Resolve sections: prefer dict format, fall back to list
+    if isinstance(raw, dict) and "plan" in raw:
+        sections = raw["plan"]
+    elif isinstance(raw, list):
+        sections = raw
+    else:
+        return ai_error("NO_CONTENT",
+            "No extracted sections found. Upload a document with extractable text.", status=422)
+
+    if not isinstance(sections, list) or len(sections) == 0:
+        return ai_error("NO_CONTENT",
+            "No valid sections in the extracted content.", status=422)
 
     # Build page plan: each section → one page
     pages = []
     for i, sec in enumerate(sections[:body.max_pages]):
-        heading = sec.get("heading", f"Section {i+1}")
-        content = sec.get("content_preview", "")
+        if not isinstance(sec, dict):
+            continue
+        heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i+1}"
+        content = sec.get("content_preview") or sec.get("content", "")
         char_count = sec.get("char_count", 0)
 
         # Suggest template type based on content hints
@@ -178,13 +225,14 @@ async def propose_page_breakdown(
             "content_preview": content[:200],
         })
 
-    # Store plan on job
+    # Store plan on job and transition state
     job.extracted_sections = {
         "plan": pages,
         "total_sections": len(sections),
         "pages_proposed": len(pages),
         "generated_at": __import__("datetime").datetime.utcnow().isoformat(),
     }
+    job.status = "page_plan_ready"
     await db.commit()
 
     return {
@@ -199,6 +247,7 @@ async def propose_page_breakdown(
             "errors": [],
             "warnings": _build_plan_warnings(sections, pages),
         },
+        "idempotent": False,
     }
 
 
@@ -219,14 +268,33 @@ async def review_page_plan(
     if job is None:
         return ai_error("NOT_FOUND", f"Ingestion job '{job_id}' not found.", status=404)
 
+    # Guard: must be in page_plan_ready (or analyzed for legacy jobs)
+    if job.status not in ("page_plan_ready", "analyzed"):
+        return ai_error(
+            "INVALID_STATE",
+            f"Job must be in 'page_plan_ready' state to review, currently '{job.status}'. "
+            "Run propose-breakdown first to generate a page plan.",
+            status=400,
+        )
+
     if body.approved:
-        # Apply modifications if any
+        # Apply modifications if any — resolve existing plan from either format
         if body.modifications:
-            existing = (job.extracted_sections or {}).get("plan", [])
+            raw = job.extracted_sections or {}
+            if isinstance(raw, dict) and "plan" in raw:
+                existing = raw["plan"]
+                total_sections = raw.get("total_sections", len(existing))
+            elif isinstance(raw, list):
+                existing = raw
+                total_sections = len(raw)
+            else:
+                existing = []
+                total_sections = 0
+
             updated = _apply_plan_modifications(existing, body.modifications)
             job.extracted_sections = {
                 "plan": updated,
-                "total_sections": (job.extracted_sections or {}).get("total_sections", 0),
+                "total_sections": total_sections,
                 "pages_proposed": len(updated),
                 "approved_at": __import__("datetime").datetime.utcnow().isoformat(),
                 "approved": True,
@@ -260,6 +328,13 @@ class GenerateCourseRequest(PydanticBaseModel):
     import_job_id: str = PydanticField(..., min_length=1)
     course_id: str = PydanticField(default="")
     options: dict = PydanticField(default_factory=dict)
+
+
+class ApplyCourseRequest(PydanticBaseModel):
+    idempotency_key: str = PydanticField(
+        default="",
+        description="Optional idempotency key for safe retry. Auto-generated if omitted.",
+    )
 
 
 @router.post("/generate-course")
@@ -309,8 +384,67 @@ async def get_generation_status(
     return {"status": "ok", **result}
 
 
+@router.post("/generate-course/{import_job_id}/apply")
+async def apply_generated_course(
+    import_job_id: str,
+    body: ApplyCourseRequest = Body(default=None),
+    user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """Apply a generated course — creates Course, Pages, and Components (US-BKND-AI-019).
+
+    Commits all generated pages and components to the database in a single
+    transaction. Marks the import job as completed on success.
+
+    Supports idempotency via optional `idempotency_key` in the request body.
+    If omitted, a deterministic key is derived from import_job_id + user_id.
+    """
+    from app.services.ai.course_generator import CourseGenerator, GenerationError
+    from app.services.ai.idempotency_service import IdempotencyService
+
+    # Resolve idempotency key (caller-provided or auto-generated)
+    effective_key = (
+        body.idempotency_key if body and body.idempotency_key
+        else IdempotencyService.generate_key(import_job_id, user.user_id)
+    )
+
+    idem_svc = IdempotencyService(db)
+
+    # 1. Check for cached result
+    cached = await idem_svc.check(effective_key, user.user_id, "")
+    if cached is not None:
+        logger.info("Idempotency hit for apply job %s", import_job_id[:8])
+        return {"status": "ok", "cached": True, **cached}
+
+    # 2. Execute apply
+    try:
+        gen = CourseGenerator(db)
+        result = await gen.apply_generated_course(
+            import_job_id=import_job_id,
+            user_id=user.user_id,
+            organization_id=user.organization_id,
+        )
+    except GenerationError as e:
+        return ai_error(e.code, e.message, status=e.http_status)
+    except Exception:
+        logger.exception("Failed to apply generated course for job %s", import_job_id)
+        return ai_error("SERVER_ERROR",
+            "An unexpected error occurred while applying the course.", status=503)
+
+    # 3. Store idempotency result (first-write-wins)
+    try:
+        await idem_svc.store(effective_key, user.user_id, "", result, status=200)
+    except Exception:
+        logger.warning("Failed to store idempotency key for apply job %s", import_job_id[:8])
+
+    return {"status": "ok", "cached": False, **result}
+
+
 def _suggest_template(heading: str, content: str) -> str:
-    """Suggest a template type based on content analysis."""
+    """Suggest a template type based on content analysis.
+
+    Returns canonical BUILTIN_TEMPLATE_TYPES only.
+    """
     text = (heading + " " + content).lower()
     if any(w in text for w in ["quiz", "assessment", "test", "question", "score"]):
         return "final-assessment"
@@ -319,8 +453,8 @@ def _suggest_template(heading: str, content: str) -> str:
     if any(w in text for w in ["faq", "question", "answer", "accordion"]):
         return "accordion"
     if any(w in text for w in ["click", "reveal", "discover", "explore"]):
-        return "click-reveal"
-    return "text-content"
+        return "accordion"  # click-reveal → accordion (canonical)
+    return "content-text"   # was "text-content"
 
 
 def _build_plan_warnings(sections: list, pages: list) -> list:

@@ -31,6 +31,40 @@ BUILTIN_TEMPLATE_TYPES = [
     "video",             # Alias for content-video
     "quiz",              # Alias for mcq
 ]
+
+# Type normalization: map AI-generated / legacy types → canonical BUILTIN_TEMPLATE_TYPES.
+# Single source of truth for all downstream consumers (assembler, export, SCORM).
+TYPE_NORMALIZATION: dict[str, str] = {
+    # AI-generated → canonical
+    "text-content": "content-text",
+    "text-with-media": "content-text",
+    "content-media": "content-text",
+    "content-audio": "content-text",
+    "content-image": "content-text",
+    "click-reveal": "accordion",
+    "interactive": "content-text",
+    "video": "content-video",
+    "quiz": "mcq",
+    # Canonical types (identity, for safe pass-through)
+    "content-text": "content-text",
+    "accordion": "accordion",
+    "tabs": "tabs",
+    "final-assessment": "final-assessment",
+    "content-video": "content-video",
+    "mcq": "mcq",
+    "welcome": "welcome",
+    "summary": "summary",
+}
+
+
+def normalize_template_type(template_type: str) -> str:
+    """Map type alias to its canonical BUILTIN_TEMPLATE_TYPE.
+
+    Unknown types are returned as-is for forward compatibility.
+    """
+    return TYPE_NORMALIZATION.get(template_type, template_type)
+
+
 # Allow any string for dynamic types loaded from DB
 TemplateType = str  # Changed from Literal for hybrid enum/DB support
 AssetType = Literal["video", "image", "audio", "document", "other"]

@@ -85,18 +85,18 @@ async def main():
     print("\n=== Component Type Mapping ===")
 
     # 7. Template-to-component mapping
-    check("text-content mapped", TEMPLATE_TO_COMPONENT["text-content"] == "text-content")
+    check("text-content aliased to content-text", TEMPLATE_TO_COMPONENT["text-content"] == "content-text")
     check("accordion mapped", TEMPLATE_TO_COMPONENT["accordion"] == "accordion")
     check("tabs mapped", TEMPLATE_TO_COMPONENT["tabs"] == "tabs")
-    check("click-reveal mapped", TEMPLATE_TO_COMPONENT["click-reveal"] == "click-reveal")
+    check("click-reveal aliased to accordion", TEMPLATE_TO_COMPONENT["click-reveal"] == "accordion")
     check("final-assessment mapped", TEMPLATE_TO_COMPONENT["final-assessment"] == "final-assessment")
 
     # 8. Valid component types set
-    check("has 5 types", len(VALID_COMPONENT_TYPES) == 5)
+    check("has 6 accepted types (canonical + legacy)", len(VALID_COMPONENT_TYPES) == 6)
 
     # 9. _map_component_type with valid type
     result = assembler._map_component_type("text-content")
-    check("maps valid type", result == "text-content")
+    check("maps legacy to canonical", result == "content-text")
 
     # 10. _map_component_type with invalid type raises
     try:
