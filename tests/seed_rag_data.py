@@ -1,6 +1,14 @@
-"""Seed courses + pages from template types, then populate embeddings via worker.
+"""Seed courses + pages from template types, then populate embeddings.
+
+Creates 10 diverse courses with realistic titles, descriptions, and pages,
+then generates embeddings for each course using the configured provider.
+
+Supports both mock (deterministic) and OpenAI embeddings.
+Idempotent — safe to run multiple times.
 
 Run: PYTHONPATH=. python tests/seed_rag_data.py
+
+Phase 0.9: Enhanced from 7 to 10 courses with embedding generation.
 """
 from __future__ import annotations
 import asyncio, os, sys
@@ -28,6 +36,13 @@ COURSES = [
      "description": "Expandable accordion-based course covering HTML, CSS, JavaScript, React, Node.js, and databases. Each section expands into detailed lessons with code examples and interactive exercises."},
     {"course_id": "COURSE-MIXED-001", "title": "Machine Learning Engineering Fundamentals",
      "description": "Mixed-format course with text content, quizzes, video tutorials, and tabbed reference guides. Covers supervised learning, unsupervised learning, neural networks, MLOps, and model deployment strategies."},
+    # ── New courses (Phase 0.9) ──────────────────────────────
+    {"course_id": "COURSE-SEC-001", "title": "Cybersecurity Awareness Training",
+     "description": "Enterprise security awareness course covering phishing detection, password hygiene, social engineering defense, data protection regulations, and incident response procedures. Includes scenario-based assessments and compliance tracking."},
+    {"course_id": "COURSE-LEAD-001", "title": "Leadership and Management Essentials",
+     "description": "Professional development course on leadership styles, team motivation, conflict resolution, strategic planning, and performance management. Features case studies, self-assessments, and interactive scenario exercises."},
+    {"course_id": "COURSE-DESIGN-001", "title": "UI/UX Design Principles and Practices",
+     "description": "Comprehensive design course covering user research methods, wireframing, prototyping, visual design principles, accessibility standards, and usability testing. Includes Figma tutorials and portfolio project assessments."},
 ]
 
 PAGES = [
@@ -51,6 +66,16 @@ PAGES = [
     (6, "Supervised Learning Algorithms", "text-content", "Linear regression, logistic regression, decision trees, random forests, and SVMs with scikit-learn examples."),
     (6, "Neural Networks and Deep Learning", "tabs", "Feedforward networks, CNNs, RNNs, Transformers — each tab with architecture diagrams and PyTorch code."),
     (6, "MLOps and Deployment", "accordion", "Model versioning, CI/CD pipelines, containerization, monitoring, and A/B testing for ML systems."),
+    # ── New pages for courses 7-9 (Phase 0.9) ──────────────
+    (7, "Phishing Awareness", "text-content", "Identify phishing emails, malicious links, social engineering techniques, and reporting procedures."),
+    (7, "Password Security Best Practices", "accordion", "Password managers, 2FA setup, passphrase creation, and credential management policies."),
+    (7, "Security Compliance Quiz", "quiz", "Assessment on data protection regulations, security policies, and incident response procedures."),
+    (8, "Leadership Styles and Approaches", "tabs", "Autocratic, democratic, transformational, servant, and situational leadership — each tab with case studies."),
+    (8, "Conflict Resolution Workshop", "click-reveal", "Interactive scenarios for mediating team conflicts, negotiation techniques, and win-win outcomes."),
+    (8, "Strategic Planning Assessment", "quiz", "Quiz on SWOT analysis, OKR setting, stakeholder management, and performance metrics."),
+    (9, "User Research Fundamentals", "text-content", "Interview techniques, survey design, persona creation, journey mapping, and usability heuristics."),
+    (9, "Wireframing and Prototyping", "tabs", "Low-fidelity sketches, interactive prototypes, Figma workflows, and design system components."),
+    (9, "Accessibility Standards", "accordion", "WCAG 2.1 guidelines, screen reader testing, color contrast requirements, and inclusive design patterns."),
 ]
 
 
@@ -92,9 +117,65 @@ async def seed():
         await session.commit()
         print(f"  Pages: {page_count} created across {len(COURSES)} courses")
 
+    # ── Generate embeddings (Phase 0.9) ──────────────────
+    print("\n── Generating embeddings for all courses ──")
+    from app.repositories.similar_course_repo import SimilarCourseRepository
+    from app.services.ai.embedding_provider import get_embedding_provider
+    import hashlib
+
+    provider = get_embedding_provider()
+    provider_type = type(provider).__name__
+    print(f"  Embedding provider: {provider_type}")
+
+    async with SessionLocal() as session:
+        repo = SimilarCourseRepository(session)
+        embedded = 0
+
+        for c in COURSES:
+            # Get the course record PK
+            from sqlalchemy import select as sa_select
+            result = await session.execute(
+                sa_select(CourseRecord).where(CourseRecord.course_id == c["course_id"])
+            )
+            record = result.scalar_one_or_none()
+            if record is None:
+                print(f"  SKIP (no record): {c['course_id']}")
+                continue
+
+            # Build text for embedding
+            course_text = f"{c['title']}. {c['description']}"
+            # Append page titles for richer embedding
+            course_pages = [p for p in PAGES if p[0] == COURSES.index(c)]
+            for _, ptitle, ptype, pexcerpt in course_pages[:5]:  # Max 5 pages
+                course_text += f" {ptitle}: {pexcerpt}"
+
+            content_hash = hashlib.sha256(course_text.encode()).hexdigest()
+
+            try:
+                vector = await provider.embed(course_text)
+                await repo.upsert_embedding(
+                    course_record_id=record.id,  # Integer PK
+                    organization_id="default",
+                    embedding=vector,
+                    content_hash=content_hash,
+                    embedding_model=(
+                        provider._model
+                        if hasattr(provider, '_model')
+                        else os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
+                    ),
+                )
+                embedded += 1
+                dim_info = f"{len(vector)}d" if hasattr(vector, '__len__') else "?"
+                print(f"  EMBEDDED: {c['course_id']} ({dim_info}) — {c['title'][:50]}")
+            except Exception as exc:
+                print(f"  FAILED: {c['course_id']} — {exc}")
+
+        await session.commit()
+        print(f"  Embeddings: {embedded}/{len(COURSES)} courses embedded")
+
     print("\n═══ SEED COMPLETE ═══")
-    print(f"  {created} courses, {page_count} pages")
-    print(f"  Run embedding worker: PYTHONPATH=. python -c \"from app.workers.embedding_worker import EmbeddingWorker; import asyncio; asyncio.run(EmbeddingWorker().start())\"")
+    print(f"  {created} courses, {page_count} pages, {embedded} embeddings")
+    print(f"  Total RAG dataset: {len(COURSES)} courses ready for similarity search")
 
 
 if __name__ == "__main__":

@@ -155,16 +155,38 @@ def get_embedding_provider() -> EmbeddingProvider:
 
     Controlled by EMBEDDING_PROVIDER env var:
         "openai" → OpenAIBackend (requires OPENAI_API_KEY)
-        "mock" or unset → MockEmbeddingProvider (deterministic, zero-cost)
+        "mock" → MockEmbeddingProvider (deterministic, zero-cost, dev only)
+
+    Default behaviour (when EMBEDDING_PROVIDER is unset):
+        - production → "openai" (requires OPENAI_API_KEY)
+        - development → "mock"
+
+    Graceful degradation: if OpenAI is configured but the API key is missing,
+    falls back to MockEmbeddingProvider with a warning.
     """
     global _embedding_provider
     if _embedding_provider is not None:
         return _embedding_provider
 
-    provider_name = os.getenv("EMBEDDING_PROVIDER", "mock").lower()
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    provider_name = os.getenv("EMBEDDING_PROVIDER", "").lower()
+
+    # Auto-detect: prefer OpenAI in production
+    if not provider_name:
+        provider_name = "openai" if env == "production" else "mock"
+
     if provider_name == "openai":
-        _embedding_provider = OpenAIBackend()
-        logger.info("Embedding provider: OpenAI (%s)", _embedding_provider._model)
+        try:
+            _embedding_provider = OpenAIBackend()
+            logger.info("Embedding provider: OpenAI (%s)", _embedding_provider._model)
+        except EmbeddingError:
+            if env == "production":
+                raise  # Can't degrade in production
+            logger.warning(
+                "OpenAI embeddings configured but unavailable. "
+                "Falling back to MockEmbeddingProvider for development."
+            )
+            _embedding_provider = MockEmbeddingProvider()
     else:
         _embedding_provider = MockEmbeddingProvider()
         logger.info(

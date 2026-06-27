@@ -4,7 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import List
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Response as FastAPIResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -171,6 +171,33 @@ async def lifespan(application: FastAPI):
             logger.exception(
                 "Error loading AI configuration — AI features will be unavailable"
             )
+
+        # ── OpenTelemetry (Phase 0.3) ──────────────────
+        try:
+            from app.services.ai.otel_tracer import init_otel
+            _otel_ok = init_otel(app)
+            if _otel_ok:
+                logger.info("OpenTelemetry INITIALISED")
+            else:
+                logger.info("OpenTelemetry DISABLED or unavailable")
+        except Exception:
+            logger.exception("OpenTelemetry init failed — traces unavailable")
+
+        # ── Prometheus Metrics (Phase 0.4) ─────────────
+        try:
+            from app.monitoring.metrics import set_ai_info, is_available as _metrics_ok
+            if _metrics_ok():
+                set_ai_info(
+                    status=ai_cfg.ai_status.value,
+                    primary_model=ai_cfg.primary_model_id,
+                    environment=ai_cfg.environment,
+                )
+                logger.info("Prometheus metrics ENABLED")
+            else:
+                logger.info("Prometheus metrics DISABLED (prometheus_client not installed)")
+        except Exception:
+            logger.exception("Prometheus metrics init failed — /metrics unavailable")
+
     except Exception:
         logger.exception("Error during startup seeding — continuing anyway")
 
@@ -343,3 +370,19 @@ app.openapi = custom_openapi
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "eLearning backend is running"}
+
+
+# ── Prometheus Metrics Endpoint (Phase 0.4) ─────────────────────────
+@app.get("/metrics")
+async def metrics():
+    """Prometheus text-format metrics endpoint.
+
+    Provides RED metrics for AI operations: Rate, Errors, Duration.
+    Scraped by Prometheus → Grafana dashboards.
+    Graceful when prometheus_client is not installed.
+    """
+    from app.monitoring.metrics import get_metrics_response
+    return FastAPIResponse(
+        content=get_metrics_response(),
+        media_type="text/plain; version=0.0.4",
+    )

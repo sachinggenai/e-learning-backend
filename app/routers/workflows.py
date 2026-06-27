@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -370,4 +371,96 @@ async def list_workflows(
             )
             for j in jobs
         ],
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SSE Streaming Endpoint (Phase 1.5)
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/{job_id}/stream")
+async def stream_workflow_progress(
+    job_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    """Stream real-time workflow progress via Server-Sent Events (Phase 1.5).
+
+    Replaces polling (GET /{job_id} in a loop) with push-based progress updates.
+    Client keeps the SSE connection open and receives events as the job progresses.
+
+    Events emitted:
+        - progress: {state, progress_pct, message}
+        - checkpoint: {state, checkpoint_summary}
+        - complete: {result}
+        - error: {code, message}
+        - heartbeat: {timestamp} (every 15s, keeps connection alive)
+
+    The connection closes when the job reaches a terminal state (completed,
+    failed, cancelled) or the client disconnects.
+    """
+    import asyncio
+    import json as _json
+    from datetime import timezone
+
+    async def event_generator():
+        last_progress = -1
+        heartbeat_count = 0
+
+        while True:
+            repo = WorkflowRepository(session)
+            job = await repo.get_job(job_id)
+            if job is None:
+                yield f"event: error\ndata: {_json.dumps({'code': 'NOT_FOUND', 'message': f'Job {job_id} not found'})}\n\n"
+                return
+
+            current_progress = int(job.progress * 100)
+
+            # Emit progress events when progress changes
+            if current_progress != last_progress:
+                last_progress = current_progress
+                state_label = job.current_state or "initialising"
+                msg_text = f"Phase: {state_label} ({current_progress}%)"
+                yield (
+                    f"event: progress\n"
+                    f"data: {_json.dumps({'state': job.current_state, 'progress_pct': current_progress, 'status': job.status, 'message': msg_text})}\n\n"
+                )
+
+            # Emit heartbeat every ~15s (every ~15 iterations at 1s poll)
+            heartbeat_count += 1
+            if heartbeat_count % 15 == 0:
+                yield (
+                    f"event: heartbeat\n"
+                    f"data: {_json.dumps({'timestamp': __import__('datetime').datetime.now(timezone.utc).isoformat()})}\n\n"
+                )
+
+            # Check terminal states
+            if job.status in ("completed", "failed", "cancelled"):
+                if job.status == "completed":
+                    yield (
+                        f"event: complete\n"
+                        f"data: {_json.dumps({'result': job.result or {}, 'job_id': str(job_id)})}\n\n"
+                    )
+                elif job.status == "failed":
+                    yield (
+                        f"event: error\n"
+                        f"data: {_json.dumps({'code': 'JOB_FAILED', 'message': str(job.error.get('message', 'Unknown error')) if job.error else 'Job failed', 'job_id': str(job_id)})}\n\n"
+                    )
+                elif job.status == "cancelled":
+                    yield (
+                        f"event: error\n"
+                        f"data: {_json.dumps({'code': 'JOB_CANCELLED', 'message': 'Job was cancelled', 'job_id': str(job_id)})}\n\n"
+                    )
+                return
+
+            await asyncio.sleep(1.0)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "Access-Control-Allow-Origin": "*",
+        },
     )

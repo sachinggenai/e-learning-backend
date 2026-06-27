@@ -163,41 +163,62 @@ class SimilarCourseService:
         )
 
         # Tier 1: Vector search
+        from app.services.ai.otel_tracer import (
+            trace_db_operation, set_span_status, record_span_exception,
+        )
         t0 = time.perf_counter()
+        tier1_span = trace_db_operation("search_vector", "course_embeddings")
         try:
             embedding = await self.embedding_provider.embed(query)
             raw_results = await self.retrieval_repo.search_vector(
                 embedding, organization_id, max_results
             )
+            set_span_status(tier1_span, True)
+            tier1_span.set_attribute("db.result_count", len(raw_results))
         except Exception as exc:
             logger.info("Tier-1 unavailable (degrading): %s", exc)
+            record_span_exception(tier1_span, exc)
             raw_results = []
+        finally:
+            tier1_span.end()
         tier1_ms = (time.perf_counter() - t0) * 1000
 
         # Tier 2: Full-text search
         if not raw_results:
             tier_used = "tier2"
             t0 = time.perf_counter()
+            tier2_span = trace_db_operation("search_fulltext", "course_embeddings")
             try:
                 raw_results = await self.retrieval_repo.search_fulltext(
                     query, organization_id, max_results
                 )
+                set_span_status(tier2_span, True)
+                tier2_span.set_attribute("db.result_count", len(raw_results))
             except Exception as exc:
                 logger.warning("Tier-2 failed (degrading): %s", exc)
+                record_span_exception(tier2_span, exc)
                 raw_results = []
+            finally:
+                tier2_span.end()
             tier2_ms = (time.perf_counter() - t0) * 1000
 
         # Tier 3: Keyword search
         if not raw_results:
             tier_used = "tier3"
             t0 = time.perf_counter()
+            tier3_span = trace_db_operation("search_keyword", "course_embeddings")
             try:
                 raw_results = await self.retrieval_repo.search_keyword(
                     query, organization_id, max_results
                 )
+                set_span_status(tier3_span, True)
+                tier3_span.set_attribute("db.result_count", len(raw_results))
             except Exception as exc:
                 logger.error("Tier-3 failed — all tiers exhausted: %s", exc)
+                record_span_exception(tier3_span, exc)
                 raw_results = []
+            finally:
+                tier3_span.end()
             tier3_ms = (time.perf_counter() - t0) * 1000
 
         # ── 3a. Audit: log retrieval event with per-tier metrics ──
@@ -250,7 +271,15 @@ class SimilarCourseService:
             return self._empty_result("No similar courses found.", tier_used)
 
         # ── 5. Enrich ───────────────────────────────────────
-        enriched = await self.retrieval_repo.enrich_results(raw_results, query)
+        enrich_span = trace_db_operation("enrich_results", "course_embeddings")
+        try:
+            enriched = await self.retrieval_repo.enrich_results(raw_results, query)
+            set_span_status(enrich_span, True)
+        except Exception as exc:
+            record_span_exception(enrich_span, exc)
+            enriched = raw_results  # Un-enriched results as fallback
+        finally:
+            enrich_span.end()
 
         # ── 6. Post-filter ──────────────────────────────────
         if filters:

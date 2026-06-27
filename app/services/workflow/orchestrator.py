@@ -547,6 +547,46 @@ class WorkflowOrchestrator:
                 "Failed to publish completion event for job %s", job.job_id
             )
 
+    # ── LangGraph Fallback (Phase 2.9) ──────────────────────────
+
+    def is_langgraph_available(self) -> bool:
+        """Check if LangGraph is installed.
+
+        When LangGraph is unavailable, the orchestrator automatically
+        handles course generation sequentially (the existing behaviour).
+        """
+        try:
+            from app.services.ai.langgraph.course_generation_graph import is_langgraph_available
+            return is_langgraph_available()
+        except ImportError:
+            return False
+
+    async def degrade_to_sequential(
+        self, job: WorkflowJob, reason: str = ""
+    ) -> None:
+        """Degrade from LangGraph to sequential execution mode.
+
+        Called when LangGraph fails or is unavailable. This ensures
+        course generation continues via the durable workflow engine
+        even without LangGraph.
+
+        This is the existing behaviour — this method is a formal
+        documentation of the fallback path.
+        """
+        logger.info(
+            "Degrading job %s to sequential mode (reason: %s)",
+            job.job_id, reason or "LangGraph unavailable",
+        )
+        async with SessionLocal() as session:
+            repo = WorkflowRepository(session)
+            await repo.append_event(
+                job.job_id,
+                job.current_state,
+                "degraded_to_sequential",
+                {"reason": reason or "LangGraph unavailable"},
+            )
+        # The job continues via the normal poll loop / state machine
+
     async def _fire_webhook(self, job: WorkflowJob, status: str) -> None:
         """POST job completion/failure to the configured webhook URL."""
         import httpx

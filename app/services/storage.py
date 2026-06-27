@@ -9,7 +9,9 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO, Optional, Dict, Any
 import logging
+import os
 from dataclasses import dataclass
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +254,253 @@ class LocalFileSystemStorage(AbstractStorage):
             return []
 
 
-# Default storage instance
+# ── S3 / MinIO Storage Backend ──────────────────────────────────────────
+
+class S3Storage(AbstractStorage):
+    """S3-compatible storage backend (MinIO, AWS S3, etc.).
+
+    Configure via environment:
+        STORAGE_BACKEND=s3
+        S3_ENDPOINT=http://localhost:9000      # MinIO endpoint
+        S3_ACCESS_KEY=minioadmin               # Access key
+        S3_SECRET_KEY=minioadmin               # Secret key
+        S3_BUCKET=elearning-assets             # Bucket name
+        S3_REGION=us-east-1                    # Region
+        S3_SECURE=0                            # Use HTTPS? (0 or 1)
+
+    Graceful degradation: if the S3 client cannot connect, falls back
+    to LocalFileSystemStorage automatically.
+    """
+
+    def __init__(
+        self,
+        endpoint: Optional[str] = None,
+        access_key: Optional[str] = None,
+        secret_key: Optional[str] = None,
+        bucket: Optional[str] = None,
+        region: Optional[str] = None,
+        secure: Optional[bool] = None,
+    ):
+        self._endpoint = endpoint or os.getenv("S3_ENDPOINT", "http://localhost:9000")
+        self._access_key = access_key or os.getenv("S3_ACCESS_KEY", "minioadmin")
+        self._secret_key = secret_key or os.getenv("S3_SECRET_KEY", "minioadmin")
+        self._bucket_name = bucket or os.getenv("S3_BUCKET", "elearning-assets")
+        self._region = region or os.getenv("S3_REGION", "us-east-1")
+        self._secure = secure if secure is not None else os.getenv("S3_SECURE", "0") == "1"
+        self._client = None
+        self._bucket_exists = False
+
+    @property
+    def bucket(self) -> str:
+        return self._bucket_name
+
+    def _get_client(self):
+        """Lazy-init the aiobotocore S3 client."""
+        if self._client is not None:
+            return self._client
+        try:
+            import aiobotocore.session
+            session = aiobotocore.session.AioSession()
+            self._client = session.create_client(
+                "s3",
+                endpoint_url=self._endpoint,
+                aws_access_key_id=self._access_key,
+                aws_secret_access_key=self._secret_key,
+                region_name=self._region,
+                use_ssl=self._secure,
+            )
+        except ImportError:
+            raise ImportError(
+                "aiobotocore package not installed. "
+                "Run: pip install aiobotocore"
+            )
+        except Exception as exc:
+            logger.error("S3 client init failed: %s", exc)
+            raise
+        return self._client
+
+    async def _ensure_bucket(self):
+        """Create bucket if it doesn't exist (idempotent)."""
+        if self._bucket_exists:
+            return
+        client = self._get_client()
+        async with client as s3:
+            try:
+                await s3.head_bucket(Bucket=self._bucket_name)
+                self._bucket_exists = True
+            except Exception:
+                await s3.create_bucket(Bucket=self._bucket_name)
+                self._bucket_exists = True
+                logger.info("S3 bucket '%s' created", self._bucket_name)
+
+    @staticmethod
+    def _sanitise_key(filename: str) -> str:
+        """Generate a unique object key from a filename."""
+        import uuid
+        ext = Path(filename).suffix
+        return f"uploads/{uuid.uuid4().hex}{ext}"
+
+    # ── AbstractStorage implementation ──────────────────────────
+
+    async def save_file(
+        self,
+        file_data: BinaryIO,
+        filename: str,
+        content_type: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> StorageResult:
+        """Save file to S3/MinIO bucket."""
+        try:
+            await self._ensure_bucket()
+            client = self._get_client()
+            key = self._sanitise_key(filename)
+
+            content = file_data.read()
+            file_size = len(content)
+
+            extra_args: Dict[str, str] = {}
+            if content_type:
+                extra_args["ContentType"] = content_type
+            if metadata:
+                for mk, mv in metadata.items():
+                    extra_args[f"x-amz-meta-{mk}"] = str(mv)
+
+            async with client as s3:
+                await s3.put_object(
+                    Bucket=self._bucket_name,
+                    Key=key,
+                    Body=content,
+                    **extra_args,
+                )
+
+            file_url = f"{self._endpoint}/{self._bucket_name}/{key}"
+
+            return StorageResult(
+                success=True,
+                file_path=key,
+                file_url=file_url,
+                metadata={
+                    "original_filename": filename,
+                    "content_type": content_type,
+                    "size": file_size,
+                    "storage_backend": "s3",
+                    "bucket": self._bucket_name,
+                    **(metadata or {}),
+                },
+            )
+        except Exception as exc:
+            logger.error("S3 save_file failed for %s: %s", filename, exc)
+            return StorageResult(success=False, error_message=str(exc))
+
+    async def get_file(self, file_path: str) -> Optional[FileInfo]:
+        """Get file metadata from S3."""
+        try:
+            client = self._get_client()
+            async with client as s3:
+                resp = await s3.head_object(
+                    Bucket=self._bucket_name,
+                    Key=file_path,
+                )
+                file_url = f"{self._endpoint}/{self._bucket_name}/{file_path}"
+                return FileInfo(
+                    path=file_path,
+                    url=file_url,
+                    size=int(resp.get("ContentLength", 0)),
+                    mime_type=resp.get("ContentType"),
+                    metadata={
+                        k.replace("x-amz-meta-", ""): v
+                        for k, v in resp.get("Metadata", {}).items()
+                    },
+                )
+        except Exception as exc:
+            logger.error("S3 get_file failed for %s: %s", file_path, exc)
+            return None
+
+    async def delete_file(self, file_path: str) -> bool:
+        """Delete file from S3 bucket."""
+        try:
+            client = self._get_client()
+            async with client as s3:
+                await s3.delete_object(
+                    Bucket=self._bucket_name,
+                    Key=file_path,
+                )
+            return True
+        except Exception as exc:
+            logger.error("S3 delete_file failed for %s: %s", file_path, exc)
+            return False
+
+    async def file_exists(self, file_path: str) -> bool:
+        """Check if file exists in S3."""
+        try:
+            client = self._get_client()
+            async with client as s3:
+                await s3.head_object(
+                    Bucket=self._bucket_name,
+                    Key=file_path,
+                )
+            return True
+        except Exception:
+            return False
+
+    async def list_files(self, prefix: Optional[str] = None) -> list[FileInfo]:
+        """List files in S3 bucket with optional prefix."""
+        try:
+            client = self._get_client()
+            async with client as s3:
+                list_kwargs = {"Bucket": self._bucket_name}
+                if prefix:
+                    list_kwargs["Prefix"] = prefix
+                resp = await s3.list_objects_v2(**list_kwargs)
+
+            files: list[FileInfo] = []
+            for obj in resp.get("Contents", []):
+                key = obj.get("Key", "")
+                file_url = f"{self._endpoint}/{self._bucket_name}/{key}"
+                files.append(FileInfo(
+                    path=key,
+                    url=file_url,
+                    size=obj.get("Size"),
+                    mime_type=None,  # Can be fetched via head_object if needed
+                ))
+            return files
+        except Exception as exc:
+            logger.error("S3 list_files failed: %s", exc)
+            return []
+
+
+# ── Storage factory ────────────────────────────────────────────────────
+
+def get_storage() -> AbstractStorage:
+    """Return the configured storage backend.
+
+    Controlled by STORAGE_BACKEND env var:
+        "s3" or "minio" → S3Storage (MinIO or AWS S3)
+        "local" or unset → LocalFileSystemStorage
+
+    Graceful degradation: if S3 is configured but fails to initialise,
+    falls back to local storage with a warning.
+    """
+    backend = os.getenv("STORAGE_BACKEND", "local").lower()
+
+    if backend in ("s3", "minio"):
+        try:
+            s3_storage = S3Storage()
+            logger.info("Storage backend: S3 (endpoint=%s, bucket=%s)",
+                        s3_storage._endpoint, s3_storage._bucket_name)
+            return s3_storage
+        except Exception as exc:
+            logger.warning(
+                "S3 storage configured but unavailable (%s). "
+                "Falling back to local filesystem storage.",
+                exc,
+            )
+
+    logger.info("Storage backend: Local filesystem (base_path=uploads)")
+    return LocalFileSystemStorage()
+
+
+# Default storage instance (lazy — use get_storage() for most cases)
 default_storage = LocalFileSystemStorage()
 
 

@@ -440,6 +440,59 @@ async def apply_generated_course(
     return {"status": "ok", "cached": False, **result}
 
 
+# ── Phase 1.4: Parallel Generation Endpoint ─────────────────────────
+
+class ParallelGenerateRequest(PydanticBaseModel):
+    import_job_id: str = PydanticField(..., min_length=1)
+    course_id: str = PydanticField(default="")
+    concurrency: int = PydanticField(default=3, ge=1, le=10)
+    options: dict = PydanticField(default_factory=dict)
+
+
+@router.post("/generate-course/parallel")
+async def generate_course_parallel(
+    body: ParallelGenerateRequest,
+    user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """Generate a full course using parallel page generation (Phase 1.4).
+
+    Uses Redis Streams for fan-out when Redis is available, or asyncio.gather
+    with semaphore as fallback. N pages generate concurrently (configurable
+    via concurrency parameter or AI_GENERATION_CONCURRENCY env var).
+
+    Returns immediately with the result — generation is synchronous in the
+    HTTP request (typically 1-2 min for a 30-page course vs 8-15 min sequential).
+    For truly async execution, use the workflow endpoints.
+    """
+    from app.services.ai.course_generator import CourseGenerator, GenerationError
+    from app.services.ai.fanout import StreamManager
+
+    logger.info(
+        "Parallel generation requested: job=%s user=%s concurrency=%d",
+        body.import_job_id, user.user_id, body.concurrency,
+    )
+
+    # Override concurrency for this run
+    import os as _os
+    _os.environ["AI_GENERATION_CONCURRENCY"] = str(body.concurrency)
+
+    try:
+        gen = CourseGenerator(db, use_llm=True)
+        result = await gen.start_generation(
+            import_job_id=body.import_job_id,
+            session_id="",
+            user_id=user.user_id,
+            organization_id=user.organization_id,
+            course_id=body.course_id,
+            options={"job_id": body.import_job_id, **body.options},
+        )
+    except GenerationError as e:
+        return ai_error(e.code, e.message, status=e.http_status)
+
+    return {"status": "ok", "mode": "parallel", "concurrency": body.concurrency, **result}
+
+
 def _suggest_template(heading: str, content: str) -> str:
     """Suggest a template type based on content analysis.
 

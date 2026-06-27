@@ -57,9 +57,25 @@ class CourseGenerator:
 
     DEFAULT_RETRY_COUNT = 2
 
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+        use_llm: Optional[bool] = None,
+        llm_client: Any = None,
+    ):
         self.db = db
         self.retry_count = self.DEFAULT_RETRY_COUNT
+        # Auto-detect: use LLM when AI is configured and enabled
+        if use_llm is None:
+            from app.services.ai.config import get_ai_config
+            cfg = get_ai_config()
+            use_llm = bool(
+                cfg.ai_authoring_enabled
+                and cfg.anthropic_api_key
+                and cfg.ai_status.value in ("configured",)
+            )
+        self.use_llm = use_llm
+        self._llm_client = llm_client
 
     # ------------------------------------------------------------------
     # Phase 0: Initiate Generation
@@ -373,12 +389,113 @@ class CourseGenerator:
     ) -> List[Dict[str, Any]]:
         """Generate content for each page in the plan.
 
-        In mock mode, generates template-appropriate placeholder content.
+        When use_llm=True and LLM client is available, uses AGT-07 Content Generator
+        for AI-powered content generation (G-07 fix).
+        Otherwise falls back to mock placeholder content.
         """
+        if self.use_llm:
+            try:
+                return await self._generate_pages_with_llm(pages, options)
+            except Exception as exc:
+                logger.warning(
+                    "LLM generation failed (%s) — falling back to mock generation", exc
+                )
+
+        # Mock fallback (original behaviour)
         generated = []
         for i, page in enumerate(pages):
             content = self._generate_page_content(page, options, i)
             generated.append(content)
+        return generated
+
+    async def _generate_pages_with_llm(
+        self, pages: List[Dict[str, Any]], options: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Generate pages using AGT-07 Content Generator Agent via LLM.
+
+        Uses the StreamManager for parallel generation when Redis is available,
+        or asyncio.gather with semaphore as fallback.
+        """
+        from app.services.ai.agents.content_generator_agent import ContentGeneratorAgent
+        from app.services.ai.fanout import StreamManager
+        from app.services.ai.config import get_ai_config
+        from app.services.ai.llm_client import LLMClient, LLMProvider
+
+        cfg = get_ai_config()
+        llm_client = self._llm_client
+        if llm_client is None:
+            provider = LLMProvider.ANTHROPIC if cfg.anthropic_api_key else LLMProvider.MOCK
+            llm_client = LLMClient(provider=provider)
+
+        # Get JSON repair instance
+        json_repair = None
+        try:
+            from app.services.ai.json_repair import JSONRepair
+            json_repair = JSONRepair()
+        except Exception:
+            pass
+
+        agent = ContentGeneratorAgent(
+            llm_client=llm_client,
+            json_repair=json_repair,
+            max_retries=3,
+        )
+
+        # Build template assignments from page plans
+        templates = []
+        for page in pages:
+            ttype = page.get("template_type", "content-text")
+            templates.append({
+                "template_type": ttype,
+                "confidence": 0.85,
+                "method": "plan",
+                "reasoning": f"Assigned from page plan: {ttype}",
+            })
+
+        # Course context from options
+        course_context = {
+            "title": options.get("course_title", "Generated Course"),
+            "description": options.get("description", ""),
+            "audience": options.get("audience", "adult learners"),
+            "tone": options.get("tone", "professional"),
+        }
+
+        # Use StreamManager for parallel generation
+        stream_mgr = StreamManager()
+        result = await stream_mgr.fan_out_pages(
+            job_id=options.get("job_id", f"gen-{id(pages)}"),
+            pages=pages,
+            templates=templates,
+            rag_context=options.get("rag_context", []),
+            course_context=course_context,
+            generate_func=agent.generate_page,
+        )
+
+        logger.info(
+            "LLM generation complete: %d pages, backend=%s, %.0fms, "
+            "%d success, %d fallback, %d error",
+            len(result.pages), result.backend, result.total_duration_ms,
+            sum(1 for p in result.pages if p.status == "success"),
+            sum(1 for p in result.pages if p.status == "fallback"),
+            sum(1 for p in result.pages if p.status == "error"),
+        )
+
+        # Convert PageResults to dict format
+        generated = []
+        for pr in result.pages:
+            if pr.status in ("success", "fallback") and pr.data:
+                generated.append(pr.data)
+            else:
+                # Failed page — use mock fallback
+                idx = pr.page_index
+                mock = self._generate_page_content(pages[idx], options, idx)
+                mock["generation_metadata"] = {
+                    "fallback": True,
+                    "reason": pr.error or "LLM generation failed",
+                    "method": "mock",
+                }
+                generated.append(mock)
+
         return generated
 
     def _generate_page_content(
