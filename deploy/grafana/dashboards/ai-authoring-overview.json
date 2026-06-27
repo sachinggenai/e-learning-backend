@@ -1,0 +1,97 @@
+{
+  "title": "AI Authoring Overview",
+  "uid": "ai-authoring-overview",
+  "panels": [
+    {
+      "title": "Course Generations",
+      "type": "stat",
+      "targets": [{"expr": "sum(rate(ai_course_generations_total[5m])) by (status)", "legendFormat": "{{status}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "title": "Generation Duration (seconds)",
+      "type": "graph",
+      "targets": [{"expr": "histogram_quantile(0.5, rate(ai_course_generation_duration_seconds_bucket[5m]))", "legendFormat": "p50"}, {"expr": "histogram_quantile(0.95, rate(ai_course_generation_duration_seconds_bucket[5m]))", "legendFormat": "p95"}],
+      "gridPos": {"x": 6, "y": 0, "w": 12, "h": 8},
+      "yaxes": [{"format": "s", "label": "Duration"}]
+    },
+    {
+      "title": "LLM Call Rate by Model",
+      "type": "graph",
+      "targets": [{"expr": "sum(rate(ai_llm_calls_total[5m])) by (model, status)", "legendFormat": "{{model}} ({{status}})"}],
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 8},
+      "yaxes": [{"format": "rps", "label": "Calls/s"}]
+    },
+    {
+      "title": "Token Consumption",
+      "type": "graph",
+      "targets": [{"expr": "sum(rate(ai_tokens_total[5m])) by (model, direction)", "legendFormat": "{{model}} {{direction}}"}],
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "yaxes": [{"format": "short", "label": "Tokens/s"}]
+    },
+    {
+      "title": "Cost per Model (USD)",
+      "type": "graph",
+      "targets": [{"expr": "sum(rate(ai_cost_usd_total[1h])) by (model)", "legendFormat": "{{model}}"}],
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "yaxes": [{"format": "currencyUSD", "label": "USD/hour"}]
+    },
+    {
+      "title": "Page Generation by Template",
+      "type": "bargauge",
+      "targets": [{"expr": "sum(rate(ai_page_generation_duration_seconds_count[5m])) by (template_type)", "legendFormat": "{{template_type}}"}],
+      "gridPos": {"x": 0, "y": 16, "w": 8, "h": 6}
+    },
+    {
+      "title": "Page Generation Latency (p50/p95)",
+      "type": "graph",
+      "targets": [{"expr": "histogram_quantile(0.5, rate(ai_page_generation_duration_seconds_bucket[5m]))", "legendFormat": "p50"}, {"expr": "histogram_quantile(0.95, rate(ai_page_generation_duration_seconds_bucket[5m]))", "legendFormat": "p95"}],
+      "gridPos": {"x": 8, "y": 16, "w": 8, "h": 6},
+      "yaxes": [{"format": "s", "label": "Seconds"}]
+    },
+    {
+      "title": "Safety Blocks",
+      "type": "stat",
+      "targets": [{"expr": "sum(rate(ai_safety_blocks_total[5m])) by (layer, pattern)", "legendFormat": "{{layer}}/{{pattern}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"x": 16, "y": 16, "w": 8, "h": 6}
+    },
+    {
+      "title": "Rate Limit Hits",
+      "type": "graph",
+      "targets": [{"expr": "sum(rate(ai_rate_limit_hits_total[5m])) by (tier)", "legendFormat": "{{tier}}"}],
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 6},
+      "yaxes": [{"format": "short", "label": "Hits/s"}]
+    },
+    {
+      "title": "Agent Calls by Type",
+      "type": "piechart",
+      "targets": [{"expr": "sum(rate(ai_agent_calls_total[5m])) by (agent)", "legendFormat": "{{agent}}"}],
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 6}
+    },
+    {
+      "title": "Remaining Cost Budget",
+      "type": "gauge",
+      "targets": [{"expr": "ai_active_cost_budget_remaining", "legendFormat": "{{tenant}}"}],
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "max": 500, "min": 0}},
+      "gridPos": {"x": 0, "y": 28, "w": 8, "h": 6}
+    },
+    {
+      "title": "PII Redactions",
+      "type": "graph",
+      "targets": [{"expr": "sum(rate(ai_pii_redactions_total[5m])) by (pii_type)", "legendFormat": "{{pii_type}}"}],
+      "gridPos": {"x": 8, "y": 28, "w": 8, "h": 6}
+    },
+    {
+      "title": "MCP Call Rate",
+      "type": "graph",
+      "targets": [{"expr": "sum(rate(ai_mcp_calls_total[5m])) by (server, status)", "legendFormat": "{{server}} ({{status}})"}],
+      "gridPos": {"x": 16, "y": 28, "w": 8, "h": 6}
+    }
+  ],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "refresh": "30s",
+  "schemaVersion": 38
+}
