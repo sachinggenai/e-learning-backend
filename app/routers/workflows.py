@@ -399,57 +399,126 @@ async def stream_workflow_progress(
     failed, cancelled) or the client disconnects.
     """
     import asyncio
+    import hashlib
     import json as _json
-    from datetime import timezone
+    from datetime import datetime, timezone
+
+    def _sanitize_checkpoint_for_sse(checkpoint_data: dict) -> dict:
+        """Strip large binary fields from checkpoint data for SSE transmission.
+
+        Keeps summary fields: course title, page_count, manifest summary, asset count.
+        Removes: raw file content, base64 assets, full page bodies.
+        """
+        sanitized: dict = {}
+        for key, value in checkpoint_data.items():
+            if isinstance(value, (str, int, float, bool, type(None))):
+                sanitized[key] = value
+            elif isinstance(value, dict):
+                if key == "course":
+                    sanitized[key] = {
+                        k: v for k, v in value.items()
+                        if k in ("course_id", "title", "page_count", "status")
+                    }
+                elif key == "manifest":
+                    sanitized[key] = {
+                        k: v for k, v in value.items()
+                        if k in ("version", "title", "organization_count", "resource_count")
+                    }
+                elif key == "assets":
+                    sanitized[key] = {
+                        "count": value.get("count", 0),
+                        "total_size_bytes": value.get("total_size_bytes", 0),
+                    }
+                else:
+                    sanitized[key] = {
+                        k: v for k, v in value.items()
+                        if not isinstance(v, str) or len(v) < 1024
+                    }
+            elif isinstance(value, list):
+                sanitized[key] = f"[{len(value)} items]"
+        return sanitized
 
     async def event_generator():
         last_progress = -1
+        last_checkpoint_hash: str | None = None
         heartbeat_count = 0
 
         while True:
             repo = WorkflowRepository(session)
             job = await repo.get_job(job_id)
             if job is None:
-                yield f"event: error\ndata: {_json.dumps({'code': 'NOT_FOUND', 'message': f'Job {job_id} not found'})}\n\n"
+                not_found_payload = {
+                    'code': 'NOT_FOUND',
+                    'message': f'Job {job_id} not found',
+                }
+                yield f"event: error\ndata: {_json.dumps(not_found_payload)}\n\n"
                 return
 
             current_progress = int(job.progress * 100)
 
-            # Emit progress events when progress changes
+            # ── Emit checkpoint events when checkpoint data changes ──
+            if job.checkpoint_data:
+                current_hash = hashlib.md5(
+                    _json.dumps(job.checkpoint_data, sort_keys=True, default=str).encode()
+                ).hexdigest()
+                if current_hash != last_checkpoint_hash:
+                    last_checkpoint_hash = current_hash
+                    safe = _sanitize_checkpoint_for_sse(job.checkpoint_data)
+                    checkpoint_payload = {
+                        'state': job.current_state,
+                        'checkpoint': safe,
+                        'progress_pct': current_progress,
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
+                    }
+                    yield f"event: checkpoint\ndata: {_json.dumps(checkpoint_payload)}\n\n"
+
+            # ── Emit progress events when progress changes ──
             if current_progress != last_progress:
                 last_progress = current_progress
                 state_label = job.current_state or "initialising"
                 msg_text = f"Phase: {state_label} ({current_progress}%)"
-                yield (
-                    f"event: progress\n"
-                    f"data: {_json.dumps({'state': job.current_state, 'progress_pct': current_progress, 'status': job.status, 'message': msg_text})}\n\n"
-                )
+                progress_payload = {
+                    'state': job.current_state,
+                    'progress_pct': current_progress,
+                    'status': job.status,
+                    'message': msg_text,
+                }
+                yield f"event: progress\ndata: {_json.dumps(progress_payload)}\n\n"
 
-            # Emit heartbeat every ~15s (every ~15 iterations at 1s poll)
+            # ── Emit heartbeat every ~15s ──
             heartbeat_count += 1
             if heartbeat_count % 15 == 0:
-                yield (
-                    f"event: heartbeat\n"
-                    f"data: {_json.dumps({'timestamp': __import__('datetime').datetime.now(timezone.utc).isoformat()})}\n\n"
-                )
+                heartbeat_payload = {
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                }
+                yield f"event: heartbeat\ndata: {_json.dumps(heartbeat_payload)}\n\n"
 
-            # Check terminal states
+            # ── Check terminal states ──
             if job.status in ("completed", "failed", "cancelled"):
                 if job.status == "completed":
-                    yield (
-                        f"event: complete\n"
-                        f"data: {_json.dumps({'result': job.result or {}, 'job_id': str(job_id)})}\n\n"
-                    )
+                    complete_payload = {
+                        'result': job.result or {},
+                        'job_id': str(job_id),
+                    }
+                    yield f"event: complete\ndata: {_json.dumps(complete_payload)}\n\n"
                 elif job.status == "failed":
-                    yield (
-                        f"event: error\n"
-                        f"data: {_json.dumps({'code': 'JOB_FAILED', 'message': str(job.error.get('message', 'Unknown error')) if job.error else 'Job failed', 'job_id': str(job_id)})}\n\n"
+                    error_msg = (
+                        str(job.error.get('message', 'Unknown error'))
+                        if job.error else 'Job failed'
                     )
+                    error_payload = {
+                        'code': 'JOB_FAILED',
+                        'message': error_msg,
+                        'job_id': str(job_id),
+                    }
+                    yield f"event: error\ndata: {_json.dumps(error_payload)}\n\n"
                 elif job.status == "cancelled":
-                    yield (
-                        f"event: error\n"
-                        f"data: {_json.dumps({'code': 'JOB_CANCELLED', 'message': 'Job was cancelled', 'job_id': str(job_id)})}\n\n"
-                    )
+                    cancel_payload = {
+                        'code': 'JOB_CANCELLED',
+                        'message': 'Job was cancelled',
+                        'job_id': str(job_id),
+                    }
+                    yield f"event: error\ndata: {_json.dumps(cancel_payload)}\n\n"
                 return
 
             await asyncio.sleep(1.0)

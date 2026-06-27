@@ -322,18 +322,24 @@ class PlannerAgent:
         text = (heading + " " + content[:500]).lower()
         available_set = set(available)
 
+        # Check FAQ/accordion FIRST (before assessment, since "questions"
+        # can appear in both contexts)
+        if "accordion" in available_set and any(
+            w in text for w in ["faq", "frequently asked", "q&a"]
+        ):
+            return "accordion"
+
+        # Assessment: strong signals only (quiz, test, assessment, exam, MCQ)
         if "final-assessment" in available_set and any(
-            w in text for w in ["quiz", "test", "assessment", "exam", "score", "questions", "mcq"]
+            w in text for w in ["quiz", "test", "assessment", "exam", "mcq",
+                                "multiple choice", "true or false", "score"]
         ):
             return "final-assessment"
+
         if "tabs" in available_set and any(
             w in text for w in ["compare", "versus", "vs", "differences", "pros and cons"]
         ):
             return "tabs"
-        if "accordion" in available_set and any(
-            w in text for w in ["faq", "frequently asked", "q&a", "questions and answers"]
-        ):
-            return "accordion"
         if "click-reveal" in available_set and any(
             w in text for w in ["click", "reveal", "discover", "explore", "interactive"]
         ):

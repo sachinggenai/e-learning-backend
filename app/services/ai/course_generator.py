@@ -14,6 +14,7 @@ individually with validation feedback loops.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from enum import Enum
@@ -65,15 +66,22 @@ class CourseGenerator:
     ):
         self.db = db
         self.retry_count = self.DEFAULT_RETRY_COUNT
-        # Auto-detect: use LLM when AI is configured and enabled
+        # Auto-detect: use LLM when AI is configured and enabled,
+        # with explicit override via AI_GENERATION_PROVIDER env var (G-07 fix)
         if use_llm is None:
-            from app.services.ai.config import get_ai_config
-            cfg = get_ai_config()
-            use_llm = bool(
-                cfg.ai_authoring_enabled
-                and cfg.anthropic_api_key
-                and cfg.ai_status.value in ("configured",)
-            )
+            provider_env = os.getenv("AI_GENERATION_PROVIDER", "").lower()
+            if provider_env in ("llm", "anthropic"):
+                use_llm = True
+            elif provider_env == "mock":
+                use_llm = False
+            else:
+                from app.services.ai.config import get_ai_config
+                cfg = get_ai_config()
+                use_llm = bool(
+                    cfg.ai_authoring_enabled
+                    and cfg.anthropic_api_key
+                    and cfg.ai_status.value in ("configured",)
+                )
         self.use_llm = use_llm
         self._llm_client = llm_client
 

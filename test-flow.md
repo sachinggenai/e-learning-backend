@@ -50,7 +50,7 @@ User curl → FastAPI Router → ChatOrchestrator → LLMClient → DeepSeek API
 ```
 POST https://api.deepseek.com/anthropic/v1/messages
 Headers:
-  x-api-key: sk-160228f9b19647859b62cea0dbd744ee
+  x-api-key: sk-...REDACTED...
   anthropic-version: 2023-06-01
   Content-Type: application/json
 ```

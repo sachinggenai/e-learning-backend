@@ -123,6 +123,53 @@ def test_pend013_all_scorm_steps_present():
         check(f"PEND013-03: {key[0]}.{key[1]} registered", key in steps)
 
 # ═══════════════════════════════════════════════════════════════════
+# FIX-6: SCORM XSD Validation Wiring
+# ═══════════════════════════════════════════════════════════════════
+
+def test_fix6_scorm_manifest_xsd_validation_wired():
+    """FIX6-01: generate_manifest_step calls SCORMValidator.validate_manifest_xsd."""
+    import app.services.workflow.steps.scorm_export  # noqa: F401
+    from app.services.workflow.steps.scorm_export import generate_manifest_step
+    source = inspect.getsource(generate_manifest_step)
+    check("FIX6-01a: imports SCORMValidator",
+          "SCORMValidator" in source or "scorm_validator" in source)
+    check("FIX6-01b: calls validate_manifest_xsd",
+          "validate_manifest_xsd" in source)
+    check("FIX6-01c: has xsd_warnings fallback",
+          "xsd_warnings" in source or "xsd_validated" in source)
+
+def test_fix6_render_manifest_xml_produces_valid_xml():
+    """FIX6-02: _render_manifest_xml produces well-formed XML with IMS namespace."""
+    import app.services.workflow.steps.scorm_export  # noqa: F401
+    from app.services.workflow.steps.scorm_export import _render_manifest_xml
+
+    manifest = {
+        "version": "2004",
+        "title": "Test Course",
+        "organizations": [{"identifier": "ORG-1", "title": "Test Org"}],
+        "resources": [],
+    }
+    xml_str = _render_manifest_xml(manifest)
+    check("FIX6-02a: has XML declaration", xml_str.startswith('<?xml'))
+    check("FIX6-02b: has manifest element", '<manifest' in xml_str)
+    check("FIX6-02c: has IMS namespace 2004", 'imsglobal.org' in xml_str)
+
+    # SCORM 1.2 namespace
+    xml_12 = _render_manifest_xml(manifest, scorm_version="1.2")
+    check("FIX6-02d: SCORM 1.2 has imsproject namespace", 'imsproject.org' in xml_12)
+
+    # With resources
+    manifest_with_res = {
+        "version": "2004",
+        "title": "Course with Resources",
+        "organizations": [],
+        "resources": [{"identifier": "RES-1", "href": "page1.html", "type": "webcontent"}],
+    }
+    xml_res = _render_manifest_xml(manifest_with_res)
+    check("FIX6-02e: includes resource element", '<resource' in xml_res)
+    check("FIX6-02f: includes resource href", 'page1.html' in xml_res)
+
+# ═══════════════════════════════════════════════════════════════════
 # Runner
 # ═══════════════════════════════════════════════════════════════════
 
@@ -138,6 +185,8 @@ async def run_all_tests():
     test_pend013_step_count_is_8()
     test_pend013_no_complete_step()
     test_pend013_all_scorm_steps_present()
+    test_fix6_scorm_manifest_xsd_validation_wired()
+    test_fix6_render_manifest_xml_produces_valid_xml()
     print(f"\n{'='*60}")
     print(f"RESULTS: {passed} passed, {failed} failed")
     print(f"{'='*60}")

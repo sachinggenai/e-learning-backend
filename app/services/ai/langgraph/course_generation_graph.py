@@ -144,6 +144,41 @@ def _make_initial_state(
     }
 
 
+# ── HITL Timeout Helper (Fix-4) ─────────────────────────────────────
+
+def _set_hitl_expiry(job_id: str, hitl_state: str) -> None:
+    """Set 72h expiry on the workflow job when entering HITL interrupt state.
+
+    Called before LangGraph interrupt() suspends the graph. The
+    WorkflowOrchestrator._expire_stale_hitl_jobs() poll loop monitors
+    expires_at and auto-rejects expired HITL jobs.
+    """
+    if not job_id:
+        return
+    try:
+        from datetime import datetime, timedelta
+        from app.db.config import SessionLocal
+        from app.repositories.workflow_repository import WorkflowRepository
+
+        async def _set():
+            async with SessionLocal() as session:
+                repo = WorkflowRepository(session)
+                await repo.update_job_expiry(
+                    job_id=job_id,
+                    expires_at=datetime.utcnow() + timedelta(hours=72),
+                    hitl_state=hitl_state,
+                )
+
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_set())
+        except RuntimeError:
+            asyncio.run(_set())
+    except Exception:
+        logger.warning("Failed to set HITL expiry for job %s", job_id)
+
+
 # ── Node Functions ─────────────────────────────────────────────────
 
 async def node_validate_input(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -274,10 +309,17 @@ async def node_hitl_plan_approval(state: Dict[str, Any]) -> Dict[str, Any]:
     """Phase 3: LangGraph interrupt() — wait for human plan approval.
 
     SUSPENDS the graph. Resumes when the user POSTs to /resume endpoint.
-    Zero compute cost while waiting. 72-hour timeout configured via
-    LangGraph checkpoint TTL.
+    Zero compute cost while waiting.
+
+    The 72-hour timeout is enforced by the WorkflowOrchestrator background
+    poll loop, which monitors workflow_jobs.expires_at for jobs stuck in
+    HITL states (hitl_plan_approval, hitl_final_confirm) and auto-rejects
+    expired jobs. See Fix-4 in GAP_FIX_IMPLEMENTATION_PLAN.md.
     """
     logger.info("Phase 3 [hitl_plan_approval]: job=%s", state.get("job_id", ""))
+
+    # ── Set 72h HITL timeout on the workflow job (Fix-4) ─────────
+    _set_hitl_expiry(state.get("job_id", ""), "hitl_plan_approval")
 
     if interrupt is not None:
         decision = interrupt({
@@ -522,6 +564,9 @@ async def node_hitl_final_confirm(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     logger.info("Phase 8 [hitl_final_confirm]: job=%s", state.get("job_id", ""))
 
+    # ── Set 72h HITL timeout on the workflow job (Fix-4) ─────────
+    _set_hitl_expiry(state.get("job_id", ""), "hitl_final_confirm")
+
     if interrupt is not None:
         decision = interrupt({
             "phase": "final_confirmation",
@@ -594,12 +639,49 @@ def _route_after_hitl_plan(state: Dict[str, Any]) -> str:
     return END if END is not None else "__end__"
 
 
-def _route_after_validate(state: Dict[str, Any]) -> str:
-    """Route after validation: clean → HITL, errors → re-plan."""
-    errors = state.get("validation_results", {}).get("errors", 0)
+async def _route_after_validate(state: Dict[str, Any]) -> str:
+    """Route after validation: clean → HITL, errors → Supervisor decides.
+
+    Uses the hybrid SupervisorRouter (Phase 2.6): deterministic rules for
+    known cases, LLM for ambiguous anomalies. Falls back to deterministic
+    "replan on >2 errors" if the Supervisor is unavailable.
+    """
+    validation = state.get("validation_results", {})
+    errors = validation.get("errors", 0)
     if errors == 0:
         return "hitl_final_confirm"
-    return "plan"  # Re-plan on validation failure
+
+    # ── Hybrid Supervisor routing ────────────────────────────
+    try:
+        from app.services.ai.langgraph.supervisor import SupervisorRouter
+        supervisor = SupervisorRouter()
+        decision = await supervisor.decide(
+            current_phase="validate",
+            error_count=errors,
+            warning_count=validation.get("warnings", 0),
+            total_pages=len(state.get("generated_pages", [])),
+            budget_remaining=999.0,  # Pull from CostTracker in production
+            previous_route_count=state.get("replan_count", 0),
+        )
+        if decision == "plan":
+            state["replan_count"] = state.get("replan_count", 0) + 1
+            return "plan"
+        elif decision == "__end__":
+            state["status"] = "failed"
+            state["errors"] = state.get("errors", []) + [{
+                "phase": "supervisor",
+                "message": f"Pipeline aborted after {errors} validation errors",
+            }]
+            return END if END is not None else "__end__"
+        else:
+            return "hitl_final_confirm"
+    except Exception as exc:
+        logger.warning(
+            "Supervisor routing failed (%s) — using deterministic fallback", exc
+        )
+        if errors > 2:
+            return "plan"
+        return "hitl_final_confirm"
 
 
 def _route_after_hitl_final(state: Dict[str, Any]) -> str:

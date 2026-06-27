@@ -364,3 +364,43 @@ class WorkflowRepository:
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    # ═══════════════════════════════════════════════════════════════
+    # HITL Timeout (Fix-4: 72h expiry enforcement)
+    # ═══════════════════════════════════════════════════════════════
+
+    async def update_job_expiry(
+        self,
+        job_id: uuid.UUID,
+        expires_at: Any,
+        hitl_state: str,
+    ) -> None:
+        """Set job expiry timestamp when entering HITL interrupt state."""
+        stmt = (
+            update(WorkflowJob)
+            .where(WorkflowJob.job_id == job_id)
+            .values(
+                expires_at=expires_at,
+                current_state=hitl_state,
+                updated_at=datetime.utcnow(),
+            )
+        )
+        await self.session.execute(stmt)
+        await self.session.commit()
+
+    async def find_expired_hitl_jobs(self) -> list[WorkflowJob]:
+        """Find jobs stuck in HITL states past their expiry timestamp."""
+        now = datetime.utcnow()
+        stmt = (
+            select(WorkflowJob)
+            .where(
+                WorkflowJob.status == "running",
+                WorkflowJob.current_state.in_([
+                    "hitl_plan_approval", "hitl_final_confirm",
+                ]),
+                WorkflowJob.expires_at.isnot(None),
+                WorkflowJob.expires_at < now,
+            )
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

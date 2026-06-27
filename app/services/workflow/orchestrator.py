@@ -88,6 +88,10 @@ class WorkflowOrchestrator:
         recovered = await self._recover_stale_jobs()
         if recovered:
             logger.info("Recovered %d stale/expired jobs on startup", recovered)
+        # 1b. Auto-reject HITL-expired jobs on startup (Fix-4)
+        hitl_expired = await self._expire_stale_hitl_jobs()
+        if hitl_expired:
+            logger.info("Auto-rejected %d HITL-expired jobs on startup", hitl_expired)
         # 2. Seed workflow type definitions (idempotent)
         await self._seed_type_definitions()
         # 3. Start the poll loop as a background task
@@ -164,6 +168,7 @@ class WorkflowOrchestrator:
 
     async def _poll_loop(self) -> None:
         """Main loop: poll for pending jobs, execute state machines."""
+        iteration = 0
         while self._running:
             try:
                 if len(self._active_jobs) < self.max_concurrency:
@@ -178,6 +183,16 @@ class WorkflowOrchestrator:
                 stale = [jid for jid, t in self._active_jobs.items() if t.done()]
                 for jid in stale:
                     self._active_jobs.pop(jid, None)
+
+                # ── Periodic HITL expiry check (every 60 iterations ~60s) ──
+                iteration += 1
+                if iteration % 60 == 0:
+                    try:
+                        hitl_count = await self._expire_stale_hitl_jobs()
+                        if hitl_count:
+                            logger.info("HITL check: auto-rejected %d expired jobs", hitl_count)
+                    except Exception:
+                        pass  # Non-fatal — don't crash the poll loop
 
             except Exception:
                 logger.exception("Error in orchestration poll loop")
@@ -410,6 +425,53 @@ class WorkflowOrchestrator:
 
             logger.info("Recovered %d stale, expired %d jobs", len(stale), len(expired))
             return len(stale) + len(expired)
+
+    async def _expire_stale_hitl_jobs(self) -> int:
+        """Auto-reject jobs stuck in HITL state for > 72 hours.
+
+        When a LangGraph graph hits interrupt() for human approval,
+        the job's expires_at is set to now + 72h. If no human responds
+        within that window, this method auto-rejects the job.
+        """
+        async with SessionLocal() as session:
+            repo = WorkflowRepository(session)
+            expired = await repo.find_expired_hitl_jobs()
+            for job in expired:
+                logger.warning(
+                    "Auto-rejecting job %s — HITL timeout expired at %s",
+                    job.job_id, job.expires_at,
+                )
+                await repo.transition(
+                    job.job_id,
+                    new_status="cancelled",
+                    new_state=job.current_state,
+                    previous_state=job.current_state,
+                    error={
+                        "code": "HITL_TIMEOUT",
+                        "message": (
+                            f"Human-in-the-loop approval timed out after 72h. "
+                            f"Please re-submit the course generation job."
+                        ),
+                    },
+                    completed_at=datetime.utcnow(),
+                )
+                # Emit outbox event for notification
+                try:
+                    from app.services.ai.outbox_service import AIOutboxService
+                    outbox = AIOutboxService(session)
+                    await outbox.publish(
+                        event_type="workflow.hitl_timeout",
+                        payload={
+                            "job_id": str(job.job_id),
+                            "workflow_type": job.workflow_type,
+                            "expired_at": job.expires_at.isoformat() if job.expires_at else None,
+                        },
+                    )
+                except Exception:
+                    pass
+            if expired:
+                logger.info("Auto-rejected %d HITL-expired jobs", len(expired))
+            return len(expired)
 
     # ═══════════════════════════════════════════════════════════════
     # Internal: Seed Type Definitions

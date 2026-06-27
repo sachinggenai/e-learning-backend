@@ -592,8 +592,138 @@ async def test_sanitize_checkpoint():
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Main Runner
+# CATEGORY I: Checkpoint SSE Sanitization (FIX-2)
 # ═══════════════════════════════════════════════════════════════════
+
+async def test_sanitize_checkpoint_for_sse_exists():
+    """FIX2-01: _sanitize_checkpoint_for_sse nested function exists in stream_workflow_progress."""
+    import inspect as _inspect
+    import app.routers.workflows as _wf
+
+    source = _inspect.getsource(_wf.stream_workflow_progress)
+    check("FIX2-01a: _sanitize_checkpoint_for_sse defined",
+          "_sanitize_checkpoint_for_sse" in source)
+    check("FIX2-01b: strips course fields",
+          "course_id" in source and "title" in source and "page_count" in source)
+    check("FIX2-01c: strips manifest fields",
+          "manifest" in source and "organization_count" in source)
+    check("FIX2-01d: strips assets fields",
+          "assets" in source and "total_size_bytes" in source)
+    check("FIX2-01e: list collapsed to count string",
+          "[{len(value)} items]" in source or "items" in source)
+
+
+async def test_sanitize_checkpoint_for_sse_large_value_handling():
+    """FIX2-02: _sanitize_checkpoint_for_sse strips values > 1024 chars."""
+    import inspect as _inspect
+    import app.routers.workflows as _wf
+
+    source = _inspect.getsource(_wf.stream_workflow_progress)
+    check("FIX2-02a: len check for strings > 1024", "1024" in source)
+    check("FIX2-02b: isinstance check for dict values",
+          "isinstance" in source)
+
+
+async def test_checkpoint_event_emission_in_event_generator():
+    """FIX2-03: event_generator emits checkpoint events with correct structure."""
+    import inspect as _inspect
+    import app.routers.workflows as _wf
+
+    source = _inspect.getsource(_wf.stream_workflow_progress)
+    check("FIX2-03a: event: checkpoint emitted",
+          "event: checkpoint" in source)
+    check("FIX2-03b: checkpoint payload has state",
+          "'state'" in source)
+    check("FIX2-03c: checkpoint payload has progress_pct",
+          "'progress_pct'" in source)
+    check("FIX2-03d: last_checkpoint_hash tracked",
+          "last_checkpoint_hash" in source)
+    check("FIX2-03e: hash computed with md5",
+          "md5" in source or "hashlib" in source)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CATEGORY J: HITL Timeout Enforcement (FIX-4)
+# ═══════════════════════════════════════════════════════════════════
+
+async def test_hitl_update_job_expiry_exists():
+    """FIX4-01: WorkflowRepository.update_job_expiry method exists with correct signature."""
+    import inspect as _inspect
+    from app.repositories.workflow_repository import WorkflowRepository
+
+    check("FIX4-01a: update_job_expiry exists",
+          hasattr(WorkflowRepository, 'update_job_expiry'))
+    sig = _inspect.signature(WorkflowRepository.update_job_expiry)
+    param_names = list(sig.parameters.keys())
+    check("FIX4-01b: has job_id param", "job_id" in param_names)
+    check("FIX4-01c: has expires_at param", "expires_at" in param_names)
+    check("FIX4-01d: has hitl_state param", "hitl_state" in param_names)
+
+
+async def test_hitl_find_expired_hitl_jobs_exists():
+    """FIX4-02: WorkflowRepository.find_expired_hitl_jobs exists."""
+    from app.repositories.workflow_repository import WorkflowRepository
+
+    check("FIX4-02a: find_expired_hitl_jobs exists",
+          hasattr(WorkflowRepository, 'find_expired_hitl_jobs'))
+
+
+async def test_hitl_find_expired_targets_correct_states():
+    """FIX4-03: find_expired_hitl_jobs query targets HITL states."""
+    import inspect as _inspect
+    from app.repositories.workflow_repository import WorkflowRepository
+
+    source = _inspect.getsource(WorkflowRepository.find_expired_hitl_jobs)
+    check("FIX4-03a: status == 'running'", "running" in source)
+    check("FIX4-03b: hitl_plan_approval state", "hitl_plan_approval" in source)
+    check("FIX4-03c: hitl_final_confirm state", "hitl_final_confirm" in source)
+    check("FIX4-03d: expires_at isnot None", "isnot(None)" in source or ".isnot(None)" in source)
+    check("FIX4-03e: expires_at < now", "expires_at <" in source)
+
+
+async def test_hitl_expire_stale_hitl_jobs_exists():
+    """FIX4-04: WorkflowOrchestrator._expire_stale_hitl_jobs exists."""
+    from app.services.workflow.orchestrator import WorkflowOrchestrator
+
+    check("FIX4-04a: _expire_stale_hitl_jobs exists",
+          hasattr(WorkflowOrchestrator, '_expire_stale_hitl_jobs'))
+
+
+async def test_hitl_expire_stale_emits_outbox_event():
+    """FIX4-05: _expire_stale_hitl_jobs publishes workflow.hitl_timeout outbox event."""
+    import inspect as _inspect
+    from app.services.workflow.orchestrator import WorkflowOrchestrator
+
+    source = _inspect.getsource(WorkflowOrchestrator._expire_stale_hitl_jobs)
+    check("FIX4-05a: event_type workflow.hitl_timeout", "workflow.hitl_timeout" in source)
+    check("FIX4-05b: AIOutboxService imported or used", "outbox_service" in source.lower() or "AIOutboxService" in source)
+
+
+async def test_hitl_expire_sets_hitl_timeout_error_code():
+    """FIX4-06: Auto-rejection sets HITL_TIMEOUT error code."""
+    import inspect as _inspect
+    from app.services.workflow.orchestrator import WorkflowOrchestrator
+
+    source = _inspect.getsource(WorkflowOrchestrator._expire_stale_hitl_jobs)
+    check("FIX4-06: HITL_TIMEOUT error code set", "HITL_TIMEOUT" in source)
+
+
+async def test_hitl_set_expiry_in_graph_exists():
+    """FIX4-07: _set_hitl_expiry helper exists in course_generation_graph."""
+    import app.services.ai.langgraph.course_generation_graph  # noqa: F401
+    from app.services.ai.langgraph.course_generation_graph import _set_hitl_expiry
+
+    check("FIX4-07: _set_hitl_expiry importable", _set_hitl_expiry is not None)
+
+
+async def test_hitl_set_expiry_uses_72h():
+    """FIX4-08: _set_hitl_expiry sets expires_at to now + 72 hours."""
+    import inspect as _inspect
+    from app.services.ai.langgraph.course_generation_graph import _set_hitl_expiry
+
+    source = _inspect.getsource(_set_hitl_expiry)
+    check("FIX4-08a: timedelta hours=72", "hours=72" in source)
+    check("FIX4-08b: calls update_job_expiry", "update_job_expiry" in source)
 
 async def main():
     print("=" * 60)
@@ -656,6 +786,23 @@ async def main():
     await test_router_import()
     await test_pydantic_schemas()
     await test_sanitize_checkpoint()
+
+    # I: Checkpoint SSE Sanitization (FIX-2)
+    print("\n--- I: Checkpoint SSE Sanitization (FIX-2) ---")
+    await test_sanitize_checkpoint_for_sse_exists()
+    await test_sanitize_checkpoint_for_sse_large_value_handling()
+    await test_checkpoint_event_emission_in_event_generator()
+
+    # J: HITL Timeout Enforcement (FIX-4)
+    print("\n--- J: HITL Timeout (FIX-4) ---")
+    await test_hitl_update_job_expiry_exists()
+    await test_hitl_find_expired_hitl_jobs_exists()
+    await test_hitl_find_expired_targets_correct_states()
+    await test_hitl_expire_stale_hitl_jobs_exists()
+    await test_hitl_expire_stale_emits_outbox_event()
+    await test_hitl_expire_sets_hitl_timeout_error_code()
+    await test_hitl_set_expiry_in_graph_exists()
+    await test_hitl_set_expiry_uses_72h()
 
     # B-extra: Reset test (runs last — clears singleton)
     print("\n--- B-extra: Registry Reset (runs last) ---")

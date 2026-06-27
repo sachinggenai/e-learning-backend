@@ -914,31 +914,65 @@ class ChatOrchestrator:
             client = LLMClient(provider=LLMProvider.ANTHROPIC, model=model)
 
             try:
-                response = await client.chat(
+                accumulated_content = ""
+                accumulated_tool_calls: list = []
+                final_token_usage = {"input": 0, "output": 0}
+                final_latency_ms = 0.0
+                t_start = _time.perf_counter()
+
+                # ── Real SSE streaming via Anthropic SDK (G-11 fix) ──
+                async for event in client.chat_stream(
                     messages=[LLMMessage(role="user", content=prompt)],
                     system_prompt=system_prompt,
                     temperature=0.7,
                     max_tokens=4096,
-                )
+                ):
+                    if event.event_type == "text_delta":
+                        delta = event.data.get("delta", "")
+                        accumulated_content += delta
+                        yield f"event: token\ndata: {_json.dumps({'content': delta})}\n\n"
 
-                content = getattr(response, 'content', str(response))
+                    elif event.event_type == "tool_call_start":
+                        tc_data = {
+                            "id": event.data.get("id", ""),
+                            "name": event.data.get("name", ""),
+                            "input": event.data.get("input", {}),
+                            "status": "started",
+                        }
+                        accumulated_tool_calls.append(tc_data)
+                        yield (
+                            f"event: tool_call\n"
+                            f"data: {_json.dumps({'tool': tc_data['name'], 'input': tc_data['input'], 'id': tc_data['id']})}\n\n"
+                        )
 
-                # Stream content token-by-token (simulated — Anthropic SSE in future)
-                words = content.split()
-                chunk_size = 5
-                for i in range(0, len(words), chunk_size):
-                    chunk = " ".join(words[i:i + chunk_size]) + " "
-                    yield f"event: token\ndata: {_json.dumps({'content': chunk})}\n\n"
+                    elif event.event_type == "tool_call_result":
+                        for tc in accumulated_tool_calls:
+                            if tc.get("id") == event.data.get("tool_use_id", ""):
+                                tc["result"] = event.data.get("content", "")
+                                tc["status"] = "complete"
+                                break
 
-                # Emit tool calls if any
-                tool_calls = getattr(response, 'tool_calls', []) or []
-                for tc in tool_calls:
-                    yield (
-                        f"event: tool_call\n"
-                        f"data: {_json.dumps({'tool': tc.get('name', ''), 'input': tc.get('input', {})})}\n\n"
+                    elif event.event_type == "turn_complete":
+                        final_token_usage = event.data.get("token_usage", final_token_usage)
+                        final_latency_ms = (_time.perf_counter() - t_start) * 1000
+
+                # ── Fallback: if stream returned empty, try non-streaming ──
+                if not accumulated_content and not accumulated_tool_calls:
+                    logger.warning("SSE stream returned empty — falling back to non-streaming")
+                    response = await client.chat(
+                        messages=[LLMMessage(role="user", content=prompt)],
+                        system_prompt=system_prompt,
+                        temperature=0.7,
+                        max_tokens=4096,
                     )
+                    accumulated_content = getattr(response, 'content', str(response))
+                    accumulated_tool_calls = getattr(response, 'tool_calls', []) or []
+                    final_token_usage = getattr(response, 'token_usage', final_token_usage)
+                    final_latency_ms = getattr(response, 'latency_ms', 0)
+                    if accumulated_content:
+                        yield f"event: token\ndata: {_json.dumps({'content': accumulated_content})}\n\n"
 
-                # Record cost
+                # ── Record cost ───────────────────────────────────────
                 try:
                     from app.services.ai.cost_tracker import CostTracker
                     CostTracker().record(
@@ -946,16 +980,16 @@ class ChatOrchestrator:
                         user_id=user_id,
                         tenant_id="",
                         model_id=model,
-                        input_tokens=getattr(response, 'token_usage', {}).get('input', 0),
-                        output_tokens=getattr(response, 'token_usage', {}).get('output', 0),
-                        latency_ms=getattr(response, 'latency_ms', 0),
+                        input_tokens=final_token_usage.get("input", 0),
+                        output_tokens=final_token_usage.get("output", 0),
+                        latency_ms=final_latency_ms,
                     )
                 except Exception:
                     pass
 
                 yield (
                     f"event: complete\n"
-                    f"data: {_json.dumps({'content': content, 'model': model, 'tier': tier.value})}\n\n"
+                    f"data: {_json.dumps({'content': accumulated_content, 'model': model, 'tier': tier.value})}\n\n"
                 )
 
             except Exception as exc:

@@ -190,9 +190,14 @@ class TemplateSelectorAgent:
         for rule_name, rule in TEMPLATE_RULES.items():
             match_count = sum(1 for kw in rule["keywords"] if kw in combined_lower)
             if match_count > 0:
-                # Weight confidence by keyword coverage
-                keyword_ratio = min(match_count / max(len(rule["keywords"]), 1), 1.0)
-                weighted_confidence = round(rule["confidence"] * keyword_ratio, 2)
+                # Keywords are an OR set — matching any is a signal.
+                # Don't penalize rules with comprehensive keyword lists.
+                #   ≥2 matches → full base confidence
+                #   1 match   → 70% of base confidence (weaker signal)
+                if match_count >= 2:
+                    weighted_confidence = rule["confidence"]
+                else:
+                    weighted_confidence = round(rule["confidence"] * 0.70, 2)
 
                 if weighted_confidence > best_confidence:
                     best_confidence = weighted_confidence
@@ -200,9 +205,8 @@ class TemplateSelectorAgent:
                         "template_type": rule["template"],
                         "confidence": weighted_confidence,
                         "reasoning": (
-                            f"Rule '{rule_name}' matched {match_count}/"
-                            f"{len(rule['keywords'])} keywords "
-                            f"(coverage: {keyword_ratio:.0%})"
+                            f"Rule '{rule_name}' matched {match_count} "
+                            f"keyword{'s' if match_count > 1 else ''}"
                         ),
                     }
 

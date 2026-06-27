@@ -149,7 +149,10 @@ class StreamManager:
         # Determine aggregate status
         success_count = sum(1 for p in result.pages if p.status == "success")
         error_count = sum(1 for p in result.pages if p.status == "error")
-        if error_count == len(result.pages):
+        if len(result.pages) == 0:
+            # Empty page list is a valid no-op success, not a failure
+            result.status = "success"
+        elif error_count == len(result.pages):
             result.status = "failed"
         elif error_count > 0 or success_count < len(result.pages):
             result.status = "partial"
@@ -322,7 +325,17 @@ class StreamManager:
         except Exception:
             pass
 
-        return FanOutResult(job_id=job_id, pages=[r for r in results if r is not None])
+        final_pages = [r for r in results if r is not None]
+        success_count = sum(1 for p in final_pages if p.status == "success")
+        error_count = sum(1 for p in final_pages if p.status == "error")
+        if error_count == len(final_pages):
+            agg_status = "failed"
+        elif error_count > 0 or success_count < len(final_pages):
+            agg_status = "partial"
+        else:
+            agg_status = "success"
+
+        return FanOutResult(job_id=job_id, status=agg_status, pages=final_pages)
 
     async def _fan_out_sequential(
         self,
@@ -375,7 +388,18 @@ class StreamManager:
         tasks = [asyncio.create_task(bounded_generate(i)) for i in range(total)]
         await asyncio.gather(*tasks, return_exceptions=True)
 
+        final_pages = [r for r in results if r is not None]
+        success_count = sum(1 for p in final_pages if p.status == "success")
+        error_count = sum(1 for p in final_pages if p.status == "error")
+        if error_count == len(final_pages):
+            agg_status = "failed"
+        elif error_count > 0 or success_count < len(final_pages):
+            agg_status = "partial"
+        else:
+            agg_status = "success"
+
         return FanOutResult(
             job_id="sequential-fallback",
-            pages=[r for r in results if r is not None],
+            status=agg_status,
+            pages=final_pages,
         )

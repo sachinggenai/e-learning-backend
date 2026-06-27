@@ -328,6 +328,86 @@ class ContentGeneratorAgent:
 
     # ── Mock fallback ─────────────────────────────────────────────
 
+    @staticmethod
+    def _build_mock_components(template_type: str, title: str) -> list:
+        """Build deterministic mock components based on template type.
+
+        Uses the TEMPLATE_SCHEMAS definitions to produce structurally valid
+        mock output for each supported template type. Self-contained — no
+        external dependencies.
+        """
+        if template_type == "final-assessment":
+            return [{
+                "component_type": "final-assessment",
+                "order_index": 0,
+                "data": {
+                    "passing_score": 80,
+                    "questions": [{
+                        "id": "q-1",
+                        "type": "mcq",
+                        "question": f"Key concept from: {title}",
+                        "options": [
+                            {"id": "a", "text": "Correct understanding of the concept", "isCorrect": True},
+                            {"id": "b", "text": "Common misconception A", "isCorrect": False},
+                            {"id": "c", "text": "Common misconception B", "isCorrect": False},
+                            {"id": "d", "text": "Common misconception C", "isCorrect": False},
+                        ],
+                        "feedback": "Review the core material on this topic.",
+                    }],
+                },
+            }]
+        elif template_type == "tabs":
+            return [{
+                "component_type": "tabs",
+                "order_index": 0,
+                "data": {
+                    "tabs": [
+                        {"title": f"{title} — Overview", "content": "<p>Key concepts and introduction to the topic.</p>"},
+                        {"title": "Details", "content": "<p>In-depth exploration of the core material.</p>"},
+                        {"title": "Examples", "content": "<p>Practical applications and case studies.</p>"},
+                    ],
+                },
+            }]
+        elif template_type == "accordion":
+            return [{
+                "component_type": "accordion",
+                "order_index": 0,
+                "data": {
+                    "items": [
+                        {"title": "What is the core concept?", "content": "<p>Answer explaining the fundamental idea.</p>"},
+                        {"title": "How does it apply in practice?", "content": "<p>Practical application explanation.</p>"},
+                        {"title": "What are the key takeaways?", "content": "<p>Summary of most important points.</p>"},
+                    ],
+                },
+            }]
+        elif template_type == "click-reveal":
+            return [{
+                "component_type": "click-reveal",
+                "order_index": 0,
+                "data": {
+                    "cards": [
+                        {"prompt": "Click to explore: Core Concept", "content": "<p>Revealed insight about the topic.</p>"},
+                        {"prompt": "Click to explore: Real-World Example", "content": "<p>Practical scenario demonstrating the concept.</p>"},
+                        {"prompt": "Click to explore: Key Takeaway", "content": "<p>Essential point to remember.</p>"},
+                    ],
+                },
+            }]
+        else:  # content-text (default)
+            return [{
+                "component_type": "content-text",
+                "order_index": 0,
+                "data": {
+                    "content": f"<h2>{title}</h2>"
+                              f"<p>This section covers the key concepts related to {title.lower()}. "
+                              f"Learners will explore the fundamental principles and practical applications.</p>"
+                              f"<h3>Key Points</h3>"
+                              f"<ul><li>Primary concept definition and context</li>"
+                              f"<li>Practical application in real-world scenarios</li>"
+                              f"<li>Common challenges and how to address them</li></ul>"
+                              f"<p>Review the material above and complete the associated activities to reinforce your understanding.</p>",
+                },
+            }]
+
     def _generate_mock_fallback(
         self,
         page_plan: Dict[str, Any],
@@ -337,15 +417,23 @@ class ContentGeneratorAgent:
     ) -> Dict[str, Any]:
         """Deterministic mock fallback when LLM generation fails.
 
-        Reuses the existing CourseGenerator._generate_page_content() logic.
+        Self-contained — builds structurally valid mock output for each
+        supported template type without any external dependencies.
         """
-        from app.services.ai.course_generator import CourseGenerator
-        # Create a lightweight generator instance just for its mock logic
-        gen = object.__new__(CourseGenerator)
-        mock_page = gen._generate_page_content(page_plan, {}, page_index)
-        mock_page["generation_metadata"] = {
-            "fallback": True,
-            "reason": error or "LLM generation unavailable",
-            "method": "mock",
+        title = page_plan.get("title", f"Page {page_index + 1}")
+        components = self._build_mock_components(template_type, title)
+
+        return {
+            "title": title,
+            "template_type": template_type,
+            "order": page_plan.get("order", page_index),
+            "components": components,
+            "source_excerpt": page_plan.get("source_content", "")[:500],
+            "learning_objective": page_plan.get("learning_objective", ""),
+            "generation_metadata": {
+                "fallback": True,
+                "reason": error or "LLM generation unavailable",
+                "method": "inline_mock",
+                "template_type": template_type,
+            },
         }
-        return mock_page

@@ -197,6 +197,66 @@ async def main():
     e3 = GenerationError("IMPORT_JOB_NOT_FOUND", "Not found", 404)
     check("404 error", e3.http_status == 404)
 
+    # ===============================================================
+    # AI_GENERATION_PROVIDER Env Var (FIX-3 / G-07)
+    # ===============================================================
+    print("\n=== AI_GENERATION_PROVIDER Env Var ===")
+    import os as _os
+
+    # FIX3-01: AI_GENERATION_PROVIDER=llm forces use_llm=True
+    old = _os.environ.get("AI_GENERATION_PROVIDER")
+    _os.environ["AI_GENERATION_PROVIDER"] = "llm"
+    try:
+        gen_llm = CourseGenerator(AsyncMock())
+        check("FIX3-01: AI_GENERATION_PROVIDER=llm -> use_llm=True",
+              gen_llm.use_llm is True)
+    finally:
+        if old is not None:
+            _os.environ["AI_GENERATION_PROVIDER"] = old
+        else:
+            _os.environ.pop("AI_GENERATION_PROVIDER", None)
+
+    # FIX3-02: AI_GENERATION_PROVIDER=mock forces use_llm=False
+    old = _os.environ.get("AI_GENERATION_PROVIDER")
+    _os.environ["AI_GENERATION_PROVIDER"] = "mock"
+    try:
+        gen_mock = CourseGenerator(AsyncMock())
+        check("FIX3-02: AI_GENERATION_PROVIDER=mock -> use_llm=False",
+              gen_mock.use_llm is False)
+    finally:
+        if old is not None:
+            _os.environ["AI_GENERATION_PROVIDER"] = old
+        else:
+            _os.environ.pop("AI_GENERATION_PROVIDER", None)
+
+    # FIX3-03: AI_GENERATION_PROVIDER=anthropic also forces use_llm=True
+    old = _os.environ.get("AI_GENERATION_PROVIDER")
+    _os.environ["AI_GENERATION_PROVIDER"] = "anthropic"
+    try:
+        gen_anthro = CourseGenerator(AsyncMock())
+        check("FIX3-03: AI_GENERATION_PROVIDER=anthropic -> use_llm=True",
+              gen_anthro.use_llm is True)
+    finally:
+        if old is not None:
+            _os.environ["AI_GENERATION_PROVIDER"] = old
+        else:
+            _os.environ.pop("AI_GENERATION_PROVIDER", None)
+
+    # FIX3-04: AI_GENERATION_PROVIDER unset -> auto-detect (backward compat)
+    _os.environ.pop("AI_GENERATION_PROVIDER", None)
+    gen_default = CourseGenerator(AsyncMock())
+    check("FIX3-04: AI_GENERATION_PROVIDER unset -> use_llm is bool",
+          isinstance(gen_default.use_llm, bool))
+
+    # FIX3-05: explicit use_llm=True overrides env var
+    _os.environ["AI_GENERATION_PROVIDER"] = "mock"
+    try:
+        gen_explicit = CourseGenerator(AsyncMock(), use_llm=True)
+        check("FIX3-05: explicit use_llm=True overrides env var",
+              gen_explicit.use_llm is True)
+    finally:
+        _os.environ.pop("AI_GENERATION_PROVIDER", None)
+
     print(f"\n{'='*60}")
     print(f"RESULTS: {passed} passed, {failed} failed")
     if failures:

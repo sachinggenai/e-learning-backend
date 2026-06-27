@@ -251,6 +251,49 @@ async def main():
     check("process_message returns role", result3.get("role") == "assistant")
     check("process_message returns proposals", "proposals" in result3)
 
+    # ===============================================================
+    # Real SSE Streaming Tests (FIX-1 / G-11)
+    # ===============================================================
+    print("\n=== Real SSE Streaming (G-11 fix) ===")
+
+    # 23. chat_stream produces real text_delta events via mock provider
+    mock_client = LLMClient(provider=LLMProvider.MOCK)
+    stream_events = []
+    async for event in mock_client.chat_stream(
+        messages=[LLMMessage(role="user", content="Hello")],
+    ):
+        stream_events.append(event)
+    text_deltas = [e for e in stream_events if e.event_type == "text_delta"]
+    turn_completes = [e for e in stream_events if e.event_type == "turn_complete"]
+    check("G11-FIX-01a: text_delta events produced", len(text_deltas) > 0)
+    check("G11-FIX-01b: turn_complete event produced", len(turn_completes) > 0)
+    check("G11-FIX-01c: delta has content", "delta" in text_deltas[0].data)
+    check("G11-FIX-01d: turn_complete has token_usage",
+          "token_usage" in turn_completes[0].data)
+
+    # 24. process_message_stream yields SSE-formatted events
+    orch2 = ChatOrchestrator(AsyncMock())
+    sse_events = []
+    async for event_str in orch2.process_message_stream(
+        session_id="sse-test-001",
+        user_id="u-001",
+        prompt="Hello from streaming test",
+    ):
+        sse_events.append(event_str)
+    token_events = [e for e in sse_events if "event: token" in e]
+    check("G11-FIX-02a: SSE token events produced", len(token_events) > 0)
+    check("G11-FIX-02b: token event contains data:",
+          "data:" in token_events[0])
+    # Verify JSON payload is valid
+    for te in token_events:
+        data_line = te.split("data: ", 1)[1].strip()
+        payload = __import__('json').loads(data_line)
+        check("G11-FIX-02c: payload has content key", "content" in payload)
+
+    # 25. complete event emitted at end of stream
+    complete_events = [e for e in sse_events if "event: complete" in e]
+    check("G11-FIX-03: complete event emitted at stream end", len(complete_events) > 0)
+
     print(f"\n{'='*60}")
     print(f"RESULTS: {passed} passed, {failed} failed")
     if failures:
