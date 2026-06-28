@@ -1,0 +1,15 @@
+{
+  "name": "E-Learning Local",
+  "values": [
+    {"key": "base_url", "value": "http://localhost:8000", "enabled": true},
+    {"key": "ws_url", "value": "ws://localhost:8000", "enabled": true},
+    {"key": "token", "value": "test-user-001", "enabled": true},
+    {"key": "session_id", "value": "", "enabled": true},
+    {"key": "course_id", "value": "COURSE-DEMO-001", "enabled": true},
+    {"key": "page_id", "value": "", "enabled": true},
+    {"key": "proposal_id", "value": "", "enabled": true},
+    {"key": "job_id", "value": "", "enabled": true},
+    {"key": "import_job_id", "value": "", "enabled": true},
+    {"key": "workflow_job_id", "value": "", "enabled": true}
+  ]
+}
