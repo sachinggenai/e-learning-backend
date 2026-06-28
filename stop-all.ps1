@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Gracefully stop all e-learning-backend services (preserves data).
 
@@ -20,6 +20,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$global:LASTEXITCODE = 0
 
 $AppPort = if ($env:PORT) { [int]$env:PORT } else { 8000 }
 $McpPorts = @(8001, 8002, 8003)
@@ -27,7 +28,7 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 Push-Location $Root
 try {
-    # ── Helpers ────────────────────────────────────────────────
+    # --- Helpers -------------------------------------------------
     function Write-Step { Write-Host "[stop-all] $args" -ForegroundColor Green }
     function Write-Warn  { Write-Host "[stop-all] $args" -ForegroundColor Yellow }
     function Write-Err   { Write-Host "[stop-all] $args" -ForegroundColor Red }
@@ -39,13 +40,13 @@ try {
             Where-Object { $_.State -eq 'Listen' }
 
         if (-not $conns) {
-            return $false  # nothing on this port
+            return $false
         }
 
         foreach ($conn in $conns) {
             $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
             if ($proc) {
-                Write-Step "Port $Port occupied by $($proc.ProcessName) (PID: $($proc.Id)) — stopping $Label"
+                Write-Step "Port $Port occupied by $($proc.ProcessName) (PID: $($proc.Id)) -- stopping $Label"
                 Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
                 $proc.WaitForExit(5000)
                 Write-Step "$Label stopped (was PID $($proc.Id))"
@@ -55,12 +56,12 @@ try {
         return $true
     }
 
-    # ── Status-only mode ───────────────────────────────────────
+    # --- Status-only mode -----------------------------------------
     if ($Status) {
         Write-Host ""
-        Write-Host "══════════════════════════════════════════════"
-        Write-Host "  e-Learning Backend — Running Services"
-        Write-Host "══════════════════════════════════════════════"
+        Write-Host "=============================================="
+        Write-Host "  e-Learning Backend - Running Services"
+        Write-Host "=============================================="
         Write-Host ""
         Write-Host "  Python processes:"
 
@@ -71,9 +72,9 @@ try {
             if ($conn) {
                 $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
                 $name = if ($proc) { $proc.ProcessName } else { "unknown" }
-                Write-Host "    ● Port $port — PID $($conn.OwningProcess) ($name)" -ForegroundColor Green
+                Write-Host "    [UP] Port $port - PID $($conn.OwningProcess) ($name)" -ForegroundColor Green
             } else {
-                Write-Host "    ○ Port $port — nothing" -ForegroundColor Red
+                Write-Host "    [--] Port $port - nothing" -ForegroundColor Red
             }
         }
 
@@ -89,13 +90,13 @@ try {
         exit 0
     }
 
-    # ═══════════════════════════════════════════════════════════
-    # STOP PHASE 1 — MCP protocol adapters
-    # ═══════════════════════════════════════════════════════════
+    # ============================================================
+    # STOP PHASE 1 - MCP protocol adapters
+    # ============================================================
     Write-Host ""
-    Write-Host "══════════════════════════════════════════════"
-    Write-Host "  e-Learning Backend — Graceful Stop"
-    Write-Host "══════════════════════════════════════════════"
+    Write-Host "=============================================="
+    Write-Host "  e-Learning Backend - Graceful Stop"
+    Write-Host "=============================================="
     Write-Host ""
 
     Write-Step "Phase 1/3: Stopping MCP protocol adapters..."
@@ -111,9 +112,9 @@ try {
         Write-Step "Stopped $stoppedMcp MCP server(s)"
     }
 
-    # ═══════════════════════════════════════════════════════════
-    # STOP PHASE 2 — FastAPI backend
-    # ═══════════════════════════════════════════════════════════
+    # ============================================================
+    # STOP PHASE 2 - FastAPI backend
+    # ============================================================
     Write-Host ""
     Write-Step "Phase 2/3: Stopping FastAPI backend..."
     if (Stop-ProcessOnPort -Port $AppPort -Label "FastAPI backend :$AppPort") {
@@ -122,30 +123,30 @@ try {
         Write-Step "FastAPI backend was not running on port $AppPort"
     }
 
-    # ═══════════════════════════════════════════════════════════
-    # STOP PHASE 3 — Docker infrastructure
-    # ═══════════════════════════════════════════════════════════
+    # ============================================================
+    # STOP PHASE 3 - Docker infrastructure
+    # ============================================================
     Write-Host ""
     Write-Step "Phase 3/3: Stopping Docker infrastructure..."
 
     $docker = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $docker) {
-        Write-Warn "Docker not found — skipping container stop"
+        Write-Warn "Docker not found - skipping container stop"
     } else {
-        $dockerInfo = docker info 2>$null
+        $null = docker info 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Warn "Docker daemon not running — skipping container stop"
+            Write-Warn "Docker daemon not running - skipping container stop"
         } elseif (Test-Path docker-compose.yml) {
             docker compose -f docker-compose.yml stop
             Write-Step "Docker containers stopped (data preserved)"
         } else {
-            Write-Warn "docker-compose.yml not found — skipping container stop"
+            Write-Warn "docker-compose.yml not found - skipping container stop"
         }
     }
 
-    # ═══════════════════════════════════════════════════════════
-    # VERIFY
-    # ═══════════════════════════════════════════════════════════
+    # ============================================================
+    # VERIFY - All ports free
+    # ============================================================
     Write-Host ""
     Write-Step "Verifying all ports are free..."
     $allClean = $true
@@ -161,8 +162,8 @@ try {
 
     if ($allClean) {
         Write-Host ""
-        Write-Host "══════════════════════════════════════════════"
-        Write-Host "  ✅ All services stopped" -ForegroundColor Green
+        Write-Host "=============================================="
+        Write-Host "  [OK] All services stopped" -ForegroundColor Green
         Write-Host ""
         Write-Host "  App ports 8000-8003: FREE"
         Write-Host "  Docker containers:   STOPPED (data preserved)"
@@ -170,7 +171,7 @@ try {
         Write-Host ""
         Write-Host "  Restart:  .\start-all.ps1"
         Write-Host "  Wipe all: .\reset-all.ps1"
-        Write-Host "══════════════════════════════════════════════"
+        Write-Host "=============================================="
     } else {
         Write-Host ""
         Write-Err "Some ports could not be freed. You may need to:"
