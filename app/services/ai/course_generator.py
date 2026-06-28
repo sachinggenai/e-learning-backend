@@ -66,6 +66,8 @@ class CourseGenerator:
     ):
         self.db = db
         self.retry_count = self.DEFAULT_RETRY_COUNT
+        self._last_model_used = "mock"     # Updated during generation for provenance
+        self._last_provider_used = "mock"  # Updated during generation for provenance
         # Auto-detect: use LLM when AI is configured and enabled,
         # with explicit override via AI_GENERATION_PROVIDER env var (G-07 fix)
         if use_llm is None:
@@ -195,7 +197,8 @@ class CourseGenerator:
             "provenance": {
                 "import_job_id": import_job_id,
                 "generated_at": datetime.utcnow().isoformat(),
-                "model": "mock",
+                "model": self._last_model_used or "mock",
+                "provider": self._last_provider_used or "mock",
                 "page_count": len(generated_pages),
             },
         }
@@ -408,8 +411,13 @@ class CourseGenerator:
                 logger.warning(
                     "LLM generation failed (%s) — falling back to mock generation", exc
                 )
+                self._last_model_used = "mock"
+                self._last_provider_used = "mock"
 
         # Mock fallback (original behaviour)
+        if not self.use_llm:
+            self._last_model_used = "mock"
+            self._last_provider_used = "mock"
         generated = []
         for i, page in enumerate(pages):
             content = self._generate_page_content(page, options, i)
@@ -434,6 +442,10 @@ class CourseGenerator:
         if llm_client is None:
             provider = LLMProvider.ANTHROPIC if cfg.anthropic_api_key else LLMProvider.MOCK
             llm_client = LLMClient(provider=provider)
+
+        # Track the actual model/provider used for provenance
+        self._last_model_used = llm_client.model
+        self._last_provider_used = llm_client.provider.value
 
         # Get JSON repair instance
         json_repair = None
