@@ -227,6 +227,15 @@ else
         exit 1
     fi
 
+    # Clean up orphaned containers from prior incomplete runs
+    ORPHANS=$(docker ps -a --filter "name=elearning-" --format "{{.Names}}" 2>/dev/null || true)
+    MANAGED=$(docker compose -f docker-compose.yml ps -a --format "{{.Names}}" 2>/dev/null || true)
+    STALE=$(comm -23 <(echo "$ORPHANS" | sort) <(echo "$MANAGED" | sort) 2>/dev/null || true)
+    if [ -n "$STALE" ]; then
+        log_warn "Removing orphaned containers: $(echo "$STALE" | tr '\n' ' ')"
+        echo "$STALE" | xargs -r docker rm -f 2>/dev/null || true
+    fi
+
     # Check if containers already exist (stopped) or need creation
     EXISTING=$(docker compose -f docker-compose.yml ps -q postgres 2>/dev/null || true)
     if [ -n "$EXISTING" ]; then
@@ -234,7 +243,7 @@ else
         docker compose -f docker-compose.yml start
     else
         log_info "Creating and starting containers..."
-        docker compose -f docker-compose.yml up -d
+        docker compose -f docker-compose.yml up -d --remove-orphans
     fi
 
     # Wait for PostgreSQL (hard dependency)

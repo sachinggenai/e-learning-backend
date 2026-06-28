@@ -207,6 +207,15 @@ function Main {
             return 1
         }
 
+        # Check for orphaned containers from prior runs
+        $orphans = docker ps -a --filter "name=elearning-" --format "{{.Names}}" 2>$null
+        $managed = docker compose -f docker-compose.yml ps -a --format "{{.Names}}" 2>$null
+        $stale = $orphans | Where-Object { $_ -notin $managed }
+        if ($stale) {
+            Write-Warn "Removing orphaned containers: $($stale -join ', ')"
+            docker rm -f $stale 2>$null
+        }
+
         # Check if containers exist
         $existing = docker compose -f docker-compose.yml ps -q postgres 2>$null
         if ($existing) {
@@ -214,7 +223,7 @@ function Main {
             docker compose -f docker-compose.yml start
         } else {
             Write-Info "Creating and starting containers..."
-            docker compose -f docker-compose.yml up -d
+            docker compose -f docker-compose.yml up -d --remove-orphans
         }
 
         # Wait for PostgreSQL (hard dependency)
