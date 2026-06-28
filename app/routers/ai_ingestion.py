@@ -622,32 +622,59 @@ async def _call_llm_for_breakdown(sections: list, max_pages: int) -> list:
 
 
 def _get_template_schemas() -> dict:
-    """Return available template types with descriptions."""
+    """Return available template types with FULL component schemas.
+
+    Loads from TEMPLATE_SCHEMAS in content_generator_agent so the LLM
+    sees exact component structure requirements for each template type.
+    Falls back to descriptions if schemas unavailable.
+    """
+    try:
+        from app.services.ai.agents.content_generator_agent import TEMPLATE_SCHEMAS
+        return dict(TEMPLATE_SCHEMAS)  # Full component schemas
+    except ImportError:
+        pass
+
+    # Fallback: rich descriptions (used when agent module not available)
     return {
         "content-text": {
             "description": "Rich text page with headings, paragraphs, lists. Best for explanatory content, definitions, theory.",
             "typical_use": "Topic explanations, concept definitions, theory pages",
             "min_content_chars": 200,
+            "components": [{"component_type": "content-text", "order_index": 0,
+                "data": {"content": "<h2>Title</h2><p>Educational body text with definitions, examples, key takeaways.</p>"}}]
         },
         "tabs": {
             "description": "Tabbed layout with 2-6 tabs. Best for comparing options, organizing subtopics, step-by-step guides.",
             "typical_use": "Comparisons, multi-perspective topics, process steps",
             "min_content_chars": 500,
+            "components": [{"component_type": "tabs", "order_index": 0,
+                "data": {"tabs": [{"title": "Tab 1", "content": "Content for first tab..."},
+                                   {"title": "Tab 2", "content": "Content for second tab..."}]}}]
         },
         "accordion": {
             "description": "Expandable Q&A or topic sections with 2-20 items. Best for FAQs, detailed breakdowns, progressive disclosure.",
             "typical_use": "FAQs, detailed topic breakdowns, knowledge checks",
             "min_content_chars": 400,
+            "components": [{"component_type": "accordion", "order_index": 0,
+                "data": {"items": [{"title": "Question or topic 1", "content": "Expanded answer or detail..."}]}}]
         },
         "click-reveal": {
             "description": "Interactive reveal elements with 2-10 items. Best for discovery learning, key points, scenario exploration.",
             "typical_use": "Discovery activities, key point reveals, scenario walkthroughs",
             "min_content_chars": 300,
+            "components": [{"component_type": "accordion", "order_index": 0,
+                "data": {"items": [{"title": "Reveal point 1", "content": "Hidden detail..."}]}}]
         },
         "final-assessment": {
             "description": "Graded quiz with 3-50 questions (MCQ, true/false, etc). Best for end-of-course assessment, knowledge validation.",
             "typical_use": "End-of-course tests, knowledge checks, certification exams",
             "min_content_chars": 300,
+            "components": [{"component_type": "final-assessment", "order_index": 0,
+                "data": {"passing_score": 80,
+                    "questions": [{"id": "q-1", "type": "mcq", "question": "Question text?",
+                        "options": [{"id": "a", "text": "Correct answer", "isCorrect": True},
+                                     {"id": "b", "text": "Wrong answer", "isCorrect": False}],
+                        "feedback": "Explanation here."}]}}]
         },
     }
 
