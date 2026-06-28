@@ -6,16 +6,46 @@
     "_exporter_id": "e-learning-backend-ai"
   },
   "variable": [
-    { "key": "base_url", "value": "http://localhost:8000" },
-    { "key": "ws_url", "value": "ws://localhost:8000" },
-    { "key": "session_id", "value": "" },
-    { "key": "course_id", "value": "COURSE-DEMO-001" },
-    { "key": "page_id", "value": "" },
-    { "key": "proposal_id", "value": "" },
-    { "key": "job_id", "value": "" },
-    { "key": "import_job_id", "value": "" },
-    { "key": "workflow_job_id", "value": "" },
-    { "key": "token", "value": "test-user-001" }
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "ws_url",
+      "value": "ws://localhost:8000"
+    },
+    {
+      "key": "session_id",
+      "value": ""
+    },
+    {
+      "key": "course_id",
+      "value": "COURSE-DEMO-001"
+    },
+    {
+      "key": "page_id",
+      "value": ""
+    },
+    {
+      "key": "proposal_id",
+      "value": ""
+    },
+    {
+      "key": "job_id",
+      "value": ""
+    },
+    {
+      "key": "import_job_id",
+      "value": ""
+    },
+    {
+      "key": "workflow_job_id",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": "test-user-001"
+    }
   ],
   "item": [
     {
@@ -43,7 +73,17 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/health", "host": ["{{base_url}}"], "path": ["api", "v1", "health"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
+            }
           }
         },
         {
@@ -57,8 +97,8 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "var json = pm.response.json();",
-                  "pm.environment.set(\"ai_enabled\", json.ai_authoring_enabled);",
-                  "console.log(\"AI Authoring:\", json.ai_authoring_enabled);"
+                  "pm.environment.set(\"ai_enabled\", json.aiAuthoringEnabled);",
+                  "console.log(\"AI Authoring:\", json.aiAuthoringEnabled);"
                 ],
                 "type": "text/javascript"
               }
@@ -66,8 +106,25 @@
           ],
           "request": {
             "method": "GET",
-            "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/ai/feature-status", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "feature-status"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/feature-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "feature-status"
+              ]
+            }
           }
         }
       ]
@@ -87,8 +144,8 @@
                   "    pm.response.to.have.status(201);",
                   "});",
                   "var json = pm.response.json();",
-                  "pm.collectionVariables.set(\"session_id\", json.session_id);",
-                  "console.log(\"Session ID:\", json.session_id);"
+                  "pm.collectionVariables.set(\"session_id\", json.session.sessionId);",
+                  "console.log(\"Session ID:\", json.session.sessionId);"
                 ],
                 "type": "text/javascript"
               }
@@ -97,14 +154,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": \"{{token}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"organization_id\": \"default\"\n}"
+              "raw": "{\"user_id\": \"{{token}}\", \"course_id\": \"{{course_id}}\", \"organization_id\": \"default\"}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/ai/sessions", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "sessions"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/sessions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "sessions"
+              ]
+            }
           }
         },
         {
@@ -125,19 +199,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/ai/sessions/{{session_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "sessions", "{{session_id}}"] }
-          }
-        },
-        {
-          "name": "03-Delete Session (Cleanup)",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
-            "url": { "raw": "{{base_url}}/api/v1/ai/sessions/{{session_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "sessions", "{{session_id}}"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/sessions/{{session_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "sessions",
+                "{{session_id}}"
+              ]
+            }
           }
         }
       ]
@@ -169,11 +248,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/tools/list_pages", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "list_pages"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tools/list_pages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tools",
+                "list_pages"
+              ]
+            }
           }
         },
         {
@@ -194,11 +294,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"page_id\": \"{{page_id}}\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/tools/fetch_page", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "fetch_page"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"page_id\": \"{{page_id}}\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tools/fetch_page",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tools",
+                "fetch_page"
+              ]
+            }
           }
         }
       ]
@@ -228,11 +349,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"query\": \"interactive quiz with assessments\",\n  \"max_results\": 5,\n  \"filters\": {\n    \"template_types\": [\"quiz\", \"text-content\"],\n    \"min_pages\": 1\n  }\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/tools/query_similar_courses", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "query_similar_courses"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"query\": \"interactive quiz with assessments\", \"max_results\": 5, \"filters\": {\"template_types\": [\"quiz\", \"text-content\"], \"min_pages\": 1}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tools/query_similar_courses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tools",
+                "query_similar_courses"
+              ]
+            }
           }
         }
       ]
@@ -259,14 +401,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"prompt\": \"Update the title of page {{page_id}} to 'Enhanced Learning Module'\",\n  \"selected_context\": { \"page_id\": \"{{page_id}}\" }\n}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"course_id\": \"{{course_id}}\", \"prompt\": \"Update the title of page {{page_id}} to 'Enhanced Learning Module'\", \"selected_context\": {\"page_id\": \"{{page_id}}\"}}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/ai/chat", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "chat"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/chat",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "chat"
+              ]
+            }
           }
         },
         {
@@ -287,12 +446,29 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/ai/chat/history?session_id={{session_id}}",
-              "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "chat", "history"],
-              "query": [{"key": "session_id", "value": "{{session_id}}"}]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "chat",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
             }
           }
         }
@@ -313,9 +489,9 @@
                   "    pm.response.to.have.status(201);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.proposal_id) {",
-                  "    pm.collectionVariables.set(\"proposal_id\", json.proposal_id);",
-                  "    console.log(\"Proposal ID:\", json.proposal_id);",
+                  "if (json.proposal.proposal_id) {",
+                  "    pm.collectionVariables.set(\"proposal_id\", json.proposal.proposal_id);",
+                  "    console.log(\"Proposal ID:\", json.proposal.proposal_id);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -325,14 +501,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"organization_id\": \"default\",\n  \"course_id\": \"{{course_id}}\",\n  \"operation\": \"create_page\",\n  \"resource_type\": \"page\",\n  \"data\": {\n    \"title\": \"AI-Generated Introduction\",\n    \"template_type\": \"text-content\",\n    \"data\": {\n      \"content\": \"<h2>Welcome to AI-Enhanced Learning</h2><p>This page was created by the AI proposal flow.</p>\"\n    }\n  }\n}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course_id\": \"{{course_id}}\", \"operation\": \"create_page\", \"resource_type\": \"page\", \"data\": {\"title\": \"AI-Generated Introduction\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>Welcome to AI-Enhanced Learning</h2><p>This page was created by the AI proposal flow.</p>\"}}}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals"
+              ]
+            }
           }
         },
         {
@@ -353,9 +546,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals",
+                "{{proposal_id}}"
+              ]
+            }
           }
         },
         {
@@ -376,11 +584,33 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"user_confirmed\": true\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}", "apply"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"user_confirmed\": true}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals",
+                "{{proposal_id}}",
+                "apply"
+              ]
+            }
           }
         },
         {
@@ -401,12 +631,28 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/ai/proposals?session_id={{session_id}}",
-              "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals"],
-              "query": [{"key": "session_id", "value": "{{session_id}}"}]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals"
+              ],
+              "query": [
+                {
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
             }
           }
         },
@@ -415,11 +661,33 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/cancel", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}", "cancel"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals",
+                "{{proposal_id}}",
+                "cancel"
+              ]
+            }
           }
         }
       ]
@@ -439,7 +707,7 @@
                   "    pm.response.to.have.status(201);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal_id);"
+                  "if (json.proposal.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal.proposal_id);"
                 ],
                 "type": "text/javascript"
               }
@@ -448,14 +716,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"organization_id\": \"default\",\n  \"course_id\": \"{{course_id}}\",\n  \"operation\": \"update_page\",\n  \"resource_type\": \"page\",\n  \"resource_id\": \"{{page_id}}\",\n  \"data\": {\n    \"title\": \"Updated Learning Module Title\",\n    \"template_type\": \"text-content\",\n    \"data\": {\n      \"content\": \"<h2>Updated Content</h2><p>This page title was updated via AI proposal.</p>\"\n    }\n  }\n}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course_id\": \"{{course_id}}\", \"operation\": \"update_page\", \"resource_type\": \"page\", \"resource_id\": \"{{page_id}}\", \"data\": {\"title\": \"Updated Learning Module Title\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>Updated Content</h2><p>This page title was updated via AI proposal.</p>\"}}}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals"
+              ]
+            }
           }
         },
         {
@@ -476,11 +761,33 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"user_confirmed\": true\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}", "apply"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"user_confirmed\": true}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals",
+                "{{proposal_id}}",
+                "apply"
+              ]
+            }
           }
         }
       ]
@@ -500,7 +807,7 @@
                   "    pm.response.to.have.status(201);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal_id);"
+                  "if (json.proposal.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal.proposal_id);"
                 ],
                 "type": "text/javascript"
               }
@@ -509,14 +816,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"organization_id\": \"default\",\n  \"course_id\": \"{{course_id}}\",\n  \"operation\": \"delete_page\",\n  \"resource_type\": \"page\",\n  \"resource_id\": \"{{page_id}}\"\n}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course_id\": \"{{course_id}}\", \"operation\": \"delete_page\", \"resource_type\": \"page\", \"resource_id\": \"{{page_id}}\"}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/delete-page", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "delete-page"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals/delete-page",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals",
+                "delete-page"
+              ]
+            }
           }
         },
         {
@@ -537,11 +862,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"user_approved_delete\": true\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/confirm-delete", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "confirm-delete"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"user_approved_delete\": true}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals/confirm-delete",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals",
+                "confirm-delete"
+              ]
+            }
           }
         }
       ]
@@ -570,11 +916,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"validation_scope\": \"full\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/tools/validate_course", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "validate_course"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"validation_scope\": \"full\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tools/validate_course",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tools",
+                "validate_course"
+              ]
+            }
           }
         },
         {
@@ -595,11 +962,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{course_id}}\",\n  \"title\": \"Test Course\",\n  \"pages\": []\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/export/validate", "host": ["{{base_url}}"], "path": ["api", "v1", "export", "validate"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"course_id\": \"{{course_id}}\", \"title\": \"Test Course\", \"pages\": []}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "export",
+                "validate"
+              ]
+            }
           }
         }
       ]
@@ -619,9 +1006,9 @@
                   "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.job_id) {",
-                  "    pm.collectionVariables.set(\"import_job_id\", json.job_id);",
-                  "    console.log(\"Import Job ID:\", json.job_id);",
+                  "if (json.jobId) {",
+                  "    pm.collectionVariables.set(\"import_job_id\", json.jobId);",
+                  "    console.log(\"Import Job ID:\", json.jobId);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -631,18 +1018,48 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "session_id", "value": "{{session_id}}", "type": "text" },
-                { "key": "course_id", "value": "{{course_id}}", "type": "text" },
-                { "key": "organization_id", "value": "default", "type": "text" },
-                { "key": "file", "type": "file", "src": "sample-course-outline.txt" }
+                {
+                  "key": "session_id",
+                  "value": "{{session_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "course_id",
+                  "value": "{{course_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "organization_id",
+                  "value": "default",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-course-outline.txt"
+                }
               ]
             },
-            "url": { "raw": "{{base_url}}/api/v1/ai/ingestions", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "ingestions"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/ingestions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "ingestions"
+              ]
+            }
           }
         },
         {
@@ -663,9 +1080,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "ingestions", "{{import_job_id}}"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "ingestions",
+                "{{import_job_id}}"
+              ]
+            }
           }
         },
         {
@@ -686,11 +1118,33 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}/propose-breakdown", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "ingestions", "{{import_job_id}}", "propose-breakdown"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}/propose-breakdown",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "ingestions",
+                "{{import_job_id}}",
+                "propose-breakdown"
+              ]
+            }
           }
         },
         {
@@ -711,11 +1165,33 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"status\": \"plan_approved\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}/review-plan", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "ingestions", "{{import_job_id}}", "review-plan"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"status\": \"plan_approved\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}/review-plan",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "ingestions",
+                "{{import_job_id}}",
+                "review-plan"
+              ]
+            }
           }
         },
         {
@@ -729,9 +1205,9 @@
                   "    pm.response.to.have.status(202);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.job_id) {",
-                  "    pm.collectionVariables.set(\"workflow_job_id\", json.job_id);",
-                  "    console.log(\"Workflow Job ID:\", json.job_id);",
+                  "if (json.jobId) {",
+                  "    pm.collectionVariables.set(\"workflow_job_id\", json.jobId);",
+                  "    console.log(\"Workflow Job ID:\", json.jobId);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -741,11 +1217,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"import_job_id\": \"{{import_job_id}}\",\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"generation_options\": {\n    \"model\": \"claude-sonnet-4-20250514\",\n    \"temperature\": 0.3,\n    \"language\": \"en\"\n  }\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/generate-course", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "generate-course"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"import_job_id\": \"{{import_job_id}}\", \"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"generation_options\": {\"model\": \"claude-sonnet-4-20250514\", \"temperature\": 0.3, \"language\": \"en\"}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/generate-course",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "generate-course"
+              ]
+            }
           }
         },
         {
@@ -768,9 +1264,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/ai/generate-course/{{import_job_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "generate-course", "{{import_job_id}}"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/generate-course/{{import_job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "generate-course",
+                "{{import_job_id}}"
+              ]
+            }
           }
         }
       ]
@@ -797,11 +1308,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"courseId\": \"{{course_id}}\",\n  \"exportFormat\": \"scorm12\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/export", "host": ["{{base_url}}"], "path": ["api", "v1", "export"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"course_id\": \"{{course_id}}\", \"exportFormat\": \"scorm12\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/export",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "export"
+              ]
+            }
           }
         },
         {
@@ -822,7 +1352,18 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/export/formats", "host": ["{{base_url}}"], "path": ["api", "v1", "export", "formats"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/formats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "export",
+                "formats"
+              ]
+            }
           }
         }
       ]
@@ -842,7 +1383,7 @@
                   "    pm.response.to.have.status(202);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.job_id) pm.collectionVariables.set(\"workflow_job_id\", json.job_id);"
+                  "if (json.jobId) pm.collectionVariables.set(\"workflow_job_id\", json.jobId);"
                 ],
                 "type": "text/javascript"
               }
@@ -851,14 +1392,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"workflow_type\": \"course_generation\",\n  \"input\": {\n    \"import_job_id\": \"{{import_job_id}}\",\n    \"user_id\": \"{{token}}\",\n    \"organization_id\": \"default\",\n    \"generation_options\": {\n      \"model\": \"claude-sonnet-4-20250514\",\n      \"temperature\": 0.3,\n      \"language\": \"en\"\n    }\n  },\n  \"priority\": 0\n}"
+              "raw": "{\"workflow_type\": \"course_generation\", \"input\": {\"import_job_id\": \"{{import_job_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"generation_options\": {\"model\": \"claude-sonnet-4-20250514\", \"temperature\": 0.3, \"language\": \"en\"}}, \"priority\": 0}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/workflows", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/workflows",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows"
+              ]
+            }
           }
         },
         {
@@ -881,9 +1438,23 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows", "{{workflow_job_id}}"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "{{workflow_job_id}}"
+              ]
+            }
           }
         },
         {
@@ -904,9 +1475,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/events", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows", "{{workflow_job_id}}", "events"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/events",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "{{workflow_job_id}}",
+                "events"
+              ]
+            }
           }
         },
         {
@@ -914,9 +1500,24 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/cancel", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows", "{{workflow_job_id}}", "cancel"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "{{workflow_job_id}}",
+                "cancel"
+              ]
+            }
           }
         },
         {
@@ -924,14 +1525,30 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/workflows?status=pending,running&limit=10",
-              "host": ["{{base_url}}"], "path": ["api", "v1", "workflows"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows"
+              ],
               "query": [
-                {"key": "status", "value": "pending,running"},
-                {"key": "limit", "value": "10"}
+                {
+                  "key": "status",
+                  "value": "pending,running"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
               ]
             }
           }
@@ -941,9 +1558,24 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/retry", "host": ["{{base_url}}"], "path": ["api", "v1", "workflows", "{{workflow_job_id}}", "retry"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/workflows/{{workflow_job_id}}/retry",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workflows",
+                "{{workflow_job_id}}",
+                "retry"
+              ]
+            }
           }
         }
       ]
@@ -957,12 +1589,29 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/ai/admin/safety-events?limit=20",
-              "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "safety-events"],
-              "query": [{"key": "limit", "value": "20"}]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "admin",
+                "safety-events"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
             }
           }
         },
@@ -971,9 +1620,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/ai/admin/safety-stats", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "safety-stats"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/admin/safety-stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "admin",
+                "safety-stats"
+              ]
+            }
           }
         },
         {
@@ -981,14 +1645,32 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/ai/admin/audit-logs?session_id={{session_id}}&limit=50",
-              "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "audit-logs"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "admin",
+                "audit-logs"
+              ],
               "query": [
-                {"key": "session_id", "value": "{{session_id}}"},
-                {"key": "limit", "value": "50"}
+                {
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             }
           }
@@ -998,9 +1680,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/ai/admin/audit-summary", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "audit-summary"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/admin/audit-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "admin",
+                "audit-summary"
+              ]
+            }
           }
         }
       ]
@@ -1029,14 +1726,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"query\": \"effective e-learning modules with quizzes\",\n  \"max_results\": 10,\n  \"filters\": {\n    \"template_types\": [\"quiz\", \"accordion\", \"text-content\"],\n    \"min_pages\": 2,\n    \"language\": \"en\"\n  }\n}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"query\": \"effective e-learning modules with quizzes\", \"max_results\": 10, \"filters\": {\"template_types\": [\"quiz\", \"accordion\", \"text-content\"], \"min_pages\": 2, \"language\": \"en\"}}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/ai/similar-courses", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "similar-courses"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/similar-courses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "similar-courses"
+              ]
+            }
           }
         }
       ]
@@ -1049,16 +1763,51 @@
           "name": "01-List Templates",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/ai/templates", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "templates"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "templates"
+              ]
+            }
           }
         },
         {
           "name": "02-Get Template by Type",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/ai/templates/text-content", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "templates", "text-content"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/templates/text-content",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "templates",
+                "text-content"
+              ]
+            }
           }
         }
       ]
@@ -1084,7 +1833,24 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{ws_url}}/ws/courses/{{course_id}}/collaborate?token={{token}}", "host": ["{{ws_url}}"], "path": ["ws", "courses", "{{course_id}}", "collaborate"], "query": [{"key": "token", "value": "{{token}}"}] }
+            "url": {
+              "raw": "{{ws_url}}/ws/courses/{{course_id}}/collaborate?token={{token}}",
+              "host": [
+                "{{ws_url}}"
+              ],
+              "path": [
+                "ws",
+                "courses",
+                "{{course_id}}",
+                "collaborate"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{token}}"
+                }
+              ]
+            }
           }
         }
       ]
@@ -1097,8 +1863,25 @@
           "name": "Get AI Config Status",
           "request": {
             "method": "GET",
-            "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/ai/feature-status", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "feature-status"] }
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/feature-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "feature-status"
+              ]
+            }
           }
         }
       ]
@@ -1112,7 +1895,17 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{base_url}}/api/v1/health", "host": ["{{base_url}}"], "path": ["api", "v1", "health"] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
+            }
           }
         },
         {
@@ -1123,8 +1916,8 @@
               "script": {
                 "exec": [
                   "var json = pm.response.json();",
-                  "if (json.session_id) {",
-                  "    pm.collectionVariables.set(\"session_id\", json.session_id);",
+                  "if (json.session.sessionId) {",
+                  "    pm.collectionVariables.set(\"session_id\", json.session.sessionId);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -1134,11 +1927,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"user_id\": \"{{token}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"organization_id\": \"default\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/sessions", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "sessions"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"user_id\": \"{{token}}\", \"course_id\": \"{{course_id}}\", \"organization_id\": \"default\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/sessions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "sessions"
+              ]
+            }
           }
         },
         {
@@ -1146,11 +1959,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/tools/list_pages", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "list_pages"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tools/list_pages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tools",
+                "list_pages"
+              ]
+            }
           }
         },
         {
@@ -1158,11 +1992,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"query\": \"interactive quizzes and assessments\",\n  \"max_results\": 5\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/tools/query_similar_courses", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "query_similar_courses"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"query\": \"interactive quizzes and assessments\", \"max_results\": 5}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tools/query_similar_courses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tools",
+                "query_similar_courses"
+              ]
+            }
           }
         },
         {
@@ -1170,11 +2025,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"prompt\": \"Create a new welcome page for the course\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/chat", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "chat"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"course_id\": \"{{course_id}}\", \"prompt\": \"Create a new welcome page for the course\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/chat",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "chat"
+              ]
+            }
           }
         },
         {
@@ -1185,7 +2060,7 @@
               "script": {
                 "exec": [
                   "var json = pm.response.json();",
-                  "if (json.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal_id);"
+                  "if (json.proposal.proposal_id) pm.collectionVariables.set(\"proposal_id\", json.proposal.proposal_id);"
                 ],
                 "type": "text/javascript"
               }
@@ -1194,11 +2069,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"user_id\": \"{{token}}\",\n  \"organization_id\": \"default\",\n  \"course_id\": \"{{course_id}}\",\n  \"operation\": \"create_page\",\n  \"resource_type\": \"page\",\n  \"data\": {\n    \"title\": \"E2E Test Welcome Page\",\n    \"template_type\": \"text-content\",\n    \"data\": {\n      \"content\": \"<h2>E2E Test Passed!</h2><p>This page was created via automated end-to-end test.</p>\"\n    }\n  }\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course_id\": \"{{course_id}}\", \"operation\": \"create_page\", \"resource_type\": \"page\", \"data\": {\"title\": \"E2E Test Welcome Page\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>E2E Test Passed!</h2><p>This page was created via automated end-to-end test.</p>\"}}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals"
+              ]
+            }
           }
         },
         {
@@ -1206,11 +2101,33 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"user_confirmed\": true\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "proposals", "{{proposal_id}}", "apply"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"user_confirmed\": true}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "proposals",
+                "{{proposal_id}}",
+                "apply"
+              ]
+            }
           }
         },
         {
@@ -1218,11 +2135,32 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"validation_scope\": \"full\"\n}" },
-            "url": { "raw": "{{base_url}}/api/v1/ai/tools/validate_course", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "tools", "validate_course"] }
+            "body": {
+              "mode": "raw",
+              "raw": "{\"session_id\": \"{{session_id}}\", \"validation_scope\": \"full\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tools/validate_course",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tools",
+                "validate_course"
+              ]
+            }
           }
         },
         {
@@ -1230,9 +2168,30 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "url": { "raw": "{{base_url}}/api/v1/ai/admin/audit-logs?limit=50", "host": ["{{base_url}}"], "path": ["api", "v1", "ai", "admin", "audit-logs"], "query": [{"key": "limit", "value": "50"}] }
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/admin/audit-logs?limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "admin",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
           }
         }
       ]
