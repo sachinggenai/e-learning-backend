@@ -54,6 +54,7 @@ class ApplyProposalRequest(BaseModel):
 
 
 class CancelProposalRequest(BaseModel):
+    session_id: str = Field(..., min_length=1, max_length=128)
     reason: str = Field(default="")
 
 
@@ -149,8 +150,8 @@ async def cancel_proposal(
     try:
         svc = AIProposalService(db)
         result = await svc.cancel_proposal(
-            proposal_id=proposal_id, session_id="", user_id=user.user_id,
-            reason=body.reason,
+            proposal_id=proposal_id, session_id=body.session_id,
+            user_id=user.user_id, reason=body.reason,
         )
     except ProposalError as e:
         return _handle_proposal_err(e)
