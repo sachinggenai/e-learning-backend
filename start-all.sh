@@ -29,6 +29,14 @@ MCP_MODULES=(
 )
 MCP_NAMES=("content-writer-mcp" "safety-scan-mcp" "template-registry-mcp")
 
+# MCP Core Infrastructure (LLM Gateway + Domain Tools) — Phase 1-4
+GATEWAY_PORT=8004
+GATEWAY_MODULE="app.mcp.llm_gateway.server:app"
+GATEWAY_NAME="llm-gateway-mcp"
+DOMAIN_PORT=8005
+DOMAIN_MODULE="app.mcp.domain_tools.server:app"
+DOMAIN_NAME="domain-tools-mcp"
+
 SKIP_DOCKER=false
 SKIP_MCP=false
 FORCE_MCP=false
@@ -205,6 +213,9 @@ if [ "$START_MCP" = true ]; then
         kill_stale_on_port "$port" || true  # MCP failures are non-blocking
     done
 fi
+# Gateway + Domain Tools are core MCP infrastructure — always clean
+kill_stale_on_port "$GATEWAY_PORT" || true
+kill_stale_on_port "$DOMAIN_PORT" || true
 log_info "Port check complete"
 
 # ═══════════════════════════════════════════════════════════════
@@ -279,8 +290,8 @@ fi
 
 # Verify Python version (requires 3.12+)
 PY_VER=$("$VENV_PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "0.0")
-if [ "$(printf '%s\n' "3.12" "$PY_VER" | sort -V | head -1)" != "3.12" ]; then
-    log_error "Python 3.12+ required, found: $PY_VER"
+if [ "$(printf '%s\n' "3.11" "$PY_VER" | sort -V | head -1)" != "3.11" ]; then
+    log_error "Python 3.11+ required, found: $PY_VER"
     "$VENV_PYTHON" --version
     exit 1
 fi
@@ -330,6 +341,24 @@ else
 fi
 
 # ═══════════════════════════════════════════════════════════════
+
+	# ═══════════════════════════════════════════════════════════════
+	# STEP 3a — MCP Core: LLM Gateway + Domain Tools
+	# ═══════════════════════════════════════════════════════════════
+	log_step "Step 3a: Starting MCP Core Infrastructure..."
+	log_info "  LLM Gateway   (port $GATEWAY_PORT) — provider-agnostic LLM access"
+	log_info "  Domain Tools  (port $DOMAIN_PORT) — 7 AI tools"
+
+	"$VENV_PYTHON" -m uvicorn "$GATEWAY_MODULE" --host 0.0.0.0 --port "$GATEWAY_PORT" &
+	MCP_PIDS+=($!)
+	sleep 1.5
+
+	"$VENV_PYTHON" -m uvicorn "$DOMAIN_MODULE" --host 0.0.0.0 --port "$DOMAIN_PORT" &
+	MCP_PIDS+=($!)
+	sleep 0.5
+
+	log_info "MCP Core started (Gateway PID: ${MCP_PIDS[-2]}, Domain Tools PID: ${MCP_PIDS[-1]})"
+
 # STEP 4 — FastAPI backend (foreground)
 # ═══════════════════════════════════════════════════════════════
 log_step "Step 4: Starting FastAPI backend..."
@@ -342,6 +371,11 @@ echo "  PostgreSQL:  localhost:${POSTGRES_PORT:-5432}"
 echo "  Redis:       localhost:6379"
 echo "  Redpanda:    localhost:19092 (Kafka) | localhost:19644 (Admin)"
 echo "  MinIO:       localhost:${S3_PORT:-9000} (API) | localhost:${S3_CONSOLE_PORT:-9001} (Console)"
+echo "  Ollama:      localhost:11434 (qwen2.5:7b, phi3:mini, nomic-embed-text)"
+echo ""
+echo "  --- MCP Architecture ---"
+echo "  LLM Gateway:  http://localhost:$GATEWAY_PORT/health"
+echo "  Domain Tools: http://localhost:$DOMAIN_PORT/health"
 echo "  FastAPI:     http://$APP_HOST:$APP_PORT"
 echo "  API Docs:    http://$APP_HOST:$APP_PORT/api/v1/docs"
 echo "  Health:      http://$APP_HOST:$APP_PORT/api/v1/health"

@@ -6,14 +6,27 @@
   Starts services in chronological order with health checks and port conflict
   resolution. Ctrl+C stops Python services (Docker stays running).
 
+  Service startup order:
+    Step 0: Port conflict resolution
+    Step 1: Docker infrastructure (PostgreSQL, Redis, Redpanda, MinIO)
+    Step 2: Database migrations (Alembic)
+    Step 3: Optional MCP servers (content_writer, safety_scan, template_registry)
+    Step 3a: MCP Core Infrastructure (LLM Gateway :8004, Domain Tools :8005)
+    Step 4: FastAPI backend (:8000)
+
+  MCP Architecture requires Ollama running locally (:11434) with models:
+    - qwen2.5:7b (GENERATOR)
+    - phi3:mini (PLANNER)
+    - nomic-embed-text (EMBEDDINGS)
+
 .PARAMETER SkipDocker
   Skip Docker container startup (containers already running elsewhere).
 
 .PARAMETER SkipMcp
-  Skip MCP protocol adapters.
+  Skip optional MCP protocol adapters (content_writer, safety_scan, template_registry).
 
 .PARAMETER WithMcp
-  Force MCP adapters even if AI_AUTHORING_ENABLED=false.
+  Force optional MCP adapters even if AI_AUTHORING_ENABLED=false.
 
 .PARAMETER AppPort
   Custom port for FastAPI (default: 8000).
@@ -21,7 +34,7 @@
 .EXAMPLE
   .\start-all.ps1                          Start everything
   .\start-all.ps1 -SkipDocker              Skip Docker
-  .\start-all.ps1 -WithMcp                 Force MCP servers
+  .\start-all.ps1 -WithMcp                 Force optional MCP servers
   .\start-all.ps1 -AppPort 8100            Custom app port
 #>
 param(
@@ -43,6 +56,14 @@ $McpModules = @(
     "app.mcp.template_registry.server:app"
 )
 $McpNames = @("content-writer-mcp", "safety-scan-mcp", "template-registry-mcp")
+
+# MCP Core Infrastructure (LLM Gateway + Domain Tools) — Phase 1-4
+$GatewayPort = 8004
+$GatewayModule = "app.mcp.llm_gateway.server:app"
+$GatewayName = "llm-gateway-mcp"
+$DomainPort = 8005
+$DomainModule = "app.mcp.domain_tools.server:app"
+$DomainName = "domain-tools-mcp"
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Push-Location $Root
@@ -178,11 +199,15 @@ function Main {
     }
 
     if (-not (Clear-Port -Port $AppPort)) { return 1 }
+    # Clear MCP core ports (always when AI enabled)
     if ($StartMcp) {
         foreach ($port in $McpPorts) {
-            Clear-Port -Port $port | Out-Null  # MCP failures are non-blocking
+            Clear-Port -Port $port | Out-Null
         }
     }
+    # Gateway + Domain Tools are core MCP infrastructure
+    Clear-Port -Port $GatewayPort | Out-Null
+    Clear-Port -Port $DomainPort | Out-Null
     Write-Info "Port check complete"
 
     # ============================================================
@@ -293,8 +318,8 @@ function Main {
 
     # Verify Python version (requires 3.12+)
     $pyVer = & $VenvPython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>&1
-    if ($LASTEXITCODE -ne 0 -or [version]$pyVer -lt [version]"3.12") {
-        Write-Err "Python 3.12+ required, found: $pyVer"
+    if ($LASTEXITCODE -ne 0 -or [version]$pyVer -lt [version]"3.11") {
+        Write-Err "Python 3.11+ required, found: $pyVer"
         & $VenvPython --version
         return 1
     }
@@ -326,7 +351,7 @@ function Main {
     # STEP 3 - MCP protocol adapters (background)
     # ============================================================
     if ($StartMcp) {
-        Write-Step "Step 3: Starting MCP protocol adapters (background)..."
+        Write-Step "Step 3: Starting optional MCP servers (background)..."
         for ($i = 0; $i -lt $McpPorts.Count; $i++) {
             $port = $McpPorts[$i]
             $module = $McpModules[$i]
@@ -339,10 +364,31 @@ function Main {
             $McpJobs += $proc
             Start-Sleep -Milliseconds 500
         }
-        Write-Info "MCP servers started (PIDs: $($McpJobs.Id -join ', '))"
+        Write-Info "Optional MCP servers started (PIDs: $($McpJobs.Id -join ', '))"
     } else {
-        Write-Step "Step 3: MCP adapters SKIPPED (use -WithMcp to force)"
+        Write-Step "Step 3: Optional MCP servers SKIPPED (use -WithMcp to force)"
     }
+
+    # ============================================================
+    # STEP 3a - MCP Core: LLM Gateway + Domain Tools (always)
+    # ============================================================
+    Write-Step "Step 3a: Starting MCP Core Infrastructure..."
+    Write-Info "  LLM Gateway   (port $GatewayPort) — provider-agnostic LLM access"
+    Write-Info "  Domain Tools  (port $DomainPort) — 7 AI tools (list_pages, proposals, validate...)"
+
+    $gw = Start-Process -FilePath $VenvPython `
+        -ArgumentList "-m", "uvicorn", $GatewayModule, "--host", "0.0.0.0", "--port", $GatewayPort `
+        -WindowStyle Hidden -PassThru
+    $McpJobs += $gw
+    Start-Sleep -Milliseconds 1500
+
+    $dt = Start-Process -FilePath $VenvPython `
+        -ArgumentList "-m", "uvicorn", $DomainModule, "--host", "0.0.0.0", "--port", $DomainPort `
+        -WindowStyle Hidden -PassThru
+    $McpJobs += $dt
+    Start-Sleep -Milliseconds 500
+
+    Write-Info "MCP Core started (Gateway PID: $($gw.Id), Domain Tools PID: $($dt.Id))"
 
     # ============================================================
     # STEP 4 - FastAPI backend (foreground)
@@ -361,14 +407,20 @@ function Main {
     Write-Host "  Redis:       localhost:6379"
     Write-Host "  Redpanda:    localhost:19092 (Kafka) | localhost:19644 (Admin)"
     Write-Host "  MinIO:       localhost:$s3Port (API) | localhost:$s3ConsolePort (Console)"
+    Write-Host "  Ollama:      localhost:11434 (qwen2.5:7b, phi3:mini, nomic-embed-text)"
+    Write-Host ""
+    Write-Host "  --- MCP Architecture ---"
+    Write-Host "  LLM Gateway:  http://localhost:$GatewayPort/health"
+    Write-Host "  Domain Tools: http://localhost:$DomainPort/health"
+    if ($StartMcp) {
+        for ($i = 0; $i -lt $McpPorts.Count; $i++) {
+            Write-Host "  $($McpNames[$i]): http://localhost:$($McpPorts[$i])/health"
+        }
+    }
+    Write-Host ""
     Write-Host "  FastAPI:     http://$($AppHost):$AppPort"
     Write-Host "  API Docs:    http://$($AppHost):$AppPort/api/v1/docs"
     Write-Host "  Health:      http://$($AppHost):$AppPort/api/v1/health"
-    if ($StartMcp) {
-        for ($i = 0; $i -lt $McpPorts.Count; $i++) {
-            Write-Host "  $($McpNames[$i]): http://$($AppHost):$($McpPorts[$i])/health"
-        }
-    }
     Write-Host ""
     Write-Host "  Press Ctrl+C to stop all Python services"
     Write-Host "  (Docker containers keep running - use stop-all.ps1)"

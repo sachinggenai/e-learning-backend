@@ -11,8 +11,13 @@ Abstraction layer over LLM providers (Anthropic, mock). Handles:
 Architecture:
     ChatOrchestrator
         └── LLMClient (this module)
-                ├── Anthropic provider (via anthropic SDK)
-                └── Mock provider (deterministic for testing)
+                ├── MCP Gateway (preferred for Anthropic, provider-agnostic)
+                ├── Anthropic provider (direct SDK, fallback)
+                └── Mock provider (deterministic, in-process)
+
+Phase 2: Anthropic path delegates to LLM Gateway MCP Server
+when available. Falls back to direct Anthropic SDK if gateway
+is unreachable. Mock stays fully in-process.
 """
 
 from __future__ import annotations
@@ -21,11 +26,33 @@ import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# MCP integration (optional — degrades gracefully if gateway is down)
+_MCP_GATEWAY = None  # Lazy singleton reference
+
+
+def _get_mcp_gateway():
+    """Get or initialize the MCP Gateway client (lazy singleton)."""
+    global _MCP_GATEWAY
+    if _MCP_GATEWAY is None:
+        from app.services.ai.mcp_client.mcp_client_manager import MCPClientManager
+        _MCP_GATEWAY = MCPClientManager.get_instance()
+    return _MCP_GATEWAY
+
+
+def _mcp_gateway_available() -> bool:
+    """Check if MCP Gateway is available without blocking."""
+    try:
+        mgr = _get_mcp_gateway()
+        return mgr.is_gateway_available
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +246,104 @@ class LLMClient:
             yield event
 
     # ------------------------------------------------------------------
-    # Anthropic Provider
+    # MCP Gateway Provider (Phase 2 — provider-agnostic)
+    # ------------------------------------------------------------------
+
+    async def _mcp_chat(
+        self,
+        messages: List[LLMMessage],
+        tools: Optional[List[ToolDef]],
+        system_prompt: Optional[str],
+        max_tokens: int,
+        temperature: float,
+    ) -> LLMResponse:
+        """Call LLM via MCP Gateway (provider-agnostic).
+
+        Converts LLM types → canonical format → calls LLMGatewayClient.
+        Falls back to LLMClientError if gateway is unreachable.
+        """
+        from app.services.ai.adapters.llm_client_adapter import (
+            llm_messages_to_canonical,
+            tools_to_canonical,
+            canonical_to_llm_response,
+        )
+        from app.services.ai.mcp_client.message import ChatCompletionRequest
+
+        try:
+            manager = _get_mcp_gateway()
+            gateway = await manager.get_llm_gateway()
+
+            request = ChatCompletionRequest(
+                model=self.model,
+                messages=llm_messages_to_canonical(messages, system_prompt or ""),
+                tools=tools_to_canonical(tools) if tools else None,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=False,
+            )
+
+            start = time.time()
+            response = await gateway.chat(request)
+            latency = (time.time() - start) * 1000
+
+            return canonical_to_llm_response(response, latency_ms=latency)
+
+        except ImportError:
+            raise LLMClientError(
+                "MCP client modules not available", retryable=False
+            )
+        except Exception as e:
+            raise LLMClientError(
+                f"MCP Gateway error: {e}", retryable=True
+            )
+
+    async def _mcp_stream(
+        self,
+        messages: List[LLMMessage],
+        tools: Optional[List[ToolDef]],
+        system_prompt: Optional[str],
+        max_tokens: int,
+        temperature: float,
+    ) -> AsyncIterator[LLMStreamEvent]:
+        """Stream LLM via MCP Gateway."""
+        from app.services.ai.adapters.llm_client_adapter import (
+            llm_messages_to_canonical,
+            tools_to_canonical,
+            canonical_stream_to_llm_event,
+        )
+        from app.services.ai.mcp_client.message import ChatCompletionRequest
+
+        try:
+            manager = _get_mcp_gateway()
+            gateway = await manager.get_llm_gateway()
+
+            request = ChatCompletionRequest(
+                model=self.model,
+                messages=llm_messages_to_canonical(messages, system_prompt or ""),
+                tools=tools_to_canonical(tools) if tools else None,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+
+            async for event in gateway.chat_stream(request):
+                yield canonical_stream_to_llm_event(event)
+
+        except ImportError:
+            yield LLMStreamEvent("error", {
+                "code": "MCP_UNAVAILABLE",
+                "message": "MCP client modules not available",
+                "retryable": False,
+            })
+        except Exception as e:
+            yield LLMStreamEvent("error", {
+                "code": "MCP_GATEWAY_ERROR",
+                "message": f"MCP Gateway error: {e}",
+                "retryable": True,
+            })
+
+    # ------------------------------------------------------------------
+    # Anthropic Provider (direct SDK — fallback when MCP unavailable)
     # ------------------------------------------------------------------
 
     async def _anthropic_chat(
@@ -230,7 +354,23 @@ class LLMClient:
         max_tokens: int,
         temperature: float,
     ) -> LLMResponse:
-        """Call Anthropic Messages API (non-streaming)."""
+        """Call Anthropic Messages API (non-streaming).
+
+        Tries MCP Gateway first for provider-agnostic routing.
+        Falls back to direct Anthropic SDK if gateway is down.
+        """
+        # Try MCP Gateway first
+        if _mcp_gateway_available():
+            try:
+                return await self._mcp_chat(
+                    messages, tools, system_prompt, max_tokens, temperature
+                )
+            except LLMClientError as e:
+                if not e.retryable:
+                    raise
+                logger.warning(
+                    "MCP Gateway failed, falling back to direct Anthropic SDK: %s", e
+                )
         if not self.api_key:
             raise LLMClientError(
                 "ANTHROPIC_API_KEY not configured. Set it in .env or disable AI.",
@@ -307,7 +447,23 @@ class LLMClient:
         max_tokens: int,
         temperature: float,
     ) -> AsyncIterator[LLMStreamEvent]:
-        """Call Anthropic Messages API with streaming."""
+        """Call Anthropic Messages API with streaming.
+
+        Tries MCP Gateway first. Falls back to direct SDK if needed.
+        """
+        # Try MCP Gateway first
+        if _mcp_gateway_available():
+            mcp_failed = False
+            async for event in self._mcp_stream(
+                messages, tools, system_prompt, max_tokens, temperature
+            ):
+                if event.event_type == "error" and event.data.get("retryable"):
+                    # Gateway error — fall back to direct
+                    mcp_failed = True
+                    break
+                yield event
+            if not mcp_failed:
+                return
         if not self.api_key:
             yield LLMStreamEvent("error", {
                 "code": "AI_NOT_CONFIGURED",

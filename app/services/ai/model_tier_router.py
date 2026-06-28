@@ -40,16 +40,16 @@ GENERATOR_TASKS = {
     "assessment", "quiz", "question",
 }
 
-# Model mapping per tier (default: DeepSeek via Anthropic-compatible API)
+# Model mapping per tier (local Ollama via MCP Gateway)
 DEFAULT_TIER_MODELS: Dict[str, str] = {
-    ModelTier.PLANNER.value: "deepseek-v4-flash",
-    ModelTier.GENERATOR.value: "deepseek-v4-pro[1m]",
+    ModelTier.PLANNER.value: "phi3:mini",
+    ModelTier.GENERATOR.value: "qwen2.5:7b",
 }
 
-# Cost comparison (per 1M tokens input)
+# Cost comparison (per 1M tokens input — local = zero)
 TIER_COSTS: Dict[str, float] = {
-    ModelTier.PLANNER.value: 0.30,     # DeepSeek Flash
-    ModelTier.GENERATOR.value: 1.00,   # DeepSeek Pro
+    ModelTier.PLANNER.value: 0.0,      # Local Ollama — zero API cost
+    ModelTier.GENERATOR.value: 0.0,    # Local Ollama — zero API cost
 }
 
 

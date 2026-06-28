@@ -47,12 +47,25 @@ class EmbeddingError(Exception):
 # ── OpenAI Backend ────────────────────────────────────────────────────
 
 class OpenAIBackend(EmbeddingProvider):
-    """OpenAI text-embedding-ada-002 production backend.
+    """OpenAI-compatible embedding backend.
+
+    Works with any OpenAI-compatible API endpoint (OpenAI cloud, Ollama,
+    LiteLLM, etc.) via the OPENAI_BASE_URL env var.
 
     Prerequisites:
         - pip install openai
-        - OPENAI_API_KEY env var set
+        - OPENAI_API_KEY env var (can be dummy for local Ollama)
+        - OPENAI_BASE_URL env var (default: https://api.openai.com/v1)
+          Set to http://localhost:11434/v1 for Ollama
         - EMBEDDING_MODEL env var (default: text-embedding-ada-002)
+          Set to nomic-embed-text for Ollama
+
+    Dimension auto-detection:
+        - nomic-embed-text → 768
+        - text-embedding-ada-002 → 1536
+        - text-embedding-3-small → 1536
+        - text-embedding-3-large → 3072
+        - default → 1536
 
     Error handling:
         - AuthenticationError (401) → EmbeddingError(retryable=False)
@@ -61,10 +74,22 @@ class OpenAIBackend(EmbeddingProvider):
         - All other API errors → EmbeddingError(retryable=True)
     """
 
+    # Dimension lookup for common models
+    _MODEL_DIMENSIONS = {
+        "nomic-embed-text": 768,
+        "nomic-embed-text:latest": 768,
+        "text-embedding-ada-002": 1536,
+        "text-embedding-3-small": 1536,
+        "text-embedding-3-large": 3072,
+    }
+
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         self._api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         self._model = model or os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
-        self._dimension = DEFAULT_EMBEDDING_DIMENSION
+        self._base_url = os.getenv("OPENAI_BASE_URL", "")
+        self._dimension = self._MODEL_DIMENSIONS.get(
+            self._model, DEFAULT_EMBEDDING_DIMENSION
+        )
         self._client = None
 
     @property
@@ -76,7 +101,10 @@ class OpenAIBackend(EmbeddingProvider):
         if self._client is None:
             try:
                 import openai
-                self._client = openai.AsyncOpenAI(api_key=self._api_key)
+                kwargs = {"api_key": self._api_key}
+                if self._base_url:
+                    kwargs["base_url"] = self._base_url
+                self._client = openai.AsyncOpenAI(**kwargs)
             except ImportError:
                 raise EmbeddingError(
                     "openai package not installed. Run: pip install openai",

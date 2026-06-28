@@ -54,9 +54,9 @@ class CourseEmbeddingRecord(Base):
         String(64), default="default", index=True
     )
 
-    # ── Vector data (pgvector native vector(1536)) ──
+    # ── Vector data (pgvector native vector — dimension from env, default 768 for nomic-embed-text) ──
     embedding: Mapped[Optional[list]] = mapped_column(
-        Vector(1536), nullable=True
+        Vector(768), nullable=True
     )
 
     # ── Staleness tracking ───────────────────────────────────

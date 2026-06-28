@@ -154,6 +154,24 @@ async def lifespan(application: FastAPI):
             except Exception:
                 logger.exception("Workflow engine failed to start — degraded mode")
 
+            # ── MCP Client Manager (Phase 2) ────────────────────
+            # Manages MCP LLM Gateway and Domain Tool connections.
+            # Does NOT crash if MCP servers are unavailable —
+            # the system degrades to direct backend calls.
+            try:
+                from app.services.ai.mcp_client.mcp_client_manager import (
+                    MCPClientManager,
+                )
+                mcp_manager = MCPClientManager.get_instance()
+                await mcp_manager.start()
+                application.state.mcp_manager = mcp_manager
+                logger.info("MCP Client Manager STARTED")
+            except Exception:
+                logger.exception(
+                    "MCP Client Manager failed to start — "
+                    "LLM calls will use direct backends"
+                )
+
             # ── Embedding Worker (US-PEND-020) ──────────────────
             try:
                 from app.workers.embedding_worker import EmbeddingWorker
@@ -210,6 +228,9 @@ async def lifespan(application: FastAPI):
         orchestrator = application.state.workflow_orchestrator
         await orchestrator.stop()
         logger.info("Workflow engine STOPPED")
+    if hasattr(application.state, 'mcp_manager'):
+        await application.state.mcp_manager.stop()
+        logger.info("MCP Client Manager STOPPED")
 
 
 app = FastAPI(

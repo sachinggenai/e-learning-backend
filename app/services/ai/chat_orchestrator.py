@@ -703,12 +703,14 @@ class ChatOrchestrator:
                         metadata={"round": round_num + 1},
                     )
 
-                    # Execute the tool
+                    # Execute the tool — try MCP Domain Tools first, fall back to in-process
                     try:
-                        exec_result = await executor.execute(
-                            tool_name,
-                            {**tool_input, "session_id": session_id},
-                            user_id,
+                        exec_result = await self._execute_tool_mcp_fallback(
+                            tool_name=tool_name,
+                            tool_input=tool_input,
+                            session_id=session_id,
+                            user_id=user_id,
+                            executor=executor,
                         )
                         output = exec_result.get("data", exec_result)
                         is_error = exec_result.get("status") == "error"
@@ -1112,6 +1114,58 @@ class ChatOrchestrator:
         except Exception:
             logger.exception("Failed to load course context")
             return {"title": "Unknown", "page_count": 0, "pages": [], "status": "draft"}
+
+    async def _execute_tool_mcp_fallback(
+        self,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+        session_id: str,
+        user_id: str,
+        executor,  # ToolExecutor instance
+    ) -> Dict[str, Any]:
+        """Execute a tool via MCP Domain Tools, falling back to in-process.
+
+        Tries DomainToolClient first. If unavailable or failing,
+        falls back to the in-process ToolExecutor instance.
+        """
+        # Try MCP Domain Tools first
+        try:
+            from app.services.ai.mcp_client.mcp_client_manager import MCPClientManager
+            mgr = MCPClientManager.get_instance()
+            if mgr.is_gateway_available or True:  # Check domain tools specifically
+                dt_client = await mgr.get_domain_tools()
+                if dt_client.is_healthy:
+                    mcp_args = {**tool_input, "session_id": session_id, "_user_id": user_id}
+                    result = await dt_client.call_tool(tool_name, mcp_args)
+                    if result.get("success"):
+                        # Parse MCP response back to ToolExecutor format
+                        raw = result.get("result", [])
+                        if isinstance(raw, list) and raw:
+                            text = raw[0].get("text", "{}")
+                            import json
+                            try:
+                                parsed = json.loads(text)
+                                return {"status": "success", "data": parsed}
+                            except (json.JSONDecodeError, TypeError):
+                                return {"status": "success", "data": text}
+                        return {"status": "success", "data": result.get("result")}
+                    else:
+                        logger.debug(
+                            "MCP tool '%s' failed: %s — falling back to in-process",
+                            tool_name, result.get("error", "unknown"),
+                        )
+        except Exception as e:
+            logger.debug(
+                "MCP Domain Tools unavailable for '%s': %s — using in-process",
+                tool_name, e,
+            )
+
+        # Fall back to in-process ToolExecutor
+        return await executor.execute(
+            tool_name,
+            {**tool_input, "session_id": session_id},
+            user_id,
+        )
 
     def _build_tool_definitions(self) -> list:
         """Build tool definitions from the tool registry for the LLM.

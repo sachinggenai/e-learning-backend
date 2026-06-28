@@ -166,7 +166,7 @@ model_list:
       api_base: http://localhost:11434
       temperature: 0.7
       max_tokens: 4096
-      supports_tool_calling: true
+      supports_tool_ca  lling: true
 
   - model_name: deepseek-v4-flash
     litellm_params:

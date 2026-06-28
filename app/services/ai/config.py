@@ -133,26 +133,26 @@ class AIConfig:
         easier updates. Add more models as they become available.
         """
         return {
-            # ── DeepSeek models (primary) ──────────────────────────
-            "deepseek-v4-pro[1m]": ModelConfig(
-                id="deepseek-v4-pro[1m]",
-                provider="anthropic",
-                api_model_name="deepseek-v4-pro[1m]",
+            # ── Ollama local models (primary) ──────────────────────
+            "qwen2.5:7b": ModelConfig(
+                id="qwen2.5:7b",
+                provider="ollama",
+                api_model_name="qwen2.5:7b",
                 tier=ModelTier.GENERATOR,
                 max_tokens=8192,
-                cost_per_1k_input_tokens=0.001,
-                cost_per_1k_output_tokens=0.005,
+                cost_per_1k_input_tokens=0.0,
+                cost_per_1k_output_tokens=0.0,
                 supports_tool_calling=True,
                 supports_structured_output=True,
             ),
-            "deepseek-v4-flash": ModelConfig(
-                id="deepseek-v4-flash",
-                provider="anthropic",
-                api_model_name="deepseek-v4-flash",
+            "phi3:mini": ModelConfig(
+                id="phi3:mini",
+                provider="ollama",
+                api_model_name="phi3:mini",
                 tier=ModelTier.PLANNER,
                 max_tokens=4096,
-                cost_per_1k_input_tokens=0.0003,
-                cost_per_1k_output_tokens=0.0015,
+                cost_per_1k_input_tokens=0.0,
+                cost_per_1k_output_tokens=0.0,
                 supports_tool_calling=True,
                 supports_structured_output=True,
             ),
