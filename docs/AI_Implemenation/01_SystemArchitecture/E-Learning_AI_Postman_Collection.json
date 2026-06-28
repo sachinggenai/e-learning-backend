@@ -97,7 +97,7 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "var json = pm.response.json();",
-                  "pm.environment.set(\"ai_enabled\", json.aiAuthoringEnabled);",
+                  "pm.collectionVariables.set(\"ai_enabled\", json.aiAuthoringEnabled);",
                   "console.log(\"AI Authoring:\", json.aiAuthoringEnabled);"
                 ],
                 "type": "text/javascript"
@@ -165,7 +165,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"user_id\": \"{{token}}\", \"course_id\": \"{{course_id}}\", \"organization_id\": \"default\"}"
+              "raw": "{\"user_id\": \"{{token}}\", \"course\": \"{{course_id}}\", \"organization_id\": \"default\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/sessions",
@@ -412,7 +412,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"course_id\": \"{{course_id}}\", \"prompt\": \"Update the title of page {{page_id}} to 'Enhanced Learning Module'\", \"selected_context\": {\"page_id\": \"{{page_id}}\"}}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"course\": \"{{course_id}}\", \"prompt\": \"Update the title of page {{page_id}} to 'Enhanced Learning Module'\", \"selected_context\": {\"page_id\": \"{{page_id}}\"}}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/chat",
@@ -512,7 +512,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course_id\": \"{{course_id}}\", \"operation\": \"create_page\", \"resource_type\": \"page\", \"data\": {\"title\": \"AI-Generated Introduction\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>Welcome to AI-Enhanced Learning</h2><p>This page was created by the AI proposal flow.</p>\"}}}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course\": \"{{course_id}}\", \"operation\": \"create_page\", \"resource_type\": \"page\", \"data\": {\"title\": \"AI-Generated Introduction\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>Welcome to AI-Enhanced Learning</h2><p>This page was created by the AI proposal flow.</p>\"}}}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/proposals",
@@ -727,7 +727,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course_id\": \"{{course_id}}\", \"operation\": \"update_page\", \"resource_type\": \"page\", \"resource_id\": \"{{page_id}}\", \"data\": {\"title\": \"Updated Learning Module Title\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>Updated Content</h2><p>This page title was updated via AI proposal.</p>\"}}}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course\": \"{{course_id}}\", \"operation\": \"update_page\", \"resource_type\": \"page\", \"resource_id\": \"{{page_id}}\", \"data\": {\"title\": \"Updated Learning Module Title\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>Updated Content</h2><p>This page title was updated via AI proposal.</p>\"}}}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/proposals",
@@ -827,7 +827,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course_id\": \"{{course_id}}\", \"operation\": \"delete_page\", \"resource_type\": \"page\", \"resource_id\": \"{{page_id}}\"}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course\": \"{{course_id}}\", \"operation\": \"delete_page\", \"resource_type\": \"page\", \"resource_id\": \"{{page_id}}\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/proposals/delete-page",
@@ -873,7 +873,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"user_approved_delete\": true}"
+              "raw": "{\"user_approved_delete\": true, \"session_id\": \"{{session_id}}\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/proposals/confirm-delete",
@@ -973,7 +973,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"course_id\": \"{{course_id}}\", \"title\": \"Test Course\", \"pages\": []}"
+              "raw": "{\"course\": \"{{course_id}}\", \"title\": \"Test Course\", \"pages\": [], \"session_id\": \"{{session_id}}\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/export/validate",
@@ -1006,9 +1006,9 @@
                   "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.jobId) {",
-                  "    pm.collectionVariables.set(\"import_job_id\", json.jobId);",
-                  "    console.log(\"Import Job ID:\", json.jobId);",
+                  "if (json.job_id) {",
+                  "    pm.collectionVariables.set(\"import_job_id\", json.job_id);",
+                  "    console.log(\"Import Job ID:\", json.job_id);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -1205,9 +1205,9 @@
                   "    pm.response.to.have.status(202);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.jobId) {",
-                  "    pm.collectionVariables.set(\"workflow_job_id\", json.jobId);",
-                  "    console.log(\"Workflow Job ID:\", json.jobId);",
+                  "if (json.job_id) {",
+                  "    pm.collectionVariables.set(\"workflow_job_id\", json.job_id);",
+                  "    console.log(\"Workflow Job ID:\", json.job_id);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -1319,7 +1319,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"course_id\": \"{{course_id}}\", \"exportFormat\": \"scorm12\"}"
+              "raw": "{\"course\": \"{{course_id}}\", \"exportFormat\": \"scorm12\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/export",
@@ -1383,7 +1383,7 @@
                   "    pm.response.to.have.status(202);",
                   "});",
                   "var json = pm.response.json();",
-                  "if (json.jobId) pm.collectionVariables.set(\"workflow_job_id\", json.jobId);"
+                  "if (json.job_id) pm.collectionVariables.set(\"workflow_job_id\", json.job_id);"
                 ],
                 "type": "text/javascript"
               }
@@ -1403,7 +1403,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"workflow_type\": \"course_generation\", \"input\": {\"import_job_id\": \"{{import_job_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"generation_options\": {\"model\": \"claude-sonnet-4-20250514\", \"temperature\": 0.3, \"language\": \"en\"}}, \"priority\": 0}"
+              "raw": "{\"workflow_type\": \"course_generation\", \"input\": {\"import_job_id\": \"{{import_job_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"generation_options\": {\"model\": \"claude-sonnet-4-20250514\", \"temperature\": 0.3, \"language\": \"en\"}}, \"priority\": 0, \"session_id\": \"{{session_id}}\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/workflows",
@@ -1938,7 +1938,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"user_id\": \"{{token}}\", \"course_id\": \"{{course_id}}\", \"organization_id\": \"default\"}"
+              "raw": "{\"user_id\": \"{{token}}\", \"course\": \"{{course_id}}\", \"organization_id\": \"default\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/sessions",
@@ -2036,7 +2036,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"course_id\": \"{{course_id}}\", \"prompt\": \"Create a new welcome page for the course\"}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"course\": \"{{course_id}}\", \"prompt\": \"Create a new welcome page for the course\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/chat",
@@ -2080,7 +2080,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course_id\": \"{{course_id}}\", \"operation\": \"create_page\", \"resource_type\": \"page\", \"data\": {\"title\": \"E2E Test Welcome Page\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>E2E Test Passed!</h2><p>This page was created via automated end-to-end test.</p>\"}}}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course\": \"{{course_id}}\", \"operation\": \"create_page\", \"resource_type\": \"page\", \"data\": {\"title\": \"E2E Test Welcome Page\", \"template_type\": \"text-content\", \"data\": {\"content\": \"<h2>E2E Test Passed!</h2><p>This page was created via automated end-to-end test.</p>\"}}}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/proposals",
