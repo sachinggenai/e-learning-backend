@@ -27,13 +27,14 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # ── Parse flags ───────────────────────────────────────────────
-for arg in "$@"; do
-    case "$arg" in
-        --force) FORCE=true ;;
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --force) FORCE=true; shift ;;
         --help)
             sed -n '2,14p' "$0"
             exit 0
             ;;
+        *) echo "Unknown flag: $1 (use --help for usage)"; exit 1 ;;
     esac
 done
 

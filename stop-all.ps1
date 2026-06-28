@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Gracefully stop all e-learning-backend services (preserves data).
 
@@ -10,51 +10,63 @@
 .PARAMETER Status
   Show what's currently running without stopping anything.
 
+.PARAMETER AppPort
+  Custom port for FastAPI (default: 8000, or $env:PORT).
+
 .EXAMPLE
   .\stop-all.ps1               Stop everything
   .\stop-all.ps1 -Status        Show running services
+  .\stop-all.ps1 -AppPort 8100  Stop app on custom port
 #>
 param(
-    [switch]$Status
+    [switch]$Status,
+    [int]$AppPort = 0
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $global:LASTEXITCODE = 0
 
-$AppPort = if ($env:PORT) { [int]$env:PORT } else { 8000 }
+if ($AppPort -eq 0) {
+    $AppPort = if ($env:PORT) { [int]$env:PORT } else { 8000 }
+}
 $McpPorts = @(8001, 8002, 8003)
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 Push-Location $Root
-try {
-    # --- Helpers -------------------------------------------------
-    function Write-Step { Write-Host "[stop-all] $args" -ForegroundColor Green }
-    function Write-Warn  { Write-Host "[stop-all] $args" -ForegroundColor Yellow }
-    function Write-Err   { Write-Host "[stop-all] $args" -ForegroundColor Red }
 
-    function Stop-ProcessOnPort {
-        param([int]$Port, [string]$Label)
+# --- Helpers -------------------------------------------------
+function Write-Step { Write-Host "[stop-all] $args" -ForegroundColor Green }
+function Write-Warn  { Write-Host "[stop-all] $args" -ForegroundColor Yellow }
+function Write-Err   { Write-Host "[stop-all] $args" -ForegroundColor Red }
 
-        $conns = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
-            Where-Object { $_.State -eq 'Listen' }
+function Stop-ProcessOnPort {
+    param([int]$Port, [string]$Label)
 
-        if (-not $conns) {
-            return $false
-        }
+    $conns = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
+        Where-Object { $_.State -eq 'Listen' }
 
-        foreach ($conn in $conns) {
-            $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
-            if ($proc) {
-                Write-Step "Port $Port occupied by $($proc.ProcessName) (PID: $($proc.Id)) -- stopping $Label"
-                Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-                $proc.WaitForExit(5000)
-                Write-Step "$Label stopped (was PID $($proc.Id))"
-            }
-        }
-        Start-Sleep -Seconds 1
-        return $true
+    if (-not $conns) {
+        return $false
     }
+
+    foreach ($conn in $conns) {
+        $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
+        if ($proc) {
+            Write-Step "Port $Port occupied by $($proc.ProcessName) (PID: $($proc.Id)) -- stopping $Label"
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            $proc.WaitForExit(5000)
+            Write-Step "$Label stopped (was PID $($proc.Id))"
+        }
+    }
+    Start-Sleep -Seconds 1
+    return $true
+}
+
+# ================================================================
+# MAIN
+# ================================================================
+function Main {
 
     # --- Status-only mode -----------------------------------------
     if ($Status) {
@@ -87,7 +99,7 @@ try {
             Write-Host "    Docker not available"
         }
         Write-Host ""
-        exit 0
+        return 0
     }
 
     # ============================================================
@@ -177,9 +189,12 @@ try {
         Write-Err "Some ports could not be freed. You may need to:"
         Write-Err "  1. Manually kill the PIDs listed above"
         Write-Err "  2. Or run: .\reset-all.ps1 (destructive)"
-        exit 1
+        return 1
     }
 
-} finally {
-    Pop-Location
+    return 0
 }
+
+$exitCode = Main
+Pop-Location
+exit $exitCode

@@ -125,8 +125,10 @@ function Invoke-Cleanup {
     Write-Host "=============================================="
 }
 
-# Register cleanup for script termination
-try {
+# ================================================================
+# MAIN — wrapped so finally always executes on any exit path
+# ================================================================
+function Main {
     # ============================================================
     # PRE-FLIGHT CHECKS
     # ============================================================
@@ -140,7 +142,7 @@ try {
     if (-not (Test-Path docker-compose.yml) -or -not (Test-Path app/main.py)) {
         Write-Err "This script must be run from the project root directory"
         Write-Err "Expected: docker-compose.yml and app/main.py"
-        exit 1
+        return 1
     }
 
     # Determine MCP startup
@@ -159,6 +161,13 @@ try {
         }
     }
 
+    # Load .env early so health checks use correct credentials
+    Load-DotEnv -Path ".env"
+
+    # Read PG credentials from env (with defaults for docker-compose)
+    $pgUser = if ($env:POSTGRES_USER) { $env:POSTGRES_USER } else { "elearning" }
+    $pgDb   = if ($env:POSTGRES_DB)   { $env:POSTGRES_DB }   else { "elearning_db" }
+
     # ============================================================
     # STEP 0 - Port conflict resolution
     # ============================================================
@@ -168,7 +177,7 @@ try {
         Write-Info "Docker will manage ports 5432, 6379, 19092, 9000, 9001"
     }
 
-    if (-not (Clear-Port -Port $AppPort)) { exit 1 }
+    if (-not (Clear-Port -Port $AppPort)) { return 1 }
     if ($StartMcp) {
         foreach ($port in $McpPorts) {
             Clear-Port -Port $port | Out-Null  # MCP failures are non-blocking
@@ -188,14 +197,14 @@ try {
         if (-not $docker) {
             Write-Err "Docker is not installed. Install Docker Desktop from: https://docker.com"
             Write-Err "Or use -SkipDocker if your infrastructure is running elsewhere."
-            exit 1
+            return 1
         }
 
         $null = docker info 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Docker daemon is not running. Start Docker Desktop first."
             Write-Err "Or use -SkipDocker if your infrastructure is running elsewhere."
-            exit 1
+            return 1
         }
 
         # Check if containers exist
@@ -213,7 +222,7 @@ try {
         $pgReady = $false
         for ($i = 1; $i -le 30; $i++) {
             $null = docker compose -f docker-compose.yml exec -T postgres `
-                pg_isready -U elearning -d elearning_db 2>&1
+                pg_isready -U $pgUser -d $pgDb 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Info "PostgreSQL is ready"
                 $pgReady = $true
@@ -226,7 +235,7 @@ try {
         if (-not $pgReady) {
             Write-Err "PostgreSQL did not become healthy within 60 seconds"
             Write-Err "Check: docker compose -f docker-compose.yml logs postgres"
-            exit 1
+            return 1
         }
 
         # Wait for Redpanda (soft dependency)
@@ -257,8 +266,6 @@ try {
     # ============================================================
     Write-Step "Step 2: Running database migrations..."
 
-    Load-DotEnv -Path ".env"
-
     $VenvDir = Join-Path $Root ".venv"
     if (-not (Test-Path $VenvDir)) {
         Write-Info "Creating virtual environment (.venv)..."
@@ -271,7 +278,7 @@ try {
         $VenvPython = Join-Path $VenvDir "bin\python"
     } else {
         Write-Err "Could not find Python in virtual environment at $VenvDir"
-        exit 1
+        return 1
     }
     Write-Info "Using Python: $VenvPython"
 
@@ -293,7 +300,7 @@ try {
     & $VenvPython -m alembic upgrade head
     if ($LASTEXITCODE -ne 0) {
         Write-Err "Alembic migration failed - check your database connection"
-        exit 1
+        return 1
     }
     Write-Info "Migrations applied"
 
@@ -351,13 +358,27 @@ try {
     Write-Host ""
 
     # Start FastAPI in FOREGROUND
-    & $VenvPython -m uvicorn app.main:app `
-        --host $AppHost `
-        --port $AppPort `
-        --reload `
-        --log-level info
+    # Ctrl+C is caught so the finally block always executes for cleanup
+    try {
+        & $VenvPython -m uvicorn app.main:app `
+            --host $AppHost `
+            --port $AppPort `
+            --reload `
+            --log-level info
+    } catch [System.Management.Automation.BreakException] {
+        # User pressed Ctrl+C — uvicorn was interrupted
+        Write-Host ""
+    }
 
+    return 0
+}
+
+# ── Execute Main with guaranteed cleanup ─────────────────────
+$exitCode = 0
+try {
+    $exitCode = Main
 } finally {
     Invoke-Cleanup
     Pop-Location
 }
+exit $exitCode

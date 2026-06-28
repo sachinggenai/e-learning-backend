@@ -7,18 +7,33 @@
 # Usage:
 #   bash stop-all.sh              Stop everything
 #   bash stop-all.sh --status     Show what's running (no stop)
+#   bash stop-all.sh --app-port 8100  Stop app on custom port
+#   bash stop-all.sh --help       Show this help
 #
 # What it stops (in order):
 #   1. MCP protocol adapters on ports 8001, 8002, 8003
-#   2. FastAPI backend on port 8000 (or custom)
+#   2. FastAPI backend on port 8000 (or --app-port value)
 #   3. Docker infrastructure containers (postgres, redis, redpanda, minio)
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-APP_PORT="${APP_PORT:-8000}"
+APP_PORT="${PORT:-8000}"  # env var default, overridden by --app-port
 MCP_PORTS=(8001 8002 8003)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"  # scripts live at project root
+
+# ── Parse flags ───────────────────────────────────────────────
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --status)   STATUS_MODE=true; shift ;;
+        --app-port) APP_PORT="$2"; shift 2 ;;
+        --help)
+            sed -n '2,18p' "$0"
+            exit 0
+            ;;
+        *) echo "Unknown flag: $1 (use --help for usage)"; exit 1 ;;
+    esac
+done
 
 # ── Colours ────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -62,7 +77,7 @@ kill_port_process() {
 }
 
 # ── Status-only mode ───────────────────────────────────────────
-if [ "${1:-}" = "--status" ]; then
+if [ "${STATUS_MODE:-false}" = true ]; then
     echo ""
     echo "══════════════════════════════════════════════"
     echo "  e-Learning Backend — Running Services"

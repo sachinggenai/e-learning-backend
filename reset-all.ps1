@@ -26,11 +26,13 @@ $McpPorts = @(8001, 8002, 8003)
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 Push-Location $Root
-try {
-    # --- Helpers -------------------------------------------------
-    function Write-Info { Write-Host "[reset-all] $args" -ForegroundColor Green }
-    function Write-Warn { Write-Host "[reset-all] $args" -ForegroundColor Yellow }
-    function Write-Err  { Write-Host "[reset-all] $args" -ForegroundColor Red }
+
+# --- Helpers -------------------------------------------------
+function Write-Info { Write-Host "[reset-all] $args" -ForegroundColor Green }
+function Write-Warn { Write-Host "[reset-all] $args" -ForegroundColor Yellow }
+function Write-Err  { Write-Host "[reset-all] $args" -ForegroundColor Red }
+
+function Main {
 
     # ============================================================
     # CONFIRMATION GATE
@@ -58,7 +60,7 @@ try {
             Write-Host ""
             Write-Info "Cancelled - nothing was deleted."
             Write-Host "  For a non-destructive stop, use: .\stop-all.ps1"
-            exit 0
+            return 0
         }
         Write-Host ""
     }
@@ -140,9 +142,14 @@ try {
     } else {
         Write-Host ""
         Write-Err "Some resources could not be cleaned. Check the errors above."
-        exit 1
+        return 1
     }
 
-} finally {
-    Pop-Location
+    return 1
+    }
+    return 0
 }
+
+$exitCode = Main
+Pop-Location
+exit $exitCode

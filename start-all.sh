@@ -46,18 +46,18 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # ── Parse flags ───────────────────────────────────────────────
-for arg in "$@"; do
-    case "$arg" in
-        --skip-docker) SKIP_DOCKER=true ;;
-        --skip-mcp)    SKIP_MCP=true ;;
-        --with-mcp)    FORCE_MCP=true ;;
-        --app-port)    shift; APP_PORT="${1:-8000}" ;;
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --skip-docker) SKIP_DOCKER=true; shift ;;
+        --skip-mcp)    SKIP_MCP=true; shift ;;
+        --with-mcp)    FORCE_MCP=true; shift ;;
+        --app-port)    APP_PORT="$2"; shift 2 ;;
         --help)
             sed -n '2,20p' "$0"
             exit 0
             ;;
+        *) echo "Unknown flag: $1 (use --help for usage)"; exit 1 ;;
     esac
-    shift 2>/dev/null || true
 done
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -181,6 +181,13 @@ else
     fi
 fi
 
+# ── Load .env early so health checks use correct credentials ──
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a
+    source "$PROJECT_DIR/.env"
+    set +a
+fi
+
 # ═══════════════════════════════════════════════════════════════
 # STEP 0 — Port conflict resolution
 # ═══════════════════════════════════════════════════════════════
@@ -243,13 +250,6 @@ fi
 # STEP 2 — Database migrations
 # ═══════════════════════════════════════════════════════════════
 log_step "Step 2: Running database migrations..."
-
-# Source .env for DATABASE_URL / POSTGRES_* vars
-if [ -f "$PROJECT_DIR/.env" ]; then
-    set -a
-    source "$PROJECT_DIR/.env"
-    set +a
-fi
 
 # Ensure virtual environment exists
 VENV_DIR="$PROJECT_DIR/.venv"
