@@ -203,27 +203,8 @@ async def propose_page_breakdown(
         return ai_error("NO_CONTENT",
             "No valid sections in the extracted content.", status=422)
 
-    # Build page plan: each section → one page
-    pages = []
-    for i, sec in enumerate(sections[:body.max_pages]):
-        if not isinstance(sec, dict):
-            continue
-        heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i+1}"
-        content = sec.get("content_preview") or sec.get("content", "")
-        char_count = sec.get("char_count", 0)
-
-        # Suggest template type based on content hints
-        suggested = _suggest_template(heading, content)
-
-        pages.append({
-            "proposed_title": heading[:200],
-            "suggested_template_type": suggested,
-            "rationale": f"Section '{heading[:80]}' ({char_count} chars) mapped to {suggested}.",
-            "source_section_ids": [str(i)],
-            "order": i,
-            "char_count": char_count,
-            "content_preview": content[:200],
-        })
+    # Build page plan via LLM with RAG context (falls back to rule-based)
+    pages = await _llm_propose_breakdown(sections, max_pages=body.max_pages)
 
     # Store plan on job and transition state
     job.extracted_sections = {
@@ -491,6 +472,258 @@ async def generate_course_parallel(
         return ai_error(e.code, e.message, status=e.http_status)
 
     return {"status": "ok", "mode": "parallel", "concurrency": body.concurrency, **result}
+
+
+async def _llm_propose_breakdown(
+    sections: list, max_pages: int = 50
+) -> list:
+    """Propose page breakdown using LLM with RAG + template context.
+
+    Sends all section previews, template schemas, and similar course
+    examples to the LLM (phi3:mini for fast classification). The LLM:
+    - Generates descriptive page titles (not filenames)
+    - Selects the best template type per page
+    - Can merge small sections or split large ones
+    - Provides rationale for each decision
+
+    Falls back to rule-based _suggest_template if LLM is unavailable
+    or returns invalid output.
+    """
+    if not sections:
+        return []
+
+    try:
+        pages = await _call_llm_for_breakdown(sections, max_pages)
+        if pages and len(pages) > 0:
+            return pages
+    except Exception:
+        pass  # Fall through to rule-based
+
+    # Fallback: rule-based breakdown
+    return _rule_based_breakdown(sections, max_pages)
+
+
+async def _call_llm_for_breakdown(sections: list, max_pages: int) -> list:
+    """Call LLM via MCP Gateway to propose page breakdown."""
+    import json as _json
+
+    # Build template schema context
+    template_schemas = _get_template_schemas()
+
+    # Build RAG context from similar courses
+    rag_context = await _get_rag_context(sections)
+
+    # Build prompt
+    sections_text = ""
+    for i, sec in enumerate(sections[:max_pages * 2]):  # Allow merging
+        if not isinstance(sec, dict):
+            continue
+        heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i+1}"
+        preview = sec.get("content_preview") or sec.get("content", "")[:500]
+        chars = sec.get("char_count", len(preview))
+        sections_text += (
+            f"--- Section {i} ({chars} chars) ---\n"
+            f"Heading: {heading}\n"
+            f"Content: {preview}\n\n"
+        )
+
+    rag_text = ""
+    if rag_context:
+        rag_text = "\nSIMILAR COURSES (for structure reference):\n"
+        for c in rag_context[:3]:
+            ttypes = c.get("template_breakdown", {})
+            rag_text += (
+                f"- {c.get('title', '')}: {c.get('page_count', 0)} pages, "
+                f"templates: {ttypes}\n"
+            )
+
+    prompt = (
+        f"You are an instructional design expert. Analyze the following document "
+        f"sections and create an optimal page breakdown for an e-learning course.\n\n"
+        f"AVAILABLE TEMPLATE TYPES:\n{_json.dumps(template_schemas, indent=2)}\n\n"
+        f"{rag_text}\n"
+        f"DOCUMENT SECTIONS:\n{sections_text}\n"
+        f"INSTRUCTIONS:\n"
+        f"1. Generate a descriptive title for each page (NOT the filename)\n"
+        f"2. Choose the best template type from the available list\n"
+        f"3. Merge very small sections (<200 chars) with adjacent sections\n"
+        f"4. Split very large sections (>5000 chars) into multiple pages\n"
+        f"5. Ensure at least one page uses final-assessment if quiz/test content exists\n"
+        f"6. Maximum {max_pages} pages total\n"
+        f"7. Provide a brief rationale for each template choice\n\n"
+        f"Return ONLY a JSON array:\n"
+        f'[{{"title": "...", "template_type": "...", "rationale": "...", '
+        f'"source_section_ids": [0,1], "order": 0}}, ...]\n'
+    )
+
+    # Call LLM via MCP Gateway directly (bypasses LLMClient proxy dependency)
+    import httpx
+    async with httpx.AsyncClient(timeout=120.0) as http:
+        resp = await http.post(
+            "http://localhost:8004/v1/chat/completions",
+            json={
+                "model": "phi3:mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 8192,  # Large JSON needs headroom
+                "temperature": 0.3,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    # Extract JSON from response
+    if "```json" in content:
+        content = content.split("```json")[1].split("```")[0]
+    elif "```" in content:
+        content = content.split("```")[1].split("```")[0]
+    # Repair truncated JSON (LLM may hit token limit mid-JSON)
+    content = content.strip()
+    if content and not content.endswith("]"):
+        # Try to close the array gracefully
+        last_good = max(
+            content.rfind('"}'), content.rfind('"}],'), content.rfind('}]')
+        )
+        if last_good > 0:
+            content = content[:last_good + 2] + "\n]"
+    if content and content.startswith("[") and content.rstrip().endswith("]"):
+        content = content[content.index("["):content.rindex("]") + 1]
+
+    plan = _json.loads(content)
+    if not isinstance(plan, list) or len(plan) == 0:
+        raise ValueError("LLM returned invalid plan structure")
+
+    # Normalize LLM field names → storage format
+    for i, page in enumerate(plan):
+        # LLM returns: title, template_type, rationale, source_section_ids, order
+        page["proposed_title"] = (
+            page.get("proposed_title") or page.get("title") or f"Page {i+1}"
+        )
+        page["suggested_template_type"] = (
+            page.get("suggested_template_type") or page.get("template_type")
+            or page.get("type") or "content-text"
+        )
+        page["rationale"] = page.get("rationale") or page.get("reason", "")
+        page.setdefault("order", page.get("order", i))
+        page.setdefault("char_count", page.get("char_count", 0))
+        page.setdefault("source_section_ids", page.get("source_section_ids", [str(i)]))
+        if "content_preview" not in page:
+            sids = page.get("source_section_ids", [str(i)])
+            previews = []
+            for sid in sids:
+                idx = int(sid) if str(sid).isdigit() else i
+                if 0 <= idx < len(sections):
+                    sec = sections[idx]
+                    previews.append(
+                        sec.get("content_preview") or sec.get("content", "")
+                    )
+            page["content_preview"] = " ".join(previews)[:200]
+
+    return plan
+
+
+def _get_template_schemas() -> dict:
+    """Return available template types with descriptions."""
+    return {
+        "content-text": {
+            "description": "Rich text page with headings, paragraphs, lists. Best for explanatory content, definitions, theory.",
+            "typical_use": "Topic explanations, concept definitions, theory pages",
+            "min_content_chars": 200,
+        },
+        "tabs": {
+            "description": "Tabbed layout with 2-6 tabs. Best for comparing options, organizing subtopics, step-by-step guides.",
+            "typical_use": "Comparisons, multi-perspective topics, process steps",
+            "min_content_chars": 500,
+        },
+        "accordion": {
+            "description": "Expandable Q&A or topic sections with 2-20 items. Best for FAQs, detailed breakdowns, progressive disclosure.",
+            "typical_use": "FAQs, detailed topic breakdowns, knowledge checks",
+            "min_content_chars": 400,
+        },
+        "click-reveal": {
+            "description": "Interactive reveal elements with 2-10 items. Best for discovery learning, key points, scenario exploration.",
+            "typical_use": "Discovery activities, key point reveals, scenario walkthroughs",
+            "min_content_chars": 300,
+        },
+        "final-assessment": {
+            "description": "Graded quiz with 3-50 questions (MCQ, true/false, etc). Best for end-of-course assessment, knowledge validation.",
+            "typical_use": "End-of-course tests, knowledge checks, certification exams",
+            "min_content_chars": 300,
+        },
+    }
+
+
+async def _get_rag_context(sections: list) -> list:
+    """Retrieve similar course structures from RAG for context.
+
+    Uses the embedding provider + pgvector directly (not the full service)
+    to avoid session dependency during breakdown.
+    """
+    try:
+        import httpx
+        from app.services.ai.embedding_provider import get_embedding_provider
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlalchemy import text
+        import os
+
+        query = " ".join([
+            s.get("heading", "") or s.get("proposed_title", "") or ""
+            for s in sections[:3] if isinstance(s, dict)
+        ])[:500]
+
+        if not query.strip():
+            return []
+
+        # Get embedding
+        provider = get_embedding_provider()
+        vec = await provider.embed(query)
+        vec_str = "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
+
+        db_url = os.getenv("DATABASE_URL", "")
+        if not db_url:
+            return []
+
+        engine = create_async_engine(db_url)
+        async with engine.connect() as conn:
+            r = await conn.execute(text(
+                "SELECT c.course_id, c.title, "
+                "1 - (ce.embedding <=> CAST(:qv AS vector)) AS similarity "
+                "FROM course_embeddings ce "
+                "JOIN courses c ON c.id = ce.course_record_id "
+                "WHERE NOT ce.is_stale "
+                "ORDER BY ce.embedding <=> CAST(:qv AS vector) LIMIT 3"
+            ), {"qv": vec_str})
+            rows = [(r[0], r[1], float(r[2])) for r in r]
+
+        await engine.dispose()
+        return [
+            {"courseId": cid, "title": title, "relevance_score": score}
+            for cid, title, score in rows if score > 0.3
+        ]
+    except Exception:
+        return []
+
+
+def _rule_based_breakdown(sections: list, max_pages: int) -> list:
+    """Fallback: rule-based one-section-per-page breakdown."""
+    pages = []
+    for i, sec in enumerate(sections[:max_pages]):
+        if not isinstance(sec, dict):
+            continue
+        heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i+1}"
+        content = sec.get("content_preview") or sec.get("content", "")
+        char_count = sec.get("char_count", 0)
+        suggested = _suggest_template(heading, content)
+
+        pages.append({
+            "proposed_title": heading[:200],
+            "suggested_template_type": suggested,
+            "rationale": f"Section '{heading[:80]}' ({char_count} chars) mapped to {suggested}.",
+            "source_section_ids": [str(i)],
+            "order": i,
+            "char_count": char_count,
+            "content_preview": content[:200],
+        })
+    return pages
 
 
 def _suggest_template(heading: str, content: str) -> str:
