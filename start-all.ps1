@@ -244,7 +244,7 @@ function Main {
         for ($i = 1; $i -le 30; $i++) {
             $health = docker compose -f docker-compose.yml exec -T redpanda `
                 rpk cluster health 2>$null
-            if ($health -match "Healthy") {
+            if ($health -match "Healthy: true") {
                 Write-Info "Redpanda is ready"
                 $rpReady = $true
                 break
@@ -281,6 +281,15 @@ function Main {
         return 1
     }
     Write-Info "Using Python: $VenvPython"
+
+    # Verify Python version (requires 3.12+)
+    $pyVer = & $VenvPython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>&1
+    if ($LASTEXITCODE -ne 0 -or [version]$pyVer -lt [version]"3.12") {
+        Write-Err "Python 3.12+ required, found: $pyVer"
+        & $VenvPython --version
+        return 1
+    }
+    Write-Info "Python version: $pyVer"
 
     # Install dependencies if uvicorn is missing
     $null = & $VenvPython -c "import uvicorn" 2>&1

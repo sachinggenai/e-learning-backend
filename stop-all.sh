@@ -43,9 +43,9 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Colour
 
 # ── Helpers ────────────────────────────────────────────────────
-log_info()  { echo -e "${GREEN}[stop-all]${NC} $1"; }
-log_warn()  { echo -e "${YELLOW}[stop-all]${NC} $1"; }
-log_error() { echo -e "${RED}[stop-all]${NC} $1"; }
+log_info()  { printf "${GREEN}[stop-all]${NC} %s\n" "$1"; }
+log_warn()  { printf "${YELLOW}[stop-all]${NC} %s\n" "$1"; }
+log_error() { printf "${RED}[stop-all]${NC} %s\n" "$1"; }
 
 kill_port_process() {
     local port="$1"
@@ -95,7 +95,7 @@ if [ "${STATUS_MODE:-false}" = true ]; then
     done
     echo ""
     echo "  Docker containers:"
-    if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
+    if command -v docker &>/dev/null && docker info &>/dev/null; then
         cd "$PROJECT_DIR"
         docker compose -f docker-compose.yml ps 2>/dev/null || echo "    No containers running"
     else
@@ -146,7 +146,7 @@ log_info "Phase 3/3: Stopping Docker infrastructure..."
 
 if ! command -v docker &>/dev/null; then
     log_warn "Docker not found — skipping container stop"
-elif ! docker info &>/dev/null 2>&1; then
+elif ! docker info &>/dev/null; then
     log_warn "Docker daemon not running — skipping container stop"
 else
     cd "$PROJECT_DIR"

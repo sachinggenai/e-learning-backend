@@ -61,9 +61,9 @@ while [ $# -gt 0 ]; do
 done
 
 # ── Helpers ────────────────────────────────────────────────────
-log_info()  { echo -e "${GREEN}[start-all]${NC} $1"; }
-log_warn()  { echo -e "${YELLOW}[start-all]${NC} $1"; }
-log_error() { echo -e "${RED}[start-all]${NC} $1"; }
+log_info()  { printf "${GREEN}[start-all]${NC} %s\n" "$1"; }
+log_warn()  { printf "${YELLOW}[start-all]${NC} %s\n" "$1"; }
+log_error() { printf "${RED}[start-all]${NC} %s\n" "$1"; }
 log_step()  { echo -e "\n${CYAN}${BOLD}▶ $1${NC}"; }
 
 kill_stale_on_port() {
@@ -112,7 +112,7 @@ wait_for_redpanda() {
     log_info "Waiting for Redpanda to be healthy (timeout: 60s)..."
     for i in $(seq 1 30); do
         if docker compose -f docker-compose.yml exec -T redpanda \
-            rpk cluster health 2>/dev/null | grep -q "Healthy"; then
+            rpk cluster health 2>/dev/null | grep -q "Healthy: true"; then
             log_info "Redpanda is ready"
             return 0
         fi
@@ -221,7 +221,7 @@ else
         exit 1
     fi
 
-    if ! docker info &>/dev/null 2>&1; then
+    if ! docker info &>/dev/null; then
         log_error "Docker daemon is not running. Start Docker Desktop first."
         log_error "Or use --skip-docker if your infrastructure is already running elsewhere."
         exit 1
@@ -267,6 +267,15 @@ else
     log_error "Could not find Python in virtual environment at $VENV_DIR"
     exit 1
 fi
+
+# Verify Python version (requires 3.12+)
+PY_VER=$("$VENV_PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "0.0")
+if [ "$(printf '%s\n' "3.12" "$PY_VER" | sort -V | head -1)" != "3.12" ]; then
+    log_error "Python 3.12+ required, found: $PY_VER"
+    "$VENV_PYTHON" --version
+    exit 1
+fi
+log_info "Python version: $PY_VER"
 
 # Install dependencies if uvicorn is missing
 if ! "$VENV_PYTHON" -c "import uvicorn" 2>/dev/null; then

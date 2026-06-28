@@ -39,9 +39,9 @@ while [ $# -gt 0 ]; do
 done
 
 # ── Helpers ────────────────────────────────────────────────────
-log_info()  { echo -e "${GREEN}[reset-all]${NC} $1"; }
-log_warn()  { echo -e "${YELLOW}[reset-all]${NC} $1"; }
-log_error() { echo -e "${RED}[reset-all]${NC} $1"; }
+log_info()  { printf "${GREEN}[reset-all]${NC} %s\n" "$1"; }
+log_warn()  { printf "${YELLOW}[reset-all]${NC} %s\n" "$1"; }
+log_error() { printf "${RED}[reset-all]${NC} %s\n" "$1"; }
 
 # ═══════════════════════════════════════════════════════════════
 # CONFIRMATION GATE
@@ -101,7 +101,7 @@ log_info "Phase 2/3: Destroying Docker containers and volumes..."
 
 if ! command -v docker &>/dev/null; then
     log_warn "Docker not found — skipping container teardown"
-elif ! docker info &>/dev/null 2>&1; then
+elif ! docker info &>/dev/null; then
     log_warn "Docker daemon not running — skipping container teardown"
 else
     cd "$PROJECT_DIR"
