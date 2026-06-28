@@ -116,6 +116,32 @@ See `.env.example` for all AI-related environment variables. Key ones:
 
 ### Running the App
 
+**Quick start (local development):**
+```bash
+# First time or full reset:
+bash reset-all.sh          # Destructive — wipes all data and containers
+bash start-all.sh          # Starts Docker infra → migrations → FastAPI on :8000
+
+# Day-to-day development:
+bash start-all.sh          # Starts everything (idempotent — skips what's already up)
+bash stop-all.sh           # Stops Python + Docker (preserves all data)
+bash start-all.sh --with-mcp   # Force MCP protocol adapters (requires AI enabled)
+
+# PowerShell (Windows):
+.\start-all.ps1
+.\stop-all.ps1
+.\reset-all.ps1
+```
+
+**Flags for `start-all`:**
+| Flag | Effect |
+|------|--------|
+| `--skip-docker` | Skip Docker (containers already running elsewhere) |
+| `--skip-mcp` | Skip MCP protocol adapters |
+| `--with-mcp` | Force MCP adapters even if AI is disabled |
+| `--app-port 8100` | Custom FastAPI port (default: 8000) |
+
+**Manual start (without scripts):**
 ```
 pip install -r requirements.txt
 PYTHONPATH=. uvicorn app.main:app --reload

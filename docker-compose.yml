@@ -7,16 +7,16 @@ services:
     container_name: elearning-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: elearning
-      POSTGRES_PASSWORD: elearning_secret
-      POSTGRES_DB: elearning_db
+      POSTGRES_USER: ${POSTGRES_USER:-elearning}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-elearning_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-elearning_db}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U elearning -d elearning_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elearning} -d ${POSTGRES_DB:-elearning_db}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -54,19 +54,25 @@ services:
       - "19644:9644"
     volumes:
       - rpdata:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   # ── MinIO (S3-compatible, for SCORM/asset storage) ──
   minio:
     image: minio/minio:latest
     container_name: elearning-minio
     restart: unless-stopped
-    command: server /data --console-address ":9001"
+    command: server /data --console-address ":${S3_CONSOLE_PORT:-9001}"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${S3_PORT:-9000}:9000"
+      - "${S3_CONSOLE_PORT:-9001}:9001"
     volumes:
       - miniodata:/data
     healthcheck:

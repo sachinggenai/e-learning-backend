@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════
+# NOTE — For local development, prefer the project-root scripts:
+#   bash start-all.sh      Full stack startup (infra + app + MCP)
+#   bash stop-all.sh       Non-destructive stop (preserves data)
+#   bash reset-all.sh      Destructive reset (deletes all data)
+#
+# This script handles infrastructure ONLY (Docker + migrations).
+# It is kept for CI/CD pipelines and standalone infra setup.
+# ═══════════════════════════════════════════════════════════════════
 # setup.sh — One-command infrastructure setup for e-learning-backend
 # Usage: bash docker/setup.sh
 #

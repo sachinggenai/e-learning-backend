@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════
+# DEPRECATED — Use project-root scripts instead:
+#   bash stop-all.sh       Non-destructive stop (preserves data)
+#   bash reset-all.sh      Destructive reset (deletes all data)
+#
+# This script runs 'docker compose down -v' which DELETES ALL DATA.
+# It is kept for backward compatibility with CI/CD pipelines.
+# ═══════════════════════════════════════════════════════════════════
 # teardown.sh — Stop and remove all e-learning-backend infrastructure containers
 # Usage: bash docker/teardown.sh
 

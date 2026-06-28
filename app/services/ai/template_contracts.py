@@ -200,7 +200,7 @@ class AITemplateContractsService:
     tool calls.
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession | None = None):
         self.db = db
 
     async def list_contracts(
@@ -209,24 +209,26 @@ class AITemplateContractsService:
         """List all template contracts available to the AI agent.
 
         Reads from template_definitions table. Falls back to built-in
-        schemas if no DB record exists for a type.
+        schemas if no DB record exists for a type. If no DB session was
+        provided, returns fallback schemas only.
         """
-        # Query active template definitions
-        q = select(TemplateDefinitionRecord).order_by(
-            TemplateDefinitionRecord.template_type
-        )
-        if not include_legacy:
-            q = q.where(TemplateDefinitionRecord.is_active == True)  # noqa: E712
+        seen_types: set = set()
+        contracts: list = []
 
-        result = await self.db.execute(q)
-        records = list(result.scalars().all())
+        # Query active template definitions if DB is available
+        if self.db is not None:
+            q = select(TemplateDefinitionRecord).order_by(
+                TemplateDefinitionRecord.template_type
+            )
+            if not include_legacy:
+                q = q.where(TemplateDefinitionRecord.is_active == True)  # noqa: E712
 
-        # Build contracts from DB records
-        seen_types = set()
-        contracts = []
-        for record in records:
-            seen_types.add(record.template_type)
-            contracts.append(self._record_to_contract(record))
+            result = await self.db.execute(q)
+            records = list(result.scalars().all())
+
+            for record in records:
+                seen_types.add(record.template_type)
+                contracts.append(self._record_to_contract(record))
 
         # Add fallback contracts for types not in DB
         for type_key, schema in _FALLBACK_SCHEMAS.items():
@@ -241,16 +243,18 @@ class AITemplateContractsService:
         """Get a single template contract by type key.
 
         Returns None if the type is unknown (not in DB and not in fallbacks).
+        If no DB session was provided, checks fallback schemas only.
         """
-        # Try DB first
-        q = select(TemplateDefinitionRecord).where(
-            TemplateDefinitionRecord.template_type == type_key
-        )
-        result = await self.db.execute(q)
-        record = result.scalar_one_or_none()
+        # Try DB first if available
+        if self.db is not None:
+            q = select(TemplateDefinitionRecord).where(
+                TemplateDefinitionRecord.template_type == type_key
+            )
+            result = await self.db.execute(q)
+            record = result.scalar_one_or_none()
 
-        if record is not None:
-            return self._record_to_contract(record)
+            if record is not None:
+                return self._record_to_contract(record)
 
         # Fall back to built-in schemas
         schema = _FALLBACK_SCHEMAS.get(type_key)
@@ -265,20 +269,22 @@ class AITemplateContractsService:
         """Get just the JSON Schema for a template type.
 
         Returns None if the type is unknown.
+        If no DB session was provided, checks fallback schemas only.
         """
-        # Try DB first
-        q = select(TemplateDefinitionRecord).where(
-            TemplateDefinitionRecord.template_type == type_key
-        )
-        result = await self.db.execute(q)
-        record = result.scalar_one_or_none()
+        # Try DB first if available
+        if self.db is not None:
+            q = select(TemplateDefinitionRecord).where(
+                TemplateDefinitionRecord.template_type == type_key
+            )
+            result = await self.db.execute(q)
+            record = result.scalar_one_or_none()
 
-        if record is not None:
-            schema = record.schema_json
-            if isinstance(schema, dict):
-                # Extract the JSON Schema portion — schema_json may
-                # contain render_config, field_schema, etc. wrapped
-                return self._extract_json_schema(type_key, schema)
+            if record is not None:
+                schema = record.schema_json
+                if isinstance(schema, dict):
+                    # Extract the JSON Schema portion — schema_json may
+                    # contain render_config, field_schema, etc. wrapped
+                    return self._extract_json_schema(type_key, schema)
 
         # Fall back
         return _FALLBACK_SCHEMAS.get(type_key)
