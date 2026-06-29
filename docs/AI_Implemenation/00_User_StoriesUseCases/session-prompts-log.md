@@ -482,3 +482,66 @@ Result: 39/39 passing.
 **Q:** now add alll the promt till today whch was asked after the last promt available in the file
 
 **A:** Appended Prompts 32-53.
+
+---
+
+## Prompt 54: Commit Postman Fixes + Validator
+**Q:** commit the Postman fixes and validator script
+
+**A:** Committed `ef6bb39`: 2 files changed (Postman collection + `scripts/validate_api_flows.py`), 326 insertions.
+
+---
+
+## Prompt 55: Push to Remote
+**Q:** push to remote
+
+**A:** Pushed `ef6bb39` → `origin/AI-Architecture-update`.
+
+---
+
+## Prompt 56: RAG Embeddings Tier1 RCA + Fix
+**Q:** fix the RAG embeddings tier1 — point OpenAIBackend to Ollama
+
+**A:** RCA: `OpenAIBackend` didn't pass `OPENAI_BASE_URL` to OpenAI SDK. Fix: read `OPENAI_BASE_URL` env var, pass to `openai.AsyncOpenAI(base_url=...)`. Also auto-detect embedding dimension (nomic-embed-text=768). Tier1 latency: 4,608ms → 351ms.
+
+---
+
+## Prompt 57: Enable pgvector + Seed Vector DB
+**Q:** Now as RAG is returning empty, now try to understand what quest we are making from RAG, expected data should existing in vectordb... make a script to populate vector db
+
+**A:** Created `scripts/seed_vectordb.py` (680 lines): backup/restore, seed 5 courses, embed via Ollama nomic-embed-text, validate. Fixed `Vector(1536)` → `Vector(768)`. Embedded 7 courses. Tier1 warm: 68ms, matches at 0.9997 relevance.
+
+---
+
+## Prompt 58: Update TRD with RAG Fix
+**Q:** update the TRD with RAG tier1 fix
+
+**A:** Added Section E.9 to `TPO-Gap-Analysis-TRD.md` with before/after metrics: cloud OpenAI (4,608ms timeout) → local Ollama (351ms success), dimension fix (1536→768), nomic-embed-text model.
+
+---
+
+## Prompt 59: Update start-all Scripts
+**Q:** update start-all.ps1 with MCP Gateway and Domain Tools
+
+**A:** Updated both `start-all.ps1` and `start-all.sh`: added Gateway (8004) + Domain Tools (8005) to port arrays, startup, cleanup, and display. New STEP 3a for MCP Core Infrastructure.
+
+---
+
+## Prompt 60: Update TRD with Full Findings + Commit
+**Q:** update the TRD with all findings and commit the changes
+
+**A:** Updated `TPO-Gap-Analysis-TRD.md` with Part E (E.1-E.8): MCP architecture, Postman validation matrix, RCA for model routing, full ingestion pipeline verification, session trace analysis. Committed `486151c` — 43 files, 6,902 insertions.
+
+---
+
+## Prompt 61: Push to Remote (Multiple)
+**Q:** push to remote (multiple times throughout session)
+
+**A:** Pushed commits: `486151c`, `ef6bb39`, `99699f4`, `b2f8ab8`, `5c89dca`, `2c47d93`, `bf550e5`, `3fe635c`, `401c22a` — all to `origin/AI-Architecture-update`.
+
+---
+
+## Prompt 62: Check Session History + Add Missing
+**Q:** check the entire history carefully of all the sessions this chat and other chats and add if anything is missing
+
+**A:** Reviewed entire conversation + session transcripts from `~/.claude/projects/`. Added Prompts 54-62 to fill gaps in commit/push/RAG-fix/script-update coverage. Previous session (`4e57945e`) documented in Prompt 1 context.
