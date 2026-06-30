@@ -34,7 +34,7 @@ def report(step, resp, extract=None):
 def main():
     # ── Step 1: Create Session ──
     # Session scoped to existing course; ingestion creates new 'csa' course at apply
-    r = api("POST", "/api/v1/ai/sessions", json={"course_id": "COURSE-DEMO-001"})
+    r = api("POST", "/api/v1/ai/sessions", json={"course_id": "COURSE-DEMO-002"})
     sid = r.json().get("session", {}).get("sessionId", "")
     report("1. Create Session", r, lambda r: print(
         f"  Session ID: {r.json().get('session',{}).get('sessionId','?')}\n"

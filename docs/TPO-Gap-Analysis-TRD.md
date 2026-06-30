@@ -2,8 +2,88 @@
 
 > **Role:** Technical Product Owner / Solution Architect
 > **Date:** 2026-06-26
+> **Last Status Update:** 2026-06-30
 > **Source:** `tpo-gap-analysis.md` (Session `fd2cc595-a73d-44e8-8904-2328d354b804`)
-> **Status:** All 13 gaps fully analyzed — G-01→G-04 ✅ FIXED & VERIFIED | G-05→G-13 📋 SOLUTIONS PROVIDED
+> **Status:** **11 of 13 gaps IMPLEMENTED** — G-01→G-04 ✅ FIXED & VERIFIED | G-05→G-13: 7 IMPLEMENTED, 1 PARTIAL, 1 OPEN
+
+---
+
+## 🔴 STATUS UPDATE — 2026-06-30 (Code-Verified)
+
+### Flow Chart: 13-Gap Implementation Status
+
+```mermaid
+flowchart TD
+    subgraph CRITICAL["🔴 Critical (4) — All IMPLEMENTED"]
+        G01["G-01: State Machine Regression ✅"]:::fixed
+        G02["G-02: Missing page_plan_ready ✅"]:::fixed
+        G03["G-03: propose-breakdown Rejected ✅"]:::fixed
+        G04["G-04: RAG end_span Crash ✅"]:::fixed
+    end
+
+    subgraph MEDIUM["🟡 Medium (5)"]
+        G05["G-05: pgvector Extension ✅"]:::implemented
+        G06["G-06: Mock Embedding ✅"]:::implemented
+        G07["G-07: Course Gen Mock 🟡"]:::partial
+        G08["G-08: DB Ops Not Traced ✅"]:::implemented
+        G09["G-09: Context Prune Trace ✅"]:::implemented
+    end
+
+    subgraph LOW["🟢 Low (4)"]
+        G10["G-10: Seed Data ❌"]:::open
+        G11["G-11: Streaming Spans ✅"]:::implemented
+        G12["G-12: Cost Tracking ✅"]:::implemented
+        G13["G-13: Model Tier Router ✅"]:::implemented
+    end
+
+    G01 ~~~ G02 ~~~ G03 ~~~ G04
+    G05 -->|"migration + docker init"| G05
+    G06 -->|"EMBEDDING_PROVIDER=openai"| G06
+    G07 -->|"LLM primary, mock fallback"| G07
+    G08 -->|"OTel spans per tier"| G08
+    G09 -->|"prune_span in orchestrator"| G09
+    G10 -->|"manual script only"| G10
+    G11 -->|"process_message_stream"| G11
+    G12 -->|"CostTracker.record()"| G12
+    G13 -->|"classify_task + route"| G13
+
+    classDef fixed fill:#00aa44,stroke:#008833,color:#fff
+    classDef implemented fill:#22cc66,stroke:#00aa44,color:#fff
+    classDef partial fill:#ffcc00,stroke:#cc9900,color:#000
+    classDef open fill:#ff4444,stroke:#cc0000,color:#fff
+```
+
+### Evidence-Based Status Per Gap
+
+| Gap | Original Status | Current Status | Evidence |
+|-----|----------------|----------------|----------|
+| **G-01** | ✅ FIXED | ✅ **FIXED & VERIFIED** | `course_generator.py:185` — `job.status = "generated"`. Guard at line 97 accepts both `"plan_approved"` and `"generated"`. |
+| **G-02** | ✅ FIXED | ✅ **FIXED & VERIFIED** | `ai_ingestion.py:235` — `job.status = "page_plan_ready"`. Review guard at line 272 accepts both `"page_plan_ready"` and `"analyzed"`. |
+| **G-03** | ✅ FIXED | ✅ **FIXED & VERIFIED** | `ai_ingestion.py:162-177` — Idempotent read: returns existing plan for `completed`/`plan_approved`/`generated`/`page_plan_ready` jobs. |
+| **G-04** | ✅ FIXED | ✅ **FIXED & VERIFIED** | `session_tracer.py:124` — `end_span()` now accepts `metadata: Optional[Dict[str, Any]] = None`. Merged at lines 152-153. |
+| **G-05** | 📋 SOLUTION | ✅ **IMPLEMENTED** | `alembic/versions/20260627_0001_enable_pgvector_extension.py` — `CREATE EXTENSION IF NOT EXISTS vector` + `ivfflat` index. `docker/init-db.sql` line 4. `docker/setup.sh` lines 55-64. `ENABLE_PGVECTOR=true` in `.env`. |
+| **G-06** | 📋 SOLUTION | ✅ **RESOLVED** | `.env` line 68: `EMBEDDING_PROVIDER=openai`. `OpenAIBackend` in `embedding_provider.py` is production-ready with auth/rate-limit/timeout handling. |
+| **G-07** | 📋 SOLUTION | 🟡 **PARTIALLY RESOLVED** | `course_generator.py:407` — `_generate_pages_with_llm()` uses `ContentGeneratorAgent` + `StreamManager` fan-out when `AI_GENERATION_PROVIDER=llm`. Mock remains as graceful fallback (correct pattern). LLM is primary path; mock is degradation. |
+| **G-08** | 📋 SOLUTION | ✅ **IMPLEMENTED** | `similar_course_service.py` — All 4 DB operations traced via OTel: `trace_db_operation("search_vector")` (line 170), `"search_fulltext"` (line 190), `"search_keyword"` (line 209), `"enrich_results"` (line 274). |
+| **G-09** | 📋 SOLUTION | ✅ **IMPLEMENTED** | `chat_orchestrator.py:529` — `prune_span = tracer.start_span("context_prune")`. Attributes: `original_tokens`, `pruned_tokens`, `messages_removed`, `pruning_strategy`. Error handling at line 544. |
+| **G-10** | 📋 SOLUTION | ❌ **NOT RESOLVED** | `tests/seed_rag_data.py` exists (10 courses, 30 pages, embedding generation, idempotent). But **not integrated** into `docker-compose.yml`, Dockerfiles, `start-all.sh`, or any startup script. Still requires manual `PYTHONPATH=. python tests/seed_rag_data.py`. |
+| **G-11** | 📋 SOLUTION | ✅ **IMPLEMENTED** | `chat_orchestrator.py:842` — `process_message_stream()` method with real SSE streaming via `client.chat_stream()` (Anthropic SDK). Emits: `thinking`, `tool_call`, `tool_result`, `token`, `complete`, `error`, `safety_block` events. |
+| **G-12** | 📋 SOLUTION | ✅ **IMPLEMENTED** | `chat_orchestrator.py:487-488` — `CostTracker` imported and instantiated. `cost_tracker.record()` called at lines 645-647 (sync path) and lines 979-980 (streaming path). |
+| **G-13** | 📋 SOLUTION | ✅ **IMPLEMENTED** | `chat_orchestrator.py:477-480` — `ModelTierRouter` imported, `classify_task()` classifies, `get_model_for_tier()` selects model. Also in streaming path at lines 911-914. |
+
+### Summary
+
+| | Original (2026-06-26) | Current (2026-06-30) |
+|---|---|---|
+| 🔴 Critical (G-01→G-04) | 4 FIXED | **4 FIXED** ✅ |
+| 🟡 Medium (G-05→G-09) | 5 SOLUTIONS | **4 IMPLEMENTED + 1 PARTIAL** |
+| 🟢 Low (G-10→G-13) | 4 SOLUTIONS | **3 IMPLEMENTED + 1 OPEN** |
+| **Total progress** | **4/13 (31%)** | **11/13 (85%)** |
+| Remaining work | 9 gaps need implementation | **1 partial (G-07) + 1 open (G-10)** |
+
+**Only 2 items remain:**
+- **G-07 (Partial):** LLM generation is the primary path but some hardcoded `"mock"` provenance strings remain at lines 69-70 in `course_generator.py`. These are cosmetic — actual generation uses LLM.
+- **G-10 (Open):** `tests/seed_rag_data.py` needs integration into `docker-compose.yml` or `start-all.sh` for automated seeding.
 
 ---
 
