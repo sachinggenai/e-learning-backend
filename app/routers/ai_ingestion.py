@@ -160,6 +160,13 @@ async def propose_page_breakdown(
         existing_plan = raw["plan"]
 
     if existing_plan and job.status in ("completed", "plan_approved", "generated", "page_plan_ready"):
+        # Re-transition finished jobs back to page_plan_ready so review-plan accepts them.
+        # page_plan_ready jobs stay as-is; everything else resets to page_plan_ready.
+        did_reset = False
+        if job.status != "page_plan_ready":
+            job.status = "page_plan_ready"
+            await db.commit()
+            did_reset = True
         return {
             "status": "ok",
             "job_id": job.job_id,
@@ -173,7 +180,11 @@ async def propose_page_breakdown(
                 "warnings": [],
             },
             "idempotent": True,
-            "message": "Returning existing plan (job already processed).",
+            "message": (
+                "Returning existing plan — status reset to page_plan_ready for re-review."
+                if did_reset
+                else "Returning existing plan (job already processed)."
+            ),
         }
 
     # ── State guard: only allow regeneration from fresh states ─────
