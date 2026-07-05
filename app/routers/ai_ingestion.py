@@ -801,7 +801,7 @@ def _rule_based_breakdown(sections: list, max_pages: int) -> list:
         total = max(len(sections), 1)
 
         pages = []
-        for i, sec in enumerate(sections[:max_pages]):
+        for i, sec in enumerate(sections):
             if not isinstance(sec, dict):
                 continue
             heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i + 1}"
@@ -828,7 +828,7 @@ def _rule_based_breakdown(sections: list, max_pages: int) -> list:
     except Exception:
         # Ultimate fallback: original _suggest_template approach
         pages = []
-        for i, sec in enumerate(sections[:max_pages]):
+        for i, sec in enumerate(sections):
             if not isinstance(sec, dict):
                 continue
             heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i + 1}"
@@ -1015,7 +1015,7 @@ def _heuristic_breakdown(sections: list, max_pages: int = 50) -> list:
     current_parent_template = None
     is_assessment_group = False
 
-    for i, sec in enumerate(sections[:max_pages]):
+    for i, sec in enumerate(sections):  # Process ALL sections; merging reduces page count
         if not isinstance(sec, dict):
             continue
 
@@ -1052,23 +1052,8 @@ def _heuristic_breakdown(sections: list, max_pages: int = 50) -> list:
             # Child section — belongs to current parent group
             current_group_indices.append(i)
         else:
-            # Standalone section — if current group exists and this looks new, flush
-            if current_group_indices and not is_tab and not is_section and not is_slide and not is_question:
-                # Check if this is a new standalone topic
-                if char_count > 100 and not heading.startswith(("—", "-", "—")):
-                    merged_groups.append({
-                        "heading": current_parent_heading or "Untitled Page",
-                        "indices": current_group_indices,
-                        "is_assessment": is_assessment_group,
-                        "child_type": _detect_child_type(current_group_indices, sections),
-                    })
-                    current_group_indices = [i]
-                    current_parent_heading = heading
-                    is_assessment_group = False
-                else:
-                    current_group_indices.append(i)
-            else:
-                current_group_indices.append(i)
+            # Standalone section — keep accumulating in current group
+            current_group_indices.append(i)
 
     # Flush final group
     if current_group_indices:
@@ -1108,11 +1093,13 @@ def _heuristic_breakdown(sections: list, max_pages: int = 50) -> list:
 
         # Override template for known group types
         suggested_template = best.template_type
-        if group.get("child_type") == "tabs" and suggested_template == "content-text":
+        if group.get("is_assessment"):
+            suggested_template = "final-assessment"
+        elif group.get("child_type") == "tabs":
             suggested_template = "tabs"
-        elif group.get("child_type") == "accordion" and suggested_template == "content-text":
+        elif group.get("child_type") == "accordion":
             suggested_template = "accordion"
-        elif group.get("is_assessment"):
+        elif group.get("child_type") == "assessment":
             suggested_template = "final-assessment"
 
         # Build merged source_section_ids

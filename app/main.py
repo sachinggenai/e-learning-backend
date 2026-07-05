@@ -16,7 +16,6 @@ from app.routers import (
     export,
     imports,
     health,
-    media,
     enhanced_templates,
     component_registry,
     page_components,
@@ -288,7 +287,11 @@ api_router.include_router(courses.router)
 api_router.include_router(templates.router)
 api_router.include_router(export.router)
 api_router.include_router(imports.router)
-api_router.include_router(media.router)
+try:
+    from app.routers import media
+    api_router.include_router(media.router)
+except Exception:
+    logger.warning("Media router failed to load — degraded mode")
 api_router.include_router(enhanced_templates.router)
 api_router.include_router(component_registry.router)
 api_router.include_router(page_components.router)
