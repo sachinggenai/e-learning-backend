@@ -101,6 +101,15 @@ class AIConfig:
     session_cleanup_interval_minutes: int = 15
     rate_limit_create_session_per_hour: int = 20
 
+    # ── TRD-CGQ Phase 1: Course Generation Quality ──────────────
+    generation_provider: str = ""            # "ollama" | "anthropic" | "mock" — explicit override
+    template_selector_llm_enabled: bool = False
+    template_selector_model: str = "qwen2.5:7b"
+    semantic_splitter_enabled: bool = False
+    rules_based_mcq_min_questions: int = 3
+    component_hierarchy_enabled: bool = False
+    model_escalation_chain: list = field(default_factory=lambda: ["qwen2.5:7b", "phi3:mini", "mock"])
+
     # ── Similar Course Retrieval / RAG (US-BKND-AI-015) ────────
     enable_pgvector: bool = False
     embedding_provider_name: str = "mock"
@@ -346,6 +355,14 @@ def load_ai_config() -> AIConfig:
         workflow_lock_timeout_ms=_env_int("WORKFLOW_LOCK_TIMEOUT_MS", 5000),
         workflow_stale_threshold=_env_int("WORKFLOW_STALE_THRESHOLD", 30),
         workflow_max_duration_seconds=_env_int("WORKFLOW_MAX_DURATION_SECONDS", 86400),
+        # ── TRD-CGQ Phase 1: Course Generation Quality ──────────
+        generation_provider=os.getenv("AI_GENERATION_PROVIDER", "").lower(),
+        template_selector_llm_enabled=_env_bool("AI_TEMPLATE_SELECTOR_LLM_ENABLED", False),
+        template_selector_model=os.getenv("AI_TEMPLATE_SELECTOR_MODEL", "qwen2.5:7b"),
+        semantic_splitter_enabled=_env_bool("AI_SEMANTIC_SPLITTER_ENABLED", False),
+        rules_based_mcq_min_questions=_env_int("AI_RULES_BASED_MCQ_MIN_QUESTIONS", 3),
+        component_hierarchy_enabled=_env_bool("AI_COMPONENT_HIERARCHY_ENABLED", False),
+        model_escalation_chain=_env_list("AI_MODEL_ESCALATION_CHAIN", ["qwen2.5:7b", "phi3:mini", "mock"]),
     )
     return _ai_config
 
@@ -386,3 +403,11 @@ def _env_float(key: str, default: float) -> float:
     except (ValueError, TypeError):
         logger.warning("Invalid float for %s, using default %f", key, default)
         return default
+
+
+def _env_list(key: str, default: list) -> list:
+    """Read a comma-separated list environment variable."""
+    raw = os.getenv(key, "")
+    if not raw:
+        return default
+    return [item.strip() for item in raw.split(",") if item.strip()]

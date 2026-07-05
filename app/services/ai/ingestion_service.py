@@ -114,11 +114,37 @@ class AIIngestionService:
             try:
                 from app.services.ai.document_extractor import DocumentExtractor
                 extractor = DocumentExtractor()
-                mime = self._mime_for(f".{detected}")
-                full_text = await extractor.extract(tmp_path, mime)
-                extracted, source_meta = self._extract_text(
-                    full_text.encode("utf-8"), filename, "md"
-                )
+
+                if detected == "docx":
+                    # ── TRD-CGQ Phase 1: Structured DOCX extraction ──
+                    # Uses real paragraph styles for accurate section detection
+                    structured = extractor.extract_structured(tmp_path)
+                    raw_text = structured.get("raw_text", "")
+                    paragraphs = structured.get("paragraphs", [])
+
+                    from app.services.ai.document_splitter import DocumentSplitter
+                    splitter = DocumentSplitter(use_llm=False)
+                    sections = splitter.split_structured(paragraphs, filename)
+
+                    extracted = [s.to_dict() for s in sections]
+                    source_meta = {
+                        "page_count": len(sections),
+                        "total_chars": sum(s.char_count for s in sections),
+                        "language": "en",
+                        "title": filename,
+                        "splitter_method": "structured_paragraphs",
+                        "paragraph_count": len(paragraphs),
+                        "heading_count": sum(1 for p in paragraphs if p.get("is_heading")),
+                    }
+                else:
+                    # PDF: existing flow (pdfplumber doesn't expose styles)
+                    mime = self._mime_for(f".{detected}")
+                    full_text = await extractor.extract(tmp_path, mime)
+                    extracted, source_meta = self._extract_text(
+                        full_text.encode("utf-8"), filename, "md"
+                    )
+                    if source_meta:
+                        source_meta["splitter_method"] = "blank_line_split"
             except Exception as exc:
                 logger.warning("Document extraction failed for %s: %s", filename, exc)
                 extracted = None

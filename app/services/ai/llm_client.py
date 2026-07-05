@@ -61,6 +61,7 @@ def _mcp_gateway_available() -> bool:
 
 class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
+    OLLAMA = "ollama"        # Local Ollama models (qwen2.5:7b, phi3:mini, etc.)
     MOCK = "mock"
 
 

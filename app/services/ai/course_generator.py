@@ -571,10 +571,10 @@ class CourseGenerator:
         cfg = get_ai_config()
         llm_client = self._llm_client
         if llm_client is None:
-            provider = LLMProvider.ANTHROPIC if cfg.anthropic_api_key else LLMProvider.MOCK
+            provider = _resolve_generation_provider(cfg)
             llm_client = LLMClient(provider=provider)
 
-        # Track the actual model/provider used for provenance
+        # Track the actual model/provider used for provenance (G4 fix)
         self._last_model_used = llm_client.model
         self._last_provider_used = llm_client.provider.value
 
@@ -839,3 +839,52 @@ class GenerationError(Exception):
         self.message = message
         self.http_status = http_status
         super().__init__(message)
+
+
+# ── TRD-CGQ G4 fix: Provider resolution ────────────────────────────────
+
+
+def _resolve_generation_provider(cfg) -> Any:
+    """Resolve the actual LLM provider for provenance tracking.
+
+    TRD-CGQ G4 fix: Previously provider was always labeled "anthropic"
+    when an API key was set, even if the actual backend was Ollama
+    (via a custom base URL) or DeepSeek. Now we detect from config.
+
+    Priority:
+    1. cfg.generation_provider explicit setting ("ollama", "anthropic", "mock")
+    2. cfg.primary_model_id lookup in model registry → provider field
+    3. anthropic_api_key presence → LLMProvider.ANTHROPIC
+    4. Fallback → LLMProvider.MOCK
+
+    Returns LLMProvider enum value.
+    """
+    from app.services.ai.llm_client import LLMProvider
+
+    # 1. Explicit generation_provider config
+    explicit = (getattr(cfg, "generation_provider", "") or "").lower()
+    if explicit == "ollama":
+        return LLMProvider.OLLAMA
+    if explicit == "anthropic":
+        return LLMProvider.ANTHROPIC
+    if explicit == "mock":
+        return LLMProvider.MOCK
+
+    # 2. Check model registry for the primary model's provider
+    try:
+        model_cfg = cfg.get_model(cfg.primary_model_id)
+        if model_cfg and model_cfg.provider:
+            provider_name = model_cfg.provider.lower()
+            if provider_name == "ollama":
+                return LLMProvider.OLLAMA
+            if provider_name in ("anthropic", "anthropic"):
+                return LLMProvider.ANTHROPIC
+    except Exception:
+        pass
+
+    # 3. Fall back to API key presence
+    if cfg.anthropic_api_key:
+        return LLMProvider.ANTHROPIC
+
+    # 4. Default
+    return LLMProvider.MOCK
