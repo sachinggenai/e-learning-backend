@@ -981,14 +981,15 @@ async def _llm_refine_ambiguous(heuristic_pages: list, sections: list) -> list:
 def _heuristic_breakdown(sections: list, max_pages: int = 50) -> list:
     """Generate page breakdown using FeatureDetector + TemplateSelector.
 
-    TRD-CGQ Phase 2C: ZERO-LLM path. Each section gets:
-    - ContentFeatures extracted (regex/counting)
-    - TemplateScore via TemplateSelector.select_with_confidence()
-    - needs_llm_refinement flag when top 2 scores are within 0.30 margin
-
-    Returns list of page dicts compatible with the existing plan format.
-    Falls back to _rule_based_breakdown on any error.
+    TRD-CGQ Phase 2C: ZERO-LLM path with section merging per TRD §5.5.
+    Merging rules:
+      1. Consecutive "Tab N —" sections under a parent PAGE → merge into 1 page
+      2. Consecutive "Section N —" / FAQ items under a parent → merge into 1 page
+      3. Consecutive "Question N" items under an assessment parent → merge into 1 page
+      4. Sections < 200 chars merge with next section
+      5. Sections sharing same source_section_ids → dedup
     """
+
     from app.services.ai.feature_detector import FeatureDetector
     from app.services.ai.template_selector import TemplateSelector
 
@@ -996,37 +997,205 @@ def _heuristic_breakdown(sections: list, max_pages: int = 50) -> list:
     selector = TemplateSelector()
     total = max(len(sections), 1)
 
-    pages = []
+    # --- Step 1: Detect parent/child relationships ---
+    # A "parent" section is a PAGE header (PAGE X — ...) or has template metadata
+    # Children follow the parent until the next parent section
+
+    import re
+    _PARENT_PAGE_RE = re.compile(r'^PAGE\s+\d+\s*[\—\-–]', re.IGNORECASE)
+    _TAB_CHILD_RE = re.compile(r'^Tab\s+\d+\s*[\—\-–]', re.IGNORECASE)
+    _SECTION_CHILD_RE = re.compile(r'^Section\s+\d+\s*[\—\-–]', re.IGNORECASE)
+    _SLIDE_CHILD_RE = re.compile(r'^Slide\s+\d+\s*[\—\-–]', re.IGNORECASE)
+    _QUESTION_RE = re.compile(r'^Question\s+\d+', re.IGNORECASE)
+
+    # Build merged groups: list of (merged_heading, merged_template, [section_indices])
+    merged_groups = []
+    current_group_indices = []
+    current_parent_heading = None
+    current_parent_template = None
+    is_assessment_group = False
+
     for i, sec in enumerate(sections[:max_pages]):
         if not isinstance(sec, dict):
             continue
 
-        heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i + 1}"
-        content = sec.get("content") or sec.get("content_preview") or ""
+        heading = sec.get("heading", "")
+        content = sec.get("content") or sec.get("content_preview", "")
         char_count = sec.get("char_count", len(content))
 
-        # Extract features and select template
-        features = detector.detect(content, i, total)
+        is_parent = bool(_PARENT_PAGE_RE.match(heading))
+        is_tab = bool(_TAB_CHILD_RE.match(heading))
+        is_section = bool(_SECTION_CHILD_RE.match(heading))
+        is_slide = bool(_SLIDE_CHILD_RE.match(heading))
+        is_question = bool(_QUESTION_RE.match(heading))
+
+        # Detect assessment group from parent heading
+        if is_parent and ("assessment" in heading.lower() or "quiz" in heading.lower()):
+            is_assessment_group = True
+        elif is_parent:
+            is_assessment_group = False
+
+        # Start a new group when we hit a parent section
+        if is_parent:
+            # Flush previous group
+            if current_group_indices:
+                merged_groups.append({
+                    "heading": current_parent_heading or "Untitled Page",
+                    "indices": current_group_indices,
+                    "is_assessment": is_assessment_group,
+                    "child_type": _detect_child_type(current_group_indices, sections),
+                })
+            current_group_indices = [i]
+            current_parent_heading = heading
+            current_parent_template = None  # Will be detected from features
+        elif is_tab or is_section or is_slide or is_question:
+            # Child section — belongs to current parent group
+            current_group_indices.append(i)
+        else:
+            # Standalone section — if current group exists and this looks new, flush
+            if current_group_indices and not is_tab and not is_section and not is_slide and not is_question:
+                # Check if this is a new standalone topic
+                if char_count > 100 and not heading.startswith(("—", "-", "—")):
+                    merged_groups.append({
+                        "heading": current_parent_heading or "Untitled Page",
+                        "indices": current_group_indices,
+                        "is_assessment": is_assessment_group,
+                        "child_type": _detect_child_type(current_group_indices, sections),
+                    })
+                    current_group_indices = [i]
+                    current_parent_heading = heading
+                    is_assessment_group = False
+                else:
+                    current_group_indices.append(i)
+            else:
+                current_group_indices.append(i)
+
+    # Flush final group
+    if current_group_indices:
+        merged_groups.append({
+            "heading": current_parent_heading or sections[current_group_indices[0]].get("heading", "Untitled Page"),
+            "indices": current_group_indices,
+            "is_assessment": is_assessment_group,
+            "child_type": _detect_child_type(current_group_indices, sections),
+        })
+
+    # --- Step 2: Merge small standalone groups ---
+    # Groups with < 200 chars merge with the next group
+    merged_groups = _merge_small_groups(merged_groups, sections)
+
+    # --- Step 3: Build pages from merged groups ---
+    pages = []
+    for gidx, group in enumerate(merged_groups):
+        indices = group["indices"]
+        if not indices:
+            continue
+
+        # Determine template from the parent (first) section
+        parent_sec = sections[indices[0]]
+        parent_heading = group["heading"]
+        parent_content = parent_sec.get("content") or parent_sec.get("content_preview", "")
+        combined_content = " ".join(
+            (sections[j].get("content") or sections[j].get("content_preview", ""))
+            for j in indices if isinstance(sections[j], dict)
+        )
+        total_chars = sum(
+            sections[j].get("char_count", 0)
+            for j in indices if isinstance(sections[j], dict)
+        )
+
+        features = detector.detect(combined_content, gidx, max(len(merged_groups), 1))
         best, needs_llm = selector.select_with_confidence(features)
 
-        page = {
-            "proposed_title": heading[:200],
-            "suggested_template_type": best.template_type,
+        # Override template for known group types
+        suggested_template = best.template_type
+        if group.get("child_type") == "tabs" and suggested_template == "content-text":
+            suggested_template = "tabs"
+        elif group.get("child_type") == "accordion" and suggested_template == "content-text":
+            suggested_template = "accordion"
+        elif group.get("is_assessment"):
+            suggested_template = "final-assessment"
+
+        # Build merged source_section_ids
+        source_ids = [str(j) for j in indices]
+
+        pages.append({
+            "proposed_title": parent_heading[:200],
+            "suggested_template_type": suggested_template,
             "rationale": (
                 f"{best.reasoning} (score={best.score:.2f}, "
-                f"confidence={best.confidence:.2f}, method={best.method})"
+                f"confidence={best.confidence:.2f}, method={best.method}, "
+                f"merged={len(indices)} sections, {total_chars} total chars)"
             ),
-            "source_section_ids": [str(i)],
-            "order": i,
-            "char_count": char_count,
-            "content_preview": content[:200],
-        }
-        if needs_llm:
-            page["needs_llm_refinement"] = True
-
-        pages.append(page)
+            "source_section_ids": source_ids,
+            "order": gidx,
+            "char_count": total_chars,
+            "content_preview": combined_content[:200],
+            "needs_llm_refinement": needs_llm,
+            "merged_sections": len(indices),
+        })
 
     return pages
+
+
+def _detect_child_type(indices: list, sections: list) -> str:
+    """Detect whether child sections form tabs, accordion, or assessment content."""
+    if not indices or len(indices) < 2:
+        return "single"
+
+    headings = [
+        sections[i].get("heading", "")
+        for i in indices if i < len(sections) and isinstance(sections[i], dict)
+    ]
+    headings_lower = " ".join(headings).lower()
+
+    import re
+    if any(re.match(r'^Tab\s+\d+', h, re.IGNORECASE) for h in headings):
+        return "tabs"
+    if any(re.match(r'^Section\s+\d+', h, re.IGNORECASE) for h in headings):
+        return "accordion"
+    if any(re.match(r'^Question\s+\d+', h, re.IGNORECASE) for h in headings):
+        return "assessment"
+    if "assessment" in headings_lower or "quiz" in headings_lower:
+        return "assessment"
+    if any(re.match(r'^Slide\s+\d+', h, re.IGNORECASE) for h in headings):
+        return "accordion"
+
+    return "single"
+
+
+def _merge_small_groups(groups: list, sections: list) -> list:
+    """Merge groups with < 200 total chars into adjacent groups."""
+    if len(groups) <= 1:
+        return groups
+
+    merged = []
+    skip_next = False
+
+    for i, group in enumerate(groups):
+        if skip_next:
+            skip_next = False
+            continue
+
+        total_chars = sum(
+            sections[j].get("char_count", 0)
+            for j in group["indices"]
+            if j < len(sections) and isinstance(sections[j], dict)
+        )
+
+        # Merge small groups with the next group
+        if total_chars < 200 and i + 1 < len(groups):
+            next_group = groups[i + 1]
+            merged.append({
+                "heading": group["heading"],
+                "indices": group["indices"] + next_group["indices"],
+                "is_assessment": group["is_assessment"] or next_group["is_assessment"],
+                "child_type": group.get("child_type") or next_group.get("child_type", "single"),
+            })
+            skip_next = True
+        else:
+            merged.append(group)
+
+    return merged
 
 
 def _build_plan_warnings(sections: list, pages: list) -> list:
