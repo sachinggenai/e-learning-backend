@@ -371,13 +371,22 @@ class CourseGenerator:
             status="draft",
         )
 
-        # ── Now create pages and components ────────────────────────────
+        # ── Delete existing pages (re-apply scenario) ──────────────────
+        # Components cascade-delete via FK ondelete CASCADE.
         from app.models.page_component import PageRecord, ComponentRecord
         from app.repositories.page_component_repo import PageRepository
+        from sqlalchemy import delete as sa_delete
         import uuid as _uuid
 
         page_repo = PageRepository(self.db)
 
+        # Remove old pages so re-apply doesn't duplicate
+        await self.db.execute(
+            sa_delete(PageRecord).where(PageRecord.course_id == course_id)
+        )
+        await self.db.flush()
+
+        # ── Create fresh pages and components ──────────────────────────
         created_pages = []
         for i, p in enumerate(pages_data):
             page_id = str(_uuid.uuid4())
