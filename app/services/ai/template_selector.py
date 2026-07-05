@@ -200,7 +200,7 @@ class TemplateSelector:
         content-text as a minimum viable fallback.
         """
         # R3: Non-English → skip heuristics, return content-text fallback
-        if features.detected_language != "en" and features.char_count > 50:
+        if features.detected_language != "en" and features.char_count > 200:
             logger.debug(
                 "Non-English content detected (lang=%s) — skipping heuristics",
                 features.detected_language,
@@ -251,7 +251,7 @@ class TemplateSelector:
               - Non-English content detected
         """
         # R3: Non-English always flags LLM refinement
-        if features.detected_language != "en" and features.char_count > 50:
+        if features.detected_language != "en" and features.char_count > 200:
             default = TemplateScore(
                 "content-text", 0.50, 0.30, "heuristic",
                 f"Non-English content (lang={features.detected_language}) — "

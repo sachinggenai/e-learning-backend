@@ -332,8 +332,10 @@ class FeatureDetector:
         content should skip heuristics and use LLM refinement directly.
 
         Uses English function-word frequency as a simple proxy.
+        Requires at least 200 chars for reliable detection — shorter
+        texts default to "en" to avoid false non-English flags.
         """
-        if len(text) < 50:
+        if len(text) < 200:
             return "en"  # Too short to reliably detect
 
         matches = len(self._ENGLISH_FUNCTION_WORDS.findall(text))

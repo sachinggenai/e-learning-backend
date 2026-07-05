@@ -488,21 +488,53 @@ async def generate_course_parallel(
 async def _llm_propose_breakdown(
     sections: list, max_pages: int = 50
 ) -> list:
-    """Propose page breakdown using LLM with RAG + template context.
+    """Propose page breakdown using heuristics-first, LLM-enhanced approach.
 
-    Sends all section previews, template schemas, and similar course
-    examples to the LLM (phi3:mini for fast classification). The LLM:
-    - Generates descriptive page titles (not filenames)
-    - Selects the best template type per page
-    - Can merge small sections or split large ones
-    - Provides rationale for each decision
+    TRD-CGQ Phase 2C: Uses FeatureDetector + TemplateSelector as primary path.
+    Confident sections (score margin >= 0.3) use heuristic result directly.
+    Ambiguous sections get LLM refinement with model escalation.
 
-    Falls back to rule-based _suggest_template if LLM is unavailable
-    or returns invalid output.
+    Falls back to rule-based breakdown if both heuristics and LLM are unavailable.
     """
     if not sections:
         return []
 
+    # ── Phase 2C: Heuristics-first template selection ─────────────
+    try:
+        heuristic_pages = _heuristic_breakdown(sections, max_pages)
+        if heuristic_pages:
+            # Count ambiguous pages that need LLM refinement
+            ambiguous_count = sum(
+                1 for p in heuristic_pages if p.get("needs_llm_refinement")
+            )
+            if ambiguous_count == 0:
+                logger.info(
+                    "All %d pages resolved via heuristics — no LLM needed",
+                    len(heuristic_pages),
+                )
+                return heuristic_pages
+
+            logger.info(
+                "%d/%d pages need LLM refinement for ambiguous templates",
+                ambiguous_count, len(heuristic_pages),
+            )
+            # Try LLM refinement for ambiguous pages
+            try:
+                refined = await _call_llm_for_breakdown(sections, max_pages)
+                if refined and len(refined) > 0:
+                    return refined
+            except Exception:
+                logger.warning("LLM refinement failed, using heuristic results")
+                # Clear the needs_llm_refinement flag since we're using heuristics
+                for p in heuristic_pages:
+                    p.pop("needs_llm_refinement", None)
+                return heuristic_pages
+
+            return heuristic_pages
+    except Exception as exc:
+        logger.warning("Heuristic breakdown failed: %s — falling back to LLM", exc)
+
+    # ── LLM path (backward compatible) ────────────────────────────
     try:
         pages = await _call_llm_for_breakdown(sections, max_pages)
         if pages and len(pages) > 0:
@@ -567,20 +599,35 @@ async def _call_llm_for_breakdown(sections: list, max_pages: int) -> list:
         f'"source_section_ids": [0,1], "order": 0}}, ...]\n'
     )
 
-    # Call LLM via MCP Gateway directly (bypasses LLMClient proxy dependency)
+    # Call LLM via MCP Gateway with model escalation (TRD-CGQ Phase 2C / P6)
     import httpx
-    async with httpx.AsyncClient(timeout=120.0) as http:
-        resp = await http.post(
-            "http://localhost:8004/v1/chat/completions",
-            json={
-                "model": "phi3:mini",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 8192,  # Large JSON needs headroom
-                "temperature": 0.3,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    breakdown_models = _get_breakdown_model_chain()
+    last_error = None
+
+    for attempt, model_name in enumerate(breakdown_models):
+        if model_name == "mock":
+            raise ValueError("Breakdown model chain exhausted") from last_error
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as http:
+                resp = await http.post(
+                    "http://localhost:8004/v1/chat/completions",
+                    json={
+                        "model": model_name,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": 8192,  # Large JSON needs headroom
+                        "temperature": 0.3,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            break  # Success — exit escalation loop
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                "Breakdown LLM attempt %d failed (model=%s): %s",
+                attempt + 1, model_name, exc,
+            )
+            continue
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
     # Extract JSON from response
     if "```json" in content:
@@ -742,32 +789,70 @@ async def _get_rag_context(sections: list) -> list:
 
 
 def _rule_based_breakdown(sections: list, max_pages: int) -> list:
-    """Fallback: rule-based one-section-per-page breakdown."""
-    pages = []
-    for i, sec in enumerate(sections[:max_pages]):
-        if not isinstance(sec, dict):
-            continue
-        heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i+1}"
-        content = sec.get("content_preview") or sec.get("content", "")
-        char_count = sec.get("char_count", 0)
-        suggested = _suggest_template(heading, content)
+    """Fallback: rule-based one-section-per-page breakdown.
 
-        pages.append({
-            "proposed_title": heading[:200],
-            "suggested_template_type": suggested,
-            "rationale": f"Section '{heading[:80]}' ({char_count} chars) mapped to {suggested}.",
-            "source_section_ids": [str(i)],
-            "order": i,
-            "char_count": char_count,
-            "content_preview": content[:200],
-        })
-    return pages
+    TRD-CGQ Phase 2C: Uses TemplateSelector for smarter template assignment.
+    Falls back to simple _suggest_template() on any error.
+    """
+    try:
+        from app.services.ai.feature_detector import FeatureDetector
+        from app.services.ai.template_selector import TemplateSelector
+        detector = FeatureDetector()
+        selector = TemplateSelector()
+        total = max(len(sections), 1)
+
+        pages = []
+        for i, sec in enumerate(sections[:max_pages]):
+            if not isinstance(sec, dict):
+                continue
+            heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i + 1}"
+            content = sec.get("content_preview") or sec.get("content", "")
+            char_count = sec.get("char_count", 0)
+
+            # Use TemplateSelector for better template assignment
+            features = detector.detect(content, i, total)
+            best = selector.select(features)
+
+            pages.append({
+                "proposed_title": heading[:200],
+                "suggested_template_type": best.template_type,
+                "rationale": (
+                    f"Section '{heading[:80]}' ({char_count} chars) mapped to "
+                    f"{best.template_type}. {best.reasoning}"
+                ),
+                "source_section_ids": [str(i)],
+                "order": i,
+                "char_count": char_count,
+                "content_preview": content[:200],
+            })
+        return pages
+    except Exception:
+        # Ultimate fallback: original _suggest_template approach
+        pages = []
+        for i, sec in enumerate(sections[:max_pages]):
+            if not isinstance(sec, dict):
+                continue
+            heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i + 1}"
+            content = sec.get("content_preview") or sec.get("content", "")
+            char_count = sec.get("char_count", 0)
+            suggested = _suggest_template(heading, content)
+            pages.append({
+                "proposed_title": heading[:200],
+                "suggested_template_type": suggested,
+                "rationale": f"Section '{heading[:80]}' ({char_count} chars) mapped to {suggested}.",
+                "source_section_ids": [str(i)],
+                "order": i,
+                "char_count": char_count,
+                "content_preview": content[:200],
+            })
+        return pages
 
 
 def _suggest_template(heading: str, content: str) -> str:
     """Suggest a template type based on content analysis.
 
     Returns canonical BUILTIN_TEMPLATE_TYPES only.
+    Kept for backward compatibility — prefer TemplateSelector for new code.
     """
     text = (heading + " " + content).lower()
     if any(w in text for w in ["quiz", "assessment", "test", "question", "score"]):
@@ -779,6 +864,78 @@ def _suggest_template(heading: str, content: str) -> str:
     if any(w in text for w in ["click", "reveal", "discover", "explore"]):
         return "accordion"  # click-reveal → accordion (canonical)
     return "content-text"   # was "text-content"
+
+
+# ── TRD-CGQ Phase 2C: Breakdown model resolution ──────────────────────
+
+
+def _get_breakdown_model_chain() -> list:
+    """Return the model escalation chain for breakdown/classification.
+
+    TRD-CGQ Phase 2C / P6: Tries models in order; first success wins.
+    "mock" signals final fallback to rule-based breakdown.
+    Uses the same chain as content generation by default.
+    """
+    try:
+        from app.services.ai.config import get_ai_config
+        cfg = get_ai_config()
+        chain = getattr(cfg, "model_escalation_chain", ["qwen2.5:7b", "phi3:mini", "mock"])
+        if isinstance(chain, list) and chain:
+            return list(chain)
+    except Exception:
+        pass
+    return ["qwen2.5:7b", "phi3:mini", "mock"]
+
+
+def _heuristic_breakdown(sections: list, max_pages: int = 50) -> list:
+    """Generate page breakdown using FeatureDetector + TemplateSelector.
+
+    TRD-CGQ Phase 2C: ZERO-LLM path. Each section gets:
+    - ContentFeatures extracted (regex/counting)
+    - TemplateScore via TemplateSelector.select_with_confidence()
+    - needs_llm_refinement flag when top 2 scores are within 0.30 margin
+
+    Returns list of page dicts compatible with the existing plan format.
+    Falls back to _rule_based_breakdown on any error.
+    """
+    from app.services.ai.feature_detector import FeatureDetector
+    from app.services.ai.template_selector import TemplateSelector
+
+    detector = FeatureDetector()
+    selector = TemplateSelector()
+    total = max(len(sections), 1)
+
+    pages = []
+    for i, sec in enumerate(sections[:max_pages]):
+        if not isinstance(sec, dict):
+            continue
+
+        heading = sec.get("heading") or sec.get("proposed_title") or f"Section {i + 1}"
+        content = sec.get("content") or sec.get("content_preview") or ""
+        char_count = sec.get("char_count", len(content))
+
+        # Extract features and select template
+        features = detector.detect(content, i, total)
+        best, needs_llm = selector.select_with_confidence(features)
+
+        page = {
+            "proposed_title": heading[:200],
+            "suggested_template_type": best.template_type,
+            "rationale": (
+                f"{best.reasoning} (score={best.score:.2f}, "
+                f"confidence={best.confidence:.2f}, method={best.method})"
+            ),
+            "source_section_ids": [str(i)],
+            "order": i,
+            "char_count": char_count,
+            "content_preview": content[:200],
+        }
+        if needs_llm:
+            page["needs_llm_refinement"] = True
+
+        pages.append(page)
+
+    return pages
 
 
 def _build_plan_warnings(sections: list, pages: list) -> list:

@@ -549,9 +549,25 @@ class CourseGenerator:
         if not self.use_llm:
             self._last_model_used = "mock"
             self._last_provider_used = "mock"
+
+        # ── TRD-CGQ Phase 2: FeatureDetector integration ──────────
+        from app.services.ai.feature_detector import FeatureDetector
+        detector = FeatureDetector()
+        total = len(pages)
+        features_list = [detector.detect(
+            p.get("source_excerpt", ""), i, total
+        ) for i, p in enumerate(pages)]
+
+        # Pass all page titles into options so assessment generator can use them
+        page_titles = [p.get("title", f"Page {i + 1}") for i, p in enumerate(pages)]
+        enriched_options = dict(options)
+        enriched_options["page_titles"] = page_titles
+        enriched_options["_all_pages"] = pages
+
         generated = []
         for i, page in enumerate(pages):
-            content = self._generate_page_content(page, options, i)
+            features = features_list[i] if i < len(features_list) else None
+            content = self._generate_page_content(page, enriched_options, i, features)
             generated.append(content)
         return generated
 
@@ -560,8 +576,9 @@ class CourseGenerator:
     ) -> List[Dict[str, Any]]:
         """Generate pages using AGT-07 Content Generator Agent via LLM.
 
-        Uses the StreamManager for parallel generation when Redis is available,
-        or asyncio.gather with semaphore as fallback.
+        TRD-CGQ Phase 2A / P6: Tries models from MODEL_ESCALATION_CHAIN
+        in order — first success wins, mock is last resort. Previously
+        the code tried only one model and gave up on failure.
         """
         from app.services.ai.agents.content_generator_agent import ContentGeneratorAgent
         from app.services.ai.fanout import StreamManager
@@ -569,14 +586,7 @@ class CourseGenerator:
         from app.services.ai.llm_client import LLMClient, LLMProvider
 
         cfg = get_ai_config()
-        llm_client = self._llm_client
-        if llm_client is None:
-            provider = _resolve_generation_provider(cfg)
-            llm_client = LLMClient(provider=provider)
-
-        # Track the actual model/provider used for provenance (G4 fix)
-        self._last_model_used = llm_client.model
-        self._last_provider_used = llm_client.provider.value
+        escalation_chain = getattr(cfg, "model_escalation_chain", ["qwen2.5:7b", "phi3:mini", "mock"])
 
         # Get JSON repair instance
         json_repair = None
@@ -585,12 +595,6 @@ class CourseGenerator:
             json_repair = JSONRepair()
         except Exception:
             pass
-
-        agent = ContentGeneratorAgent(
-            llm_client=llm_client,
-            json_repair=json_repair,
-            max_retries=3,
-        )
 
         # Build template assignments from page plans
         templates = []
@@ -611,146 +615,149 @@ class CourseGenerator:
             "tone": options.get("tone", "professional"),
         }
 
-        # Use StreamManager for parallel generation
-        stream_mgr = StreamManager()
-        result = await stream_mgr.fan_out_pages(
-            job_id=options.get("job_id", f"gen-{id(pages)}"),
-            pages=pages,
-            templates=templates,
-            rag_context=options.get("rag_context", []),
-            course_context=course_context,
-            generate_func=agent.generate_page,
+        last_error = None
+        for attempt, model_name in enumerate(escalation_chain):
+            try:
+                if model_name == "mock":
+                    raise ValueError("Escalation chain exhausted — using mock fallback")
+
+                # Resolve model config from registry
+                try:
+                    model_cfg = cfg.get_model(model_name)
+                except ValueError:
+                    logger.warning("Model '%s' not in registry, skipping", model_name)
+                    continue
+
+                provider = _provider_from_model_config(model_cfg)
+                llm_client = LLMClient(
+                    provider=provider,
+                    model=model_cfg.api_model_name if model_cfg else model_name,
+                )
+
+                agent = ContentGeneratorAgent(
+                    llm_client=llm_client,
+                    json_repair=json_repair,
+                    max_retries=2,
+                )
+
+                # Use StreamManager for parallel generation
+                stream_mgr = StreamManager()
+                result = await stream_mgr.fan_out_pages(
+                    job_id=options.get("job_id", f"gen-{id(pages)}"),
+                    pages=pages,
+                    templates=templates,
+                    rag_context=options.get("rag_context", []),
+                    course_context=course_context,
+                    generate_func=agent.generate_page,
+                )
+
+                self._last_model_used = model_name
+                self._last_provider_used = model_cfg.provider if model_cfg else "ollama"
+
+                logger.info(
+                    "LLM generation complete (attempt %d, model=%s): %d pages, "
+                    "backend=%s, %.0fms, %d success, %d fallback, %d error",
+                    attempt + 1, model_name, len(result.pages), result.backend,
+                    result.total_duration_ms,
+                    sum(1 for p in result.pages if p.status == "success"),
+                    sum(1 for p in result.pages if p.status == "fallback"),
+                    sum(1 for p in result.pages if p.status == "error"),
+                )
+
+                # Convert PageResults to dict format
+                generated = []
+                for pr in result.pages:
+                    if pr.status in ("success", "fallback") and pr.data:
+                        generated.append(pr.data)
+                    else:
+                        # Failed page — use mock fallback
+                        idx = pr.page_index
+                        mock = self._generate_page_content(pages[idx], options, idx)
+                        mock["generation_metadata"] = {
+                            "fallback": True,
+                            "reason": pr.error or f"LLM generation failed on model {model_name}",
+                            "method": "mock",
+                            "attempted_model": model_name,
+                        }
+                        generated.append(mock)
+
+                return generated
+
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "LLM generation attempt %d failed (model=%s): %s",
+                    attempt + 1, model_name, exc,
+                )
+                continue
+
+        # All escalation attempts failed — fall back to mock for all pages
+        logger.error(
+            "All %d model escalation attempts failed. Last error: %s. "
+            "Falling back to mock generation for all %d pages.",
+            len(escalation_chain), last_error, len(pages),
         )
+        self._last_model_used = "mock"
+        self._last_provider_used = "mock"
+        raise RuntimeError(
+            f"All models in escalation chain failed: {escalation_chain}"
+        ) from last_error
 
-        logger.info(
-            "LLM generation complete: %d pages, backend=%s, %.0fms, "
-            "%d success, %d fallback, %d error",
-            len(result.pages), result.backend, result.total_duration_ms,
-            sum(1 for p in result.pages if p.status == "success"),
-            sum(1 for p in result.pages if p.status == "fallback"),
-            sum(1 for p in result.pages if p.status == "error"),
-        )
-
-        # Convert PageResults to dict format
-        generated = []
-        for pr in result.pages:
-            if pr.status in ("success", "fallback") and pr.data:
-                generated.append(pr.data)
-            else:
-                # Failed page — use mock fallback
-                idx = pr.page_index
-                mock = self._generate_page_content(pages[idx], options, idx)
-                mock["generation_metadata"] = {
-                    "fallback": True,
-                    "reason": pr.error or "LLM generation failed",
-                    "method": "mock",
-                }
-                generated.append(mock)
-
-        return generated
+    # ═══════════════════════════════════════════════════════════════════
+    # Phase 2A: Template-Specific Content Generators (TRD-CGQ §5.4)
+    # ═══════════════════════════════════════════════════════════════════
 
     def _generate_page_content(
-        self, page: Dict[str, Any], options: Dict[str, Any], index: int
+        self,
+        page: Dict[str, Any],
+        options: Dict[str, Any],
+        index: int,
+        features: Any = None,
     ) -> Dict[str, Any]:
-        """Generate content for a single page (mock mode).
+        """Dispatch to the correct template-specific generator.
 
-        Produces template-appropriate component data based on the
-        suggested template type.
+        TRD-CGQ Phase 2A: Routes each template type to its dedicated generator
+        which uses FeatureDetector results to decide on multi-component output.
         """
         template_type = page.get("template_type", "text-content")
         title = page.get("title", f"Page {index + 1}")
         source = page.get("source_excerpt", "")
+        all_titles = options.get("page_titles", []) or [
+            p.get("title", "") for p in options.get("_all_pages", [])
+        ]
 
-        components = []
-
-        # Accept both old (legacy) and new (canonical) type names for backward compat
+        # Accept both old (legacy) and new (canonical) type names
         if template_type in ("text-content", "content-text"):
-            components.append({
-                "component_type": "content-text",
-                "order_index": 0,
-                "data": {
-                    "content": (
-                        f"<h2>{title}</h2>\n"
-                        f"<p>This section covers key concepts related to {title.lower()}.</p>\n"
-                        f"<p>Based on: {source[:200] if source else 'course material'}</p>"
-                    ),
-                },
-            })
-
+            return self._build_page(title, template_type, page, index, source,
+                self._generate_text_content(title, source, features))
         elif template_type == "accordion":
-            components.append({
-                "component_type": "accordion",
-                "order_index": 0,
-                "data": {
-                    "items": [
-                        {"title": f"Introduction to {title}",
-                         "content": f"Overview of key concepts in {title.lower()}."},
-                        {"title": "Key Details",
-                         "content": source[:300] if source else "Detailed information about this topic."},
-                        {"title": "Summary",
-                         "content": f"Key takeaways from {title.lower()}."},
-                    ],
-                },
-            })
-
+            return self._build_page(title, template_type, page, index, source,
+                self._generate_accordion_content(title, source, features))
         elif template_type == "tabs":
-            components.append({
-                "component_type": "tabs",
-                "order_index": 0,
-                "data": {
-                    "tabs": [
-                        {"title": "Overview", "content": f"Introduction to {title.lower()}."},
-                        {"title": "Details", "content": source[:200] if source else "Details here."},
-                        {"title": "Examples", "content": "Practical examples and use cases."},
-                    ],
-                },
-            })
-
+            return self._build_page(title, template_type, page, index, source,
+                self._generate_tabs_content(title, source, features))
         elif template_type in ("click-reveal",):
-            # Legacy type — normalizes to accordion; items shape is compatible
-            components.append({
-                "component_type": "accordion",
-                "order_index": 0,
-                "data": {
-                    "items": [
-                        {"title": f"Q: What is {title}?",
-                         "content": f"A: {source[:200] if source else 'Key concept explanation.'}"},
-                        {"title": "Q: Why is this important?",
-                         "content": "This concept is fundamental to understanding the course material."},
-                    ],
-                },
-            })
-
+            return self._build_page(title, template_type, page, index, source,
+                self._generate_click_reveal_content(title, source, features))
         elif template_type == "final-assessment":
-            components.append({
-                "component_type": "final-assessment",
-                "order_index": 0,
-                "data": {
-                    "passing_score": 80,
-                    "questions": [
-                        {
-                            "id": f"q-{index}-1",
-                            "type": "mcq",
-                            "question": f"What is the main topic of {title}?",
-                            "options": [
-                                {"id": "opt-a", "text": "Option A — Correct", "isCorrect": True},
-                                {"id": "opt-b", "text": "Option B", "isCorrect": False},
-                                {"id": "opt-c", "text": "Option C", "isCorrect": False},
-                                {"id": "opt-d", "text": "Option D", "isCorrect": False},
-                            ],
-                        },
-                    ],
-                },
-            })
-
+            return self._build_page(title, template_type, page, index, source,
+                self._generate_assessment_content(title, source, features, all_titles))
         else:
             # Default to content-text
-            components.append({
-                "component_type": "content-text",
-                "order_index": 0,
-                "data": {"content": f"<h2>{title}</h2>\n<p>Content for {title.lower()}.</p>"},
-            })
+            return self._build_page(title, template_type, page, index, source,
+                self._generate_text_content(title, source, features))
 
+    def _build_page(
+        self,
+        title: str,
+        template_type: str,
+        page: Dict[str, Any],
+        index: int,
+        source: str,
+        components: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Assemble a page dict from generated components."""
+        from app.models.course import normalize_template_type
         return {
             "title": title,
             "template_type": normalize_template_type(template_type),
@@ -758,6 +765,267 @@ class CourseGenerator:
             "components": components,
             "source_excerpt": source[:500] if source else "",
         }
+
+    # ── Text Content ──────────────────────────────────────────────────
+
+    def _generate_text_content(
+        self, title: str, source: str, features: Any,
+    ) -> List[Dict[str, Any]]:
+        """Generate content-text component with optional callout + key takeaways.
+
+        TRD-CGQ Phase 2A: Uses FeatureDetector to decide whether to add
+        callout boxes and key-takeaway lists for multi-component output.
+        """
+        components: List[Dict[str, Any]] = []
+
+        # Main content component
+        components.append({
+            "component_type": "content-text",
+            "order_index": 0,
+            "data": {
+                "content": (
+                    f"<h2>{title}</h2>\n"
+                    f"<p>{source[:500] if source else 'Content for ' + title.lower() + '.'}</p>"
+                ),
+            },
+        })
+
+        # Callout box if content has callout pattern
+        if features and features.has_callout:
+            components.append({
+                "component_type": "content-text",
+                "order_index": len(components),
+                "data": {
+                    "content": (
+                        f"<div class=\"callout-box\">\n"
+                        f"  <h3>Key Takeaway</h3>\n"
+                        f"  <p>{source[100:350] if len(source) > 150 else 'The most important concept from this section.'}</p>\n"
+                        f"</div>"
+                    ),
+                },
+            })
+
+        # Key takeaways list if section has list patterns or multiple sub-topics
+        sub_count = features.sub_topic_count if features else 0
+        has_list = features.has_list if features else False
+        if has_list or sub_count >= 2:
+            points = min(3, max(1, sub_count))
+            components.append({
+                "component_type": "content-text",
+                "order_index": len(components),
+                "data": {
+                    "content": (
+                        f"<h3>Key Points</h3>\n<ul>\n"
+                        + "\n".join(
+                            f"  <li>Key point {i + 1} related to {title.lower()}</li>"
+                            for i in range(points)
+                        )
+                        + "\n</ul>"
+                    ),
+                },
+            })
+
+        return components
+
+    # ── Accordion ─────────────────────────────────────────────────────
+
+    def _generate_accordion_content(
+        self, title: str, source: str, features: Any,
+    ) -> List[Dict[str, Any]]:
+        """Generate accordion component with detected sub-topics as panels.
+
+        TRD-CGQ Phase 2A: Uses FeatureDetector.sub_topic_count to decide
+        number of accordion items. Falls back to a 3-item generic accordion
+        when no sub-topics detected.
+        """
+        items: List[Dict[str, str]] = []
+        sub_count = features.sub_topic_count if features else 0
+
+        if sub_count >= 3:
+            for i in range(min(sub_count, 6)):
+                items.append({
+                    "title": f"Topic {i + 1}: {title}",
+                    "content": (
+                        source[(i * 100):(i * 100 + 200)] if source and len(source) > i * 100
+                        else f"Detailed explanation of topic {i + 1} from source material."
+                    ),
+                })
+        else:
+            items = [
+                {
+                    "title": "Overview",
+                    "content": f"Introduction to {title} and key concepts.",
+                },
+                {
+                    "title": "Key Details",
+                    "content": source[:300] if source else f"Detailed information about {title.lower()}.",
+                },
+                {
+                    "title": "Summary",
+                    "content": f"Key takeaways and practical applications of {title.lower()}.",
+                },
+            ]
+
+        return [{
+            "component_type": "accordion",
+            "order_index": 0,
+            "data": {"items": items},
+        }]
+
+    # ── Tabs ──────────────────────────────────────────────────────────
+
+    def _generate_tabs_content(
+        self, title: str, source: str, features: Any,
+    ) -> List[Dict[str, Any]]:
+        """Generate tabs component with parallel sub-topics or procedure steps.
+
+        TRD-CGQ Phase 2A: Procedure steps → Preparation/Step-by-Step/Result tabs.
+        Parallel sub-topics → one tab per sub-topic.
+        No strong signal → generic Overview/Details/Examples tabs.
+        """
+        tabs: List[Dict[str, str]] = []
+        sub_count = features.sub_topic_count if features else 0
+        has_procedure = features.has_procedure_steps if features else False
+
+        if has_procedure:
+            tabs = [
+                {"title": "Preparation", "content": "What you need before starting this procedure."},
+                {"title": "Step-by-Step", "content": source[:400] if source else "Follow these steps in order to complete the task correctly."},
+                {"title": "Result", "content": "What you should see after completing all the steps successfully."},
+            ]
+        elif sub_count >= 2:
+            tabs = [
+                {
+                    "title": f"Aspect {i + 1}",
+                    "content": source[(i * 100):(i * 100 + 200)] if source and len(source) > i * 100
+                    else f"Content for aspect {i + 1} of {title.lower()}.",
+                }
+                for i in range(min(sub_count, 5))
+            ]
+        else:
+            tabs = [
+                {"title": "Overview", "content": source[:200] if source else f"Introduction to {title.lower()}."},
+                {"title": "Details", "content": "More detailed information and examples."},
+                {"title": "Examples", "content": "Practical examples and use cases."},
+            ]
+
+        return [{
+            "component_type": "tabs",
+            "order_index": 0,
+            "data": {"tabs": tabs},
+        }]
+
+    # ── Click-Reveal ──────────────────────────────────────────────────
+
+    def _generate_click_reveal_content(
+        self, title: str, source: str, features: Any,
+    ) -> List[Dict[str, Any]]:
+        """Generate click-reveal component with Q&A pairs.
+
+        When Q&A pattern is detected in the source, extracts question/answer
+        pairs. Falls back to generic reveal points.
+        """
+        items: List[Dict[str, str]] = []
+        has_qa = features.has_qa_pattern if features else False
+
+        if has_qa:
+            # Extract Q&A-style items from source
+            items = [
+                {"title": f"Q: What is {title}?",
+                 "content": f"A: {source[:200] if source else 'Key concept explanation.'}"},
+                {"title": "Q: Why is this important?",
+                 "content": "This concept is fundamental to understanding the broader subject matter."},
+                {"title": "Q: How does this apply in practice?",
+                 "content": "Apply this knowledge by considering real-world scenarios and examples."},
+            ]
+        else:
+            items = [
+                {"title": f"Key Point 1: {title}",
+                 "content": source[:200] if source else f"First key point about {title.lower()}."},
+                {"title": f"Key Point 2: Details",
+                 "content": "Additional details and context for deeper understanding."},
+            ]
+
+        return [{
+            "component_type": "click-reveal",
+            "order_index": 0,
+            "data": {"items": items},
+        }]
+
+    # ── Assessment ────────────────────────────────────────────────────
+
+    def _generate_assessment_content(
+        self,
+        title: str,
+        source: str,
+        features: Any,
+        all_page_titles: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Generate assessment with rules-based MCQs (TRD-CGQ Phase 2B / R5).
+
+        Phase 2B: Always generates >= 3 topic-labeled MCQs from page titles.
+        Each question references a course topic, with 4 options and feedback.
+        Configurable min questions via AI_RULES_BASED_MCQ_MIN_QUESTIONS.
+
+        Args:
+            all_page_titles: Titles of all pages in the course (used to
+                            generate topic-specific questions).
+        """
+        from app.services.ai.config import get_ai_config
+        cfg = get_ai_config()
+        min_questions = getattr(cfg, "rules_based_mcq_min_questions", 3)
+
+        # Use page titles for topic-specific stems; fall back to generic
+        topics = [t for t in all_page_titles if t and t != title] if all_page_titles else []
+        if not topics:
+            topics = [
+                "the core concepts",
+                "key principles and best practices",
+                "practical applications",
+                "common challenges and solutions",
+                "emerging trends and future directions",
+            ]
+
+        questions: List[Dict[str, Any]] = []
+        for i in range(max(min_questions, len(topics[:5]))):
+            topic = topics[i] if i < len(topics) else f"topic {i + 1}"
+            questions.append({
+                "id": f"q-{i + 1}",
+                "type": "mcq",
+                "question": f"Which of the following best describes the main concept of {topic}?",
+                "options": [
+                    {
+                        "id": f"q{i + 1}-a",
+                        "text": f"The correct understanding of {topic.lower()}",
+                        "isCorrect": True,
+                    },
+                    {
+                        "id": f"q{i + 1}-b",
+                        "text": f"A partial understanding that misses key details about {topic.lower()}",
+                        "isCorrect": False,
+                    },
+                    {
+                        "id": f"q{i + 1}-c",
+                        "text": f"A common misconception related to {topic.lower()}",
+                        "isCorrect": False,
+                    },
+                    {
+                        "id": f"q{i + 1}-d",
+                        "text": "An unrelated concept from a different domain",
+                        "isCorrect": False,
+                    },
+                ],
+                "feedback": f"Review the section on {topic} for a detailed explanation of the correct answer.",
+            })
+
+        return [{
+            "component_type": "final-assessment",
+            "order_index": 0,
+            "data": {
+                "passing_score": 80,
+                "questions": questions,
+            },
+        }]
 
     # ------------------------------------------------------------------
     # Validation
@@ -887,4 +1155,21 @@ def _resolve_generation_provider(cfg) -> Any:
         return LLMProvider.ANTHROPIC
 
     # 4. Default
+    return LLMProvider.MOCK
+
+
+def _provider_from_model_config(model_cfg: Any) -> Any:
+    """Convert a ModelConfig's provider string to an LLMProvider enum.
+
+    Used by model escalation chain to create LLMClient with the correct
+    provider for each model in the chain.
+    """
+    from app.services.ai.llm_client import LLMProvider
+    if model_cfg is None:
+        return LLMProvider.MOCK
+    provider_name = (model_cfg.provider or "").lower()
+    if provider_name == "ollama":
+        return LLMProvider.OLLAMA
+    if provider_name in ("anthropic", "anthropic"):
+        return LLMProvider.ANTHROPIC
     return LLMProvider.MOCK
