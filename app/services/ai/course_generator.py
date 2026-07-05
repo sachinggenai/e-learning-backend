@@ -13,6 +13,8 @@ individually with validation feedback loops.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 from datetime import datetime
@@ -37,6 +39,42 @@ class GenerationStatus(str, Enum):
     AWAITING_CONFIRMATION = "awaiting_confirmation"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+# ---------------------------------------------------------------------------
+# Content Fingerprint — dedup identical re-applies
+# ---------------------------------------------------------------------------
+
+def _compute_course_fingerprint(pages_data: List[Dict[str, Any]]) -> str:
+    """Compute a deterministic content hash for deduplication.
+
+    Normalizes page order, titles, template types, and component content
+    (first 500 chars) so that identical course content always produces
+    the same fingerprint regardless of UUIDs or minor whitespace changes.
+
+    Returns a 64-char hex SHA-256 digest.
+    """
+    normalized = []
+    sorted_pages = sorted(pages_data, key=lambda p, idx=0: p.get("order", idx))
+    for i, p in enumerate(sorted_pages):
+        components = []
+        comps = sorted(p.get("components", []), key=lambda c, idx=0: c.get("order_index", idx))
+        for j, c in enumerate(comps):
+            comp_data = c.get("data", {})
+            components.append({
+                "type": c.get("component_type", ""),
+                "content": str(comp_data.get("content", ""))[:500],
+                "order": c.get("order_index", j),
+            })
+        normalized.append({
+            "title": p.get("title", ""),
+            "template_type": p.get("template_type", ""),
+            "order": p.get("order", i),
+            "components": components,
+        })
+    return hashlib.sha256(
+        json.dumps(normalized, sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -144,8 +182,21 @@ class CourseGenerator:
             meta_check["generation_status"] = GenerationStatus.READY_FOR_REVIEW.value
             meta_check.pop("applied_at", None)
             meta_check.pop("applied_pages", None)
+            # Keep content_fingerprint — used by apply for dedup
             job.source_metadata = meta_check
             job.status = "generated"
+            await self.db.commit()
+
+            # Clear old idempotency record so re-apply isn't blocked by stale cache
+            from app.models.ai_models import AIIdempotencyKeyRecord
+            from app.services.ai.idempotency_service import IdempotencyService
+            from sqlalchemy import delete as sa_delete_idem
+            old_key = IdempotencyService.generate_key(import_job_id, user_id)
+            await self.db.execute(
+                sa_delete_idem(AIIdempotencyKeyRecord).where(
+                    AIIdempotencyKeyRecord.idempotency_key == old_key
+                )
+            )
             await self.db.commit()
             pages_data = existing_course.get("pages", [])
             return {
@@ -371,7 +422,25 @@ class CourseGenerator:
             status="draft",
         )
 
-        # ── Delete existing pages (re-apply scenario) ──────────────────
+        # ── Content fingerprint check (dedup identical re-applies) ────
+        new_fingerprint = _compute_course_fingerprint(pages_data)
+        existing_fingerprint = meta.get("content_fingerprint", "")
+
+        if existing_fingerprint and existing_fingerprint == new_fingerprint:
+            logger.info(
+                "Content fingerprint match for job %s — skipping re-apply",
+                import_job_id[:8],
+            )
+            return {
+                "course_id": course_id,
+                "course_title": course_title,
+                "pages_created": 0,
+                "pages": [],
+                "idempotent": True,
+                "message": "Content unchanged — no re-apply needed.",
+            }
+
+        # ── Delete existing pages (re-apply or content-changed scenario)
         # Components cascade-delete via FK ondelete CASCADE.
         from app.models.page_component import PageRecord, ComponentRecord
         from app.repositories.page_component_repo import PageRepository
@@ -381,6 +450,11 @@ class CourseGenerator:
         page_repo = PageRepository(self.db)
 
         # Remove old pages so re-apply doesn't duplicate
+        if existing_fingerprint:
+            logger.info(
+                "Content fingerprint changed for job %s — replacing pages",
+                import_job_id[:8],
+            )
         await self.db.execute(
             sa_delete(PageRecord).where(PageRecord.course_id == course_id)
         )
@@ -426,6 +500,7 @@ class CourseGenerator:
         final_meta["generation_status"] = "completed"
         final_meta["applied_at"] = datetime.utcnow().isoformat()
         final_meta["applied_pages"] = len(created_pages)
+        final_meta["content_fingerprint"] = new_fingerprint
         job.source_metadata = final_meta
         job.status = "completed"
         self.db.add(job)

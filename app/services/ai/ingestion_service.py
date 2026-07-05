@@ -90,6 +90,7 @@ class AIIngestionService:
                         meta["generation_status"] = "ready_for_review"
                         meta.pop("applied_at", None)
                         meta.pop("applied_pages", None)
+                        meta.pop("content_fingerprint", None)
                         existing.source_metadata = meta
                     await self.db.commit()
                 return existing  # Idempotent: return existing job

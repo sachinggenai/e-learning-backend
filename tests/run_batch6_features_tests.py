@@ -400,6 +400,134 @@ async def test_generate_completed_no_cached_course_raises():
 
 
 # ═══════════════════════════════════════════════════════════════════
+# PEND-021-FP: Content fingerprint dedup on re-apply
+# ═══════════════════════════════════════════════════════════════════
+
+async def test_apply_with_same_content_is_noop():
+    """PEND021-FP-01: Re-apply with same content → fingerprint match → no-op."""
+    from app.services.ai.course_generator import CourseGenerator, _compute_course_fingerprint
+    from app.db.config import SessionLocal
+    import hashlib
+
+    async with SessionLocal() as db:
+        content = b"test-fp-01-" + uuid.uuid4().bytes
+        from app.services.ai.ingestion_service import AIIngestionService
+        ing_svc = AIIngestionService(db)
+        job = await ing_svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-fp-01.docx",
+            session_id="test-session-fp",
+            user_id="u-fp",
+            organization_id="org-fp",
+            course_id="COURSE-FP-01",
+        )
+
+        # Set up generated course data
+        pages = [
+            {"title": "Page A", "template_type": "content-text", "order": 0,
+             "components": [{"component_type": "content-text", "order_index": 0,
+             "data": {"content": "Hello world"}}]},
+        ]
+        job.source_metadata = {
+            "generation_status": "ready_for_review",
+            "generated_course": {"title": "Test", "pages": pages},
+        }
+        await db.commit()
+
+        gen = CourseGenerator(db)
+        r1 = await gen.apply_generated_course(
+            import_job_id=job.job_id, user_id="u-fp",
+        )
+        check("PEND021-FP-01: first apply creates pages", r1["pages_created"] == 1)
+        fp1 = (job.source_metadata or {}).get("content_fingerprint", "")
+        check("PEND021-FP-01: fingerprint stored", bool(fp1))
+
+        # Reset generation_status for re-apply (simulate generate-course)
+        meta = dict(job.source_metadata or {})
+        meta["generation_status"] = "ready_for_review"
+        job.source_metadata = meta
+        job.status = "generated"
+        await db.commit()
+
+        # Re-apply with same content
+        r2 = await gen.apply_generated_course(
+            import_job_id=job.job_id, user_id="u-fp",
+        )
+        check("PEND021-FP-01: re-apply no-op", r2["pages_created"] == 0)
+        check("PEND021-FP-01: idempotent=true", r2.get("idempotent") is True)
+
+        # Clean up
+        from sqlalchemy import delete as sa_del
+        from app.models.page_component import PageRecord
+        await db.execute(sa_del(PageRecord).where(PageRecord.course_id == "COURSE-FP-01"))
+        await db.delete(job)
+        await db.commit()
+
+
+async def test_apply_with_different_content_replaces():
+    """PEND021-FP-02: Re-apply with different content → fingerprint mismatch → replace."""
+    from app.services.ai.course_generator import CourseGenerator
+    from app.db.config import SessionLocal
+
+    async with SessionLocal() as db:
+        content = b"test-fp-02-" + uuid.uuid4().bytes
+        from app.services.ai.ingestion_service import AIIngestionService
+        ing_svc = AIIngestionService(db)
+        job = await ing_svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-fp-02.docx",
+            session_id="test-session-fp",
+            user_id="u-fp",
+            organization_id="org-fp",
+            course_id="COURSE-FP-02",
+        )
+
+        pages_v1 = [
+            {"title": "Page A", "template_type": "content-text", "order": 0,
+             "components": [{"component_type": "content-text", "order_index": 0,
+             "data": {"content": "Version 1 content"}}]},
+        ]
+        job.source_metadata = {
+            "generation_status": "ready_for_review",
+            "generated_course": {"title": "Test", "pages": pages_v1},
+        }
+        await db.commit()
+
+        gen = CourseGenerator(db)
+        r1 = await gen.apply_generated_course(
+            import_job_id=job.job_id, user_id="u-fp",
+        )
+        check("PEND021-FP-02: first apply", r1["pages_created"] == 1)
+
+        # Change content
+        pages_v2 = [
+            {"title": "Page B", "template_type": "content-text", "order": 0,
+             "components": [{"component_type": "content-text", "order_index": 0,
+             "data": {"content": "Completely different content here"}}]},
+        ]
+        meta = dict(job.source_metadata or {})
+        meta["generation_status"] = "ready_for_review"
+        meta["generated_course"] = {"title": "Test V2", "pages": pages_v2}
+        job.source_metadata = meta
+        job.status = "generated"
+        await db.commit()
+
+        r2 = await gen.apply_generated_course(
+            import_job_id=job.job_id, user_id="u-fp",
+        )
+        check("PEND021-FP-02: content changed → replaces", r2["pages_created"] == 1)
+        check("PEND021-FP-02: new title applied",
+              r2["course_title"] == "Test V2")
+
+        # Clean up
+        from sqlalchemy import delete as sa_del
+        from app.models.page_component import PageRecord
+        await db.execute(sa_del(PageRecord).where(PageRecord.course_id == "COURSE-FP-02"))
+        await db.delete(job)
+        await db.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════
 # PEND-022: LLM Context Summarization
 # ═══════════════════════════════════════════════════════════════════
 
@@ -492,6 +620,8 @@ async def run_all_tests():
     await test_reupload_empty_course_id_noop()
     await test_generate_idempotent_completed_job()
     await test_generate_completed_no_cached_course_raises()
+    await test_apply_with_same_content_is_noop()
+    await test_apply_with_different_content_replaces()
     test_pend022_llm_summarize_exists()
     test_pend022_summarize_threshold()
     test_pend022_summary_cache()
