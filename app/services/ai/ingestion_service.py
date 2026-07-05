@@ -74,10 +74,20 @@ class AIIngestionService:
         # Compute hash
         file_hash = hashlib.sha256(content).hexdigest()
 
-        # Check for duplicate
+        # Check for duplicate — update course_id if re-uploading for a different course
         if file_hash:
             existing = await self._find_by_hash(file_hash)
             if existing:
+                if course_id and existing.course_id != course_id:
+                    existing.course_id = course_id
+                    # Reset generation state so apply goes to the new course
+                    meta = dict(existing.source_metadata or {})
+                    if meta.get("generation_status") == "completed":
+                        meta["generation_status"] = "ready_for_review"
+                        meta.pop("applied_at", None)
+                        meta.pop("applied_pages", None)
+                        existing.source_metadata = meta
+                    await self.db.commit()
                 return existing  # Idempotent: return existing job
 
         # Detect type

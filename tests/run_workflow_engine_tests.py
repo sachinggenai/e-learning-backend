@@ -515,11 +515,11 @@ async def test_router_import():
         path_methods.setdefault(r.path, set()).update(r.methods)
 
     expected = {
-        "/api/v1/workflows": {"POST", "GET"},
-        "/api/v1/workflows/{job_id}": {"GET"},
-        "/api/v1/workflows/{job_id}/cancel": {"POST"},
-        "/api/v1/workflows/{job_id}/retry": {"POST"},
-        "/api/v1/workflows/{job_id}/events": {"GET"},
+        "/workflows": {"POST", "GET"},
+        "/workflows/{job_id}": {"GET"},
+        "/workflows/{job_id}/cancel": {"POST"},
+        "/workflows/{job_id}/retry": {"POST"},
+        "/workflows/{job_id}/events": {"GET"},
     }
     for path, methods in expected.items():
         actual = path_methods.get(path, set())

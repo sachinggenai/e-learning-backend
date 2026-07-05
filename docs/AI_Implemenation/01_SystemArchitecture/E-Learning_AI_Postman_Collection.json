@@ -165,7 +165,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"user_id\": \"{{token}}\", \"course\": \"{{course_id}}\", \"organization_id\": \"default\"}"
+              "raw": "{\"user_id\": \"{{token}}\", \"course_id\": \"{{course_id}}\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/sessions",
@@ -412,7 +412,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"course\": \"{{course_id}}\", \"prompt\": \"Update the title of page {{page_id}} to 'Enhanced Learning Module'\", \"selected_context\": {\"page_id\": \"{{page_id}}\"}}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"prompt\": \"Update the title of page {{page_id}} to 'Enhanced Learning Module'\", \"selected_context\": {\"page_id\": \"{{page_id}}\"}}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/chat",
@@ -672,7 +672,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\"session_id\": \"{{session_id}}\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/proposals/{{proposal_id}}/cancel",
@@ -827,7 +827,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course\": \"{{course_id}}\", \"operation\": \"delete_page\", \"resource_type\": \"page\", \"resource_id\": \"{{page_id}}\"}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"organization_id\": \"default\", \"course\": \"{{course_id}}\", \"operation\": \"delete_page\", \"resource_type\": \"page\", \"page_id\": \"{{page_id}}\"}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/proposals/delete-page",
@@ -907,7 +907,7 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "var json = pm.response.json();",
-                  "console.log(\"Valid:\", json.isValid || json.valid);"
+                  "console.log(\"Valid:\", json.is_valid || json.valid);"
                 ],
                 "type": "text/javascript"
               }
@@ -1176,7 +1176,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"session_id\": \"{{session_id}}\", \"status\": \"plan_approved\"}"
+              "raw": "{\"session_id\": \"{{session_id}}\", \"approved\": true}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/ingestions/{{import_job_id}}/review-plan",
@@ -1228,7 +1228,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"import_job_id\": \"{{import_job_id}}\", \"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"generation_options\": {\"model\": \"claude-sonnet-4-20250514\", \"temperature\": 0.3, \"language\": \"en\"}}"
+              "raw": "{\"import_job_id\": \"{{import_job_id}}\", \"session_id\": \"{{session_id}}\", \"user_id\": \"{{token}}\", \"options\": {\"model\": \"claude-sonnet-4-20250514\", \"temperature\": 0.3, \"language\": \"en\"}}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ai/generate-course",
@@ -1283,6 +1283,58 @@
               ]
             }
           }
+        },
+        {
+          "name": "07-Apply Generated Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Course applied — 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "if (json.course_id) {",
+                  "    pm.collectionVariables.set(\"course_id\", json.course_id);",
+                  "    console.log(\"Applied course:\", json.course_id, \"Pages:\", json.pages_created);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"idempotency_key\": \"\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/generate-course/{{import_job_id}}/apply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "generate-course",
+                "{{import_job_id}}",
+                "apply"
+              ]
+            }
+          }
         }
       ]
     },
@@ -1319,17 +1371,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"course\": \"{{course_id}}\", \"exportFormat\": \"scorm12\"}"
+              "raw": "{}"
             },
             "url": {
-              "raw": "{{base_url}}/api/v1/export",
+              "raw": "{{base_url}}/api/v1/export/scorm/{{course_id}}",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "export"
+                "export",
+                "scorm",
+                "{{course_id}}"
               ]
             }
           }

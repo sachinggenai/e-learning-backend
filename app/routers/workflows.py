@@ -1,6 +1,6 @@
 """REST endpoints for the durable workflow engine — US-BKND-AI-034.
 
-6 endpoints:
+6 endpoints (mounted under /api/v1 via parent router):
     POST   /api/v1/workflows              Submit a workflow job (202)
     GET    /api/v1/workflows/{job_id}     Poll job status (200)
     POST   /api/v1/workflows/{job_id}/cancel   Cancel running job (200)
@@ -27,7 +27,7 @@ from app.repositories.workflow_repository import WorkflowRepository
 from app.services.workflow.orchestrator import WorkflowOrchestrator
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/workflows", tags=["Workflows"])
+router = APIRouter(prefix="/workflows", tags=["Workflows"])
 
 
 # ═══════════════════════════════════════════════════════════════════
