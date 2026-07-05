@@ -518,18 +518,17 @@ async def _llm_propose_breakdown(
                 "%d/%d pages need LLM refinement for ambiguous templates",
                 ambiguous_count, len(heuristic_pages),
             )
-            # Try LLM refinement for ambiguous pages
+            # --- TRD-CGQ Phase 3B: LLM refinement for ambiguous pages ---
             try:
-                refined = await _call_llm_for_breakdown(sections, max_pages)
+                refined = await _llm_refine_ambiguous(heuristic_pages, sections)
                 if refined and len(refined) > 0:
                     return refined
-            except Exception:
-                logger.warning("LLM refinement failed, using heuristic results")
-                # Clear the needs_llm_refinement flag since we're using heuristics
-                for p in heuristic_pages:
-                    p.pop("needs_llm_refinement", None)
-                return heuristic_pages
+            except Exception as exc:
+                logger.warning("LLM refinement failed: %s — using heuristic results", exc)
 
+            # Clear the needs_llm_refinement flag since we're using heuristics
+            for p in heuristic_pages:
+                p.pop("needs_llm_refinement", None)
             return heuristic_pages
     except Exception as exc:
         logger.warning("Heuristic breakdown failed: %s — falling back to LLM", exc)
@@ -885,6 +884,98 @@ def _get_breakdown_model_chain() -> list:
     except Exception:
         pass
     return ["qwen2.5:7b", "phi3:mini", "mock"]
+
+
+# ── TRD-CGQ Phase 3B: LLM refinement for ambiguous templates ─────────
+
+
+async def _llm_refine_ambiguous(heuristic_pages: list, sections: list) -> list:
+    """Refine ambiguous template assignments using LLM.
+
+    Only sends ambiguous pages (needs_llm_refinement=True) to the LLM.
+    Confident pages retain their heuristic assignment.
+
+    Returns merged list with LLM-refined + heuristic pages.
+    """
+    ambiguous_indices = [
+        i for i, p in enumerate(heuristic_pages)
+        if p.get("needs_llm_refinement")
+    ]
+    if not ambiguous_indices:
+        return heuristic_pages
+
+    logger.info(
+        "LLM refinement: %d ambiguous pages out of %d total",
+        len(ambiguous_indices), len(heuristic_pages),
+    )
+
+    try:
+        from app.services.ai.template_selector import TemplateSelector
+        from app.services.ai.feature_detector import FeatureDetector
+        from app.services.ai.llm_client import LLMClient, LLMProvider
+
+        detector = FeatureDetector()
+
+        # Use a small model for classification
+        try:
+            from app.services.ai.config import get_ai_config
+            cfg = get_ai_config()
+            refinement_model = getattr(cfg, "template_selector_model", "phi3:mini")
+            model_cfg = cfg.get_model(refinement_model)
+            provider_name = model_cfg.provider.lower() if model_cfg else "ollama"
+            if provider_name == "ollama":
+                provider = LLMProvider.OLLAMA
+            elif provider_name == "anthropic":
+                provider = LLMProvider.ANTHROPIC
+            else:
+                provider = LLMProvider.MOCK
+        except Exception:
+            provider = LLMProvider.MOCK
+            refinement_model = "mock"
+
+        if provider == LLMProvider.MOCK:
+            logger.info("No LLM available for refinement — keeping heuristic assignments")
+            for p in heuristic_pages:
+                p.pop("needs_llm_refinement", None)
+            return heuristic_pages
+
+        llm_client = LLMClient(provider=provider, model=refinement_model)
+        selector = TemplateSelector(llm_client=llm_client)
+
+        for idx in ambiguous_indices:
+            page = heuristic_pages[idx]
+            section_idx = page.get("source_section_ids", [str(idx)])
+            sid = int(section_idx[0]) if section_idx and str(section_idx[0]).isdigit() else idx
+
+            if 0 <= sid < len(sections):
+                sec = sections[sid]
+                if isinstance(sec, dict):
+                    content = sec.get("content") or sec.get("content_preview", "")
+                    features = detector.detect(content, idx, max(len(heuristic_pages), 1))
+
+                    # Get top candidates for the LLM to choose from
+                    candidates = selector.score_all(features)[:3]
+                    if len(candidates) >= 2:
+                        best = await selector.llm_refine(features, candidates, content)
+                        page["suggested_template_type"] = best.template_type
+                        page["rationale"] = (
+                            f"LLM-refined: {best.reasoning} "
+                            f"(score={best.score:.2f}, confidence={best.confidence:.2f})"
+                        )
+
+            page.pop("needs_llm_refinement", None)
+
+        logger.info("LLM refinement complete for %d ambiguous pages", len(ambiguous_indices))
+        return heuristic_pages
+
+    except Exception as exc:
+        logger.warning("LLM refinement batch failed: %s — keeping heuristic assignments", exc)
+        for p in heuristic_pages:
+            p.pop("needs_llm_refinement", None)
+        return heuristic_pages
+
+
+# ── TRD-CGQ Phase 2C: Heuristic breakdown ────────────────────────────
 
 
 def _heuristic_breakdown(sections: list, max_pages: int = 50) -> list:

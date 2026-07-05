@@ -574,19 +574,20 @@ class CourseGenerator:
     async def _generate_pages_with_llm(
         self, pages: List[Dict[str, Any]], options: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """Generate pages using AGT-07 Content Generator Agent via LLM.
+        """Generate pages using template-specific agents with tier-based routing.
 
-        TRD-CGQ Phase 2A / P6: Tries models from MODEL_ESCALATION_CHAIN
-        in order — first success wins, mock is last resort. Previously
-        the code tried only one model and gave up on failure.
+        TRD-CGQ Phase 3A/3D: Pages are grouped by template tier (SMALL/MID/LARGE)
+        and each group gets the optimal model + specialized agent.
+        Falls back through model escalation chain on failure.
         """
-        from app.services.ai.agents.content_generator_agent import ContentGeneratorAgent
         from app.services.ai.fanout import StreamManager
         from app.services.ai.config import get_ai_config
-        from app.services.ai.llm_client import LLMClient, LLMProvider
+        from app.services.ai.llm_client import LLMClient
+        from app.services.ai.template_tier_router import TemplateTierRouter
+        from app.services.ai.agents.template_agents import create_agent_for_template
 
         cfg = get_ai_config()
-        escalation_chain = getattr(cfg, "model_escalation_chain", ["qwen2.5:7b", "phi3:mini", "mock"])
+        tier_router = TemplateTierRouter(model_registry=cfg)
 
         # Get JSON repair instance
         json_repair = None
@@ -615,93 +616,131 @@ class CourseGenerator:
             "tone": options.get("tone", "professional"),
         }
 
-        last_error = None
-        for attempt, model_name in enumerate(escalation_chain):
-            try:
-                if model_name == "mock":
-                    raise ValueError("Escalation chain exhausted — using mock fallback")
+        # ── Phase 3A: Group pages by template tier ──────────────────
+        tier_groups = tier_router.group_pages_by_tier(pages)
 
-                # Resolve model config from registry
-                try:
-                    model_cfg = cfg.get_model(model_name)
-                except ValueError:
-                    logger.warning("Model '%s' not in registry, skipping", model_name)
-                    continue
+        # Process tier groups: LARGE first (assessments), then MID, then SMALL
+        all_generated: Dict[int, Dict[str, Any]] = {}  # page_index -> result
 
-                provider = _provider_from_model_config(model_cfg)
-                llm_client = LLMClient(
-                    provider=provider,
-                    model=model_cfg.api_model_name if model_cfg else model_name,
-                )
-
-                agent = ContentGeneratorAgent(
-                    llm_client=llm_client,
-                    json_repair=json_repair,
-                    max_retries=2,
-                )
-
-                # Use StreamManager for parallel generation
-                stream_mgr = StreamManager()
-                result = await stream_mgr.fan_out_pages(
-                    job_id=options.get("job_id", f"gen-{id(pages)}"),
-                    pages=pages,
-                    templates=templates,
-                    rag_context=options.get("rag_context", []),
-                    course_context=course_context,
-                    generate_func=agent.generate_page,
-                )
-
-                self._last_model_used = model_name
-                self._last_provider_used = model_cfg.provider if model_cfg else "ollama"
-
-                logger.info(
-                    "LLM generation complete (attempt %d, model=%s): %d pages, "
-                    "backend=%s, %.0fms, %d success, %d fallback, %d error",
-                    attempt + 1, model_name, len(result.pages), result.backend,
-                    result.total_duration_ms,
-                    sum(1 for p in result.pages if p.status == "success"),
-                    sum(1 for p in result.pages if p.status == "fallback"),
-                    sum(1 for p in result.pages if p.status == "error"),
-                )
-
-                # Convert PageResults to dict format
-                generated = []
-                for pr in result.pages:
-                    if pr.status in ("success", "fallback") and pr.data:
-                        generated.append(pr.data)
-                    else:
-                        # Failed page — use mock fallback
-                        idx = pr.page_index
-                        mock = self._generate_page_content(pages[idx], options, idx)
-                        mock["generation_metadata"] = {
-                            "fallback": True,
-                            "reason": pr.error or f"LLM generation failed on model {model_name}",
-                            "method": "mock",
-                            "attempted_model": model_name,
-                        }
-                        generated.append(mock)
-
-                return generated
-
-            except Exception as exc:
-                last_error = exc
-                logger.warning(
-                    "LLM generation attempt %d failed (model=%s): %s",
-                    attempt + 1, model_name, exc,
-                )
+        for tier in [tier_router.LARGE, tier_router.MID, tier_router.SMALL]:
+            tier_pages = tier_groups.get(tier, [])
+            if not tier_pages:
                 continue
 
-        # All escalation attempts failed — fall back to mock for all pages
-        logger.error(
-            "All %d model escalation attempts failed. Last error: %s. "
-            "Falling back to mock generation for all %d pages.",
-            len(escalation_chain), last_error, len(pages),
+            tier_page_indices = [idx for idx, _ in tier_pages]
+            tier_page_dicts = [p for _, p in tier_pages]
+            tier_templates = [templates[i] for i in tier_page_indices]
+
+            model_id = tier_router.get_model_for_tier(tier)
+            escalation_chain = getattr(cfg, "model_escalation_chain", ["qwen2.5:7b", "phi3:mini", "mock"])
+
+            # Try models in escalation chain for this tier
+            tier_success = False
+            last_error = None
+            for model_name in escalation_chain:
+                if model_name == "mock":
+                    break
+                try:
+                    try:
+                        model_cfg = cfg.get_model(model_name)
+                    except ValueError:
+                        continue
+
+                    provider = _provider_from_model_config(model_cfg)
+                    llm_client = LLMClient(
+                        provider=provider,
+                        model=model_cfg.api_model_name if model_cfg else model_name,
+                    )
+
+                    # ── Phase 3D: Template-specific agent ──────────
+                    # Use the first page's template type to pick agent
+                    primary_ttype = tier_page_dicts[0].get("template_type", "content-text")
+                    agent = create_agent_for_template(
+                        template_type=primary_ttype,
+                        llm_client=llm_client,
+                        json_repair=json_repair,
+                        max_retries=2,
+                    )
+
+                    stream_mgr = StreamManager()
+                    result = await stream_mgr.fan_out_pages(
+                        job_id=options.get("job_id", f"gen-{id(pages)}"),
+                        pages=tier_page_dicts,
+                        templates=tier_templates,
+                        rag_context=options.get("rag_context", []),
+                        course_context=course_context,
+                        generate_func=agent.generate_page,
+                    )
+
+                    self._last_model_used = model_name
+                    self._last_provider_used = model_cfg.provider if model_cfg else "ollama"
+
+                    logger.info(
+                        "Tier %s generation complete (model=%s): %d pages, "
+                        "%d success, %d fallback, %d error",
+                        tier.value, model_name, len(result.pages),
+                        sum(1 for p in result.pages if p.status == "success"),
+                        sum(1 for p in result.pages if p.status == "fallback"),
+                        sum(1 for p in result.pages if p.status == "error"),
+                    )
+
+                    # Map results back to original page indices
+                    for pr in result.pages:
+                        orig_idx = tier_page_indices[pr.page_index] if pr.page_index < len(tier_page_indices) else pr.page_index
+                        if pr.status in ("success", "fallback") and pr.data:
+                            all_generated[orig_idx] = pr.data
+                        else:
+                            mock = self._generate_page_content(pages[orig_idx], options, orig_idx)
+                            mock["generation_metadata"] = {
+                                "fallback": True,
+                                "reason": pr.error or f"LLM generation failed on model {model_name}",
+                                "method": "mock",
+                                "attempted_model": model_name,
+                                "tier": tier.value,
+                            }
+                            all_generated[orig_idx] = mock
+
+                    tier_success = True
+                    break
+
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning(
+                        "Tier %s generation attempt with %s failed: %s",
+                        tier.value, model_name, exc,
+                    )
+                    continue
+
+            # If tier failed all models, use mock for its pages
+            if not tier_success:
+                logger.error(
+                    "Tier %s failed all models. Last error: %s. Using mock for %d pages.",
+                    tier.value, last_error, len(tier_pages),
+                )
+                for idx, page in tier_pages:
+                    mock = self._generate_page_content(page, options, idx)
+                    mock["generation_metadata"] = {
+                        "fallback": True,
+                        "reason": f"Tier {tier.value} failed all models",
+                        "method": "mock",
+                        "tier": tier.value,
+                    }
+                    all_generated[idx] = mock
+
+        # Assemble results in original page order
+        generated = [all_generated[i] for i in sorted(all_generated.keys())]
+
+        # Log tier routing stats
+        stats = tier_router.get_stats()
+        logger.info(
+            "Template tier routing: %d pages -> SMALL=%d (%.0f%%) MID=%d (%.0f%%) LARGE=%d (%.0f%%)",
+            stats["total_pages"],
+            stats["routing_counts"].get("small", 0), stats["small_pct"],
+            stats["routing_counts"].get("mid", 0), stats["mid_pct"],
+            stats["routing_counts"].get("large", 0), stats["large_pct"],
         )
-        self._last_model_used = "mock"
-        self._last_provider_used = "mock"
-        raise RuntimeError(
-            f"All models in escalation chain failed: {escalation_chain}"
-        ) from last_error
+
+        return generated
 
     # ═══════════════════════════════════════════════════════════════════
     # Phase 2A: Template-Specific Content Generators (TRD-CGQ §5.4)

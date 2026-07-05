@@ -367,7 +367,7 @@ class TemplateSelector:
 
         return scores
 
-    # ── LLM Refinement (Phase 2+ stub) ─────────────────────────────────
+    # ── LLM Refinement (Phase 3B) ─────────────────────────────────────
 
     async def llm_refine(
         self,
@@ -377,19 +377,90 @@ class TemplateSelector:
     ) -> TemplateScore:
         """Use LLM to choose between ambiguous template candidates.
 
-        Only called when select_with_confidence() returns needs_llm=True.
-        Phase 1: Returns best heuristic candidate (no LLM call).
-        Phase 2: Full implementation with LLM call.
+        TRD-CGQ Phase 3B: Called when select_with_confidence() returns
+        needs_llm=True (top 2 scores within 0.30 margin).
 
-        Works with any model size — small models do simple choice,
-        large models can override with creative selections.
+        Uses a small model for this simple classification task — the LLM
+        sees only the section text + candidate list, and picks the best fit.
+
+        Falls back to best heuristic candidate if LLM is unavailable or fails.
         """
-        if not self.llm_client or not candidates:
+        if not self.llm_client or not candidates or len(candidates) < 2:
             return candidates[0] if candidates else DEFAULT_TEMPLATE
 
-        # Phase 2+ will add actual LLM call here
-        logger.debug(
-            "LLM refinement not yet implemented — returning best heuristic: %s",
-            candidates[0].template_type if candidates else "content-text",
-        )
-        return candidates[0] if candidates else DEFAULT_TEMPLATE
+        try:
+            # Build a focused classification prompt
+            candidate_list = "\n".join(
+                f"- {c.template_type} (score {c.score:.2f}): {c.reasoning}"
+                for c in candidates[:3]
+            )
+
+            prompt = (
+                f"You are a template classification expert. Given the following "
+                f"content section, choose the SINGLE best template type from the "
+                f"candidates below.\n\n"
+                f"SECTION TEXT (first 800 chars):\n{section_text[:800]}\n\n"
+                f"CANDIDATE TEMPLATES:\n{candidate_list}\n\n"
+                f"Return a JSON object:\n"
+                f'{{"template_type": "chosen-type", "reasoning": "brief explanation"}}\n'
+            )
+
+            # Use the LLM client for classification
+            response = await self.llm_client.chat(
+                messages=[type('LLMMessage', (), {
+                    'role': 'user', 'content': prompt,
+                    'tool_calls': [], 'tool_results': [],
+                })()],
+                system_prompt="You are a template classification expert. Respond ONLY with valid JSON.",
+                temperature=0.2,
+                max_tokens=256,
+            )
+
+            raw = getattr(response, 'content', str(response))
+            parsed = self._parse_refinement_response(raw)
+
+            if parsed and parsed.get("template_type"):
+                chosen_type = parsed["template_type"]
+                # Find matching candidate
+                for c in candidates:
+                    if c.template_type == chosen_type:
+                        c.method = "llm"
+                        c.reasoning = parsed.get("reasoning", c.reasoning)
+                        c.confidence = min(c.confidence + 0.10, 0.95)
+                        logger.info(
+                            "LLM refinement: chose '%s' over %d candidates",
+                            chosen_type, len(candidates),
+                        )
+                        return c
+
+                # If LLM chose something not in candidates, return content-text fallback
+                logger.warning(
+                    "LLM refinement chose '%s' not in candidates %s — using fallback",
+                    chosen_type, [c.template_type for c in candidates],
+                )
+        except Exception as exc:
+            logger.warning("LLM refinement failed: %s — using best heuristic", exc)
+
+        return candidates[0]  # Fallback to best heuristic
+
+    def _parse_refinement_response(self, raw: str) -> Optional[Dict[str, Any]]:
+        """Parse the LLM refinement response JSON."""
+        import json as _json
+        content = raw.strip()
+        # Extract from code block if needed
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0]
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0]
+        try:
+            return _json.loads(content)
+        except (_json.JSONDecodeError, ValueError):
+            # Try to extract JSON object from text
+            import re
+            match = re.search(r'\{[^}]+\}', content)
+            if match:
+                try:
+                    return _json.loads(match.group())
+                except (_json.JSONDecodeError, ValueError):
+                    pass
+        return None
