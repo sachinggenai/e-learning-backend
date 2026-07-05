@@ -467,8 +467,28 @@ class AIIdempotencyKeyRecord(Base):
 class AIIngestionJobRecord(Base):
     """An AI document ingestion job for file upload and text extraction.
 
-    Jobs progress: uploaded → extracting → analyzed | failed.
-    Extracted content is staged for downstream AI segmentation (US-AI-017).
+    ── Dual State Machine ──────────────────────────────────────────
+    This record tracks TWO independent state machines:
+
+    1. ``status`` (column) — Job lifecycle at the ingestion/router level:
+       uploaded → analyzed → page_plan_ready → plan_approved → generated → completed
+       Transitions are driven by router endpoints (propose-breakdown,
+       review-plan, generate-course, apply).  Idempotent propose-breakdown
+       can reset a terminal status back to page_plan_ready.
+
+    2. ``source_metadata.generation_status`` (JSON key) — Generation progress
+       inside CourseGenerator:
+       null → generating → ready_for_review → completed
+       Checked by apply_generated_course().  A re-upload with a different
+       course_id resets completed → ready_for_review so the same generated
+       content can be applied to a new course.
+
+    These two fields CAN diverge — e.g. job.status="completed" while
+    generation_status="ready_for_review" after a re-upload.  Downstream
+    code must check the appropriate field for its concern:
+    - Routers (propose-breakdown, review-plan) → job.status
+    - CourseGenerator (start_generation, apply) → source_metadata.generation_status
+    ─────────────────────────────────────────────────────────────────
     """
 
     __tablename__ = "ai_ingestion_jobs"

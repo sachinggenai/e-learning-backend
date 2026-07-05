@@ -74,7 +74,9 @@ class AIIngestionService:
         # Compute hash
         file_hash = hashlib.sha256(content).hexdigest()
 
-        # Check for duplicate — update course_id if re-uploading for a different course
+        # Check for duplicate — update course_id if re-uploading for a different course.
+        # See AIIngestionJobRecord docstring for the dual state machine
+        # (job.status vs source_metadata.generation_status).
         if file_hash:
             existing = await self._find_by_hash(file_hash)
             if existing:

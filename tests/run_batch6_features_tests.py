@@ -133,6 +133,165 @@ def test_pend021_max_limits():
     check("PEND021-04: MAX_CHARS = 500000", DocumentExtractor.MAX_CHARS == 500000)
 
 # ═══════════════════════════════════════════════════════════════════
+# PEND-021-IO: Ingestion Idempotency — course_id update on re-upload
+# ═══════════════════════════════════════════════════════════════════
+
+async def test_reupload_idempotent_same_course():
+    """PEND021-IO-01: Re-upload with same course_id does NOT mutate job."""
+    from app.services.ai.ingestion_service import AIIngestionService
+    from app.db.config import SessionLocal
+    import hashlib
+
+    async with SessionLocal() as db:
+        svc = AIIngestionService(db)
+        content = b"test-ingestion-io-01-" + uuid.uuid4().bytes
+        file_hash = hashlib.sha256(content).hexdigest()
+
+        # Create a fresh job
+        job = await svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-io-01.docx",
+            session_id="test-session-io",
+            user_id="u-io",
+            organization_id="org-io",
+            course_id="COURSE-IO-01",
+        )
+        original_course = job.course_id
+        original_meta = dict(job.source_metadata or {})
+
+        # Re-upload same file with same course_id
+        job2 = await svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-io-01.docx",
+            session_id="test-session-io",
+            user_id="u-io",
+            organization_id="org-io",
+            course_id="COURSE-IO-01",
+        )
+        check("PEND021-IO-01: Same job returned", job2.job_id == job.job_id)
+        check("PEND021-IO-01: course_id unchanged", job2.course_id == original_course)
+        # Clean up
+        await db.delete(job)
+        await db.commit()
+
+
+async def test_reupload_different_course_resets_gen_status():
+    """PEND021-IO-02: Re-upload with different course_id resets generation_status."""
+    from app.services.ai.ingestion_service import AIIngestionService
+    from app.db.config import SessionLocal
+    import hashlib
+
+    async with SessionLocal() as db:
+        svc = AIIngestionService(db)
+        content = b"test-ingestion-io-02-" + uuid.uuid4().bytes
+
+        # Create and complete a job
+        job = await svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-io-02.docx",
+            session_id="test-session-io",
+            user_id="u-io",
+            organization_id="org-io",
+            course_id="COURSE-IO-OLD",
+        )
+        job.source_metadata = {"generation_status": "completed", "applied_at": "2026-01-01", "applied_pages": 5}
+        await db.commit()
+
+        # Re-upload with different course_id
+        job2 = await svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-io-02.docx",
+            session_id="test-session-io",
+            user_id="u-io",
+            organization_id="org-io",
+            course_id="COURSE-IO-NEW",
+        )
+        meta = job2.source_metadata or {}
+        check("PEND021-IO-02: course_id updated to new", job2.course_id == "COURSE-IO-NEW")
+        check("PEND021-IO-02: gen_status reset to ready_for_review",
+              meta.get("generation_status") == "ready_for_review")
+        check("PEND021-IO-02: applied_at removed", "applied_at" not in meta)
+        check("PEND021-IO-02: applied_pages removed", "applied_pages" not in meta)
+        # Clean up
+        await db.delete(job)
+        await db.commit()
+
+
+async def test_reupload_different_course_not_completed():
+    """PEND021-IO-03: Re-upload with different course_id when NOT completed
+    only updates course_id, does NOT touch generation_status."""
+    from app.services.ai.ingestion_service import AIIngestionService
+    from app.db.config import SessionLocal
+    import hashlib
+
+    async with SessionLocal() as db:
+        svc = AIIngestionService(db)
+        content = b"test-ingestion-io-03-" + uuid.uuid4().bytes
+
+        job = await svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-io-03.docx",
+            session_id="test-session-io",
+            user_id="u-io",
+            organization_id="org-io",
+            course_id="COURSE-IO-OLD",
+        )
+        job.source_metadata = {"generation_status": "generating", "page_count": 3}
+        await db.commit()
+
+        job2 = await svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-io-03.docx",
+            session_id="test-session-io",
+            user_id="u-io",
+            organization_id="org-io",
+            course_id="COURSE-IO-NEW",
+        )
+        meta = job2.source_metadata or {}
+        check("PEND021-IO-03: course_id updated", job2.course_id == "COURSE-IO-NEW")
+        check("PEND021-IO-03: gen_status NOT reset (not completed)",
+              meta.get("generation_status") == "generating")
+        # Clean up
+        await db.delete(job)
+        await db.commit()
+
+
+async def test_reupload_empty_course_id_noop():
+    """PEND021-IO-04: Re-upload with empty course_id does NOT update."""
+    from app.services.ai.ingestion_service import AIIngestionService
+    from app.db.config import SessionLocal
+    import hashlib
+
+    async with SessionLocal() as db:
+        svc = AIIngestionService(db)
+        content = b"test-ingestion-io-04-" + uuid.uuid4().bytes
+
+        job = await svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-io-04.docx",
+            session_id="test-session-io",
+            user_id="u-io",
+            organization_id="org-io",
+            course_id="COURSE-IO-04",
+        )
+        original_course = job.course_id
+
+        # Re-upload with empty course_id
+        job2 = await svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-io-04.docx",
+            session_id="test-session-io",
+            user_id="u-io",
+            organization_id="org-io",
+            course_id="",
+        )
+        check("PEND021-IO-04: course_id unchanged (empty)", job2.course_id == original_course)
+        # Clean up
+        await db.delete(job)
+        await db.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════
 # PEND-022: LLM Context Summarization
 # ═══════════════════════════════════════════════════════════════════
 
@@ -219,6 +378,10 @@ async def run_all_tests():
     await test_pend021_extract_unsupported_type()
     test_pend021_ingestion_integration()
     test_pend021_max_limits()
+    await test_reupload_idempotent_same_course()
+    await test_reupload_different_course_resets_gen_status()
+    await test_reupload_different_course_not_completed()
+    await test_reupload_empty_course_id_noop()
     test_pend022_llm_summarize_exists()
     test_pend022_summarize_threshold()
     test_pend022_summary_cache()
