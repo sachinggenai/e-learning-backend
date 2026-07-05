@@ -82,7 +82,9 @@ class AIIngestionService:
             if existing:
                 if course_id and existing.course_id != course_id:
                     existing.course_id = course_id
-                    # Reset generation state so apply goes to the new course
+                    # Reset generation state so apply goes to the new course.
+                    # Safe to pop applied_at/applied_pages — the only downstream
+                    # consumers (ai_tools.py:454/506/655) use .get().
                     meta = dict(existing.source_metadata or {})
                     if meta.get("generation_status") == "completed":
                         meta["generation_status"] = "ready_for_review"

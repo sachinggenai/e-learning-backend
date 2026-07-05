@@ -257,13 +257,13 @@ def main():
         print(f"     Pages proposed: {len(plan)}")
 
         r = api("POST", f"/api/v1/ai/ingestions/{job_id}/review-plan",
-                json={"session_id": session_id, "action": "approve"})
+                json={"session_id": session_id, "approved": True})
         review_ok = r.status_code == 200
         check("Review Plan", review_ok, f"got {r.status_code}: {r.text[:80]}")
 
         if review_ok:
             r = api("POST", "/api/v1/ai/generate-course",
-                    json={"import_job_id": job_id, "session_id": session_id, "use_llm": True},
+                    json={"import_job_id": job_id, "options": {"model": "qwen2.5:7b", "temperature": 0.3, "language": "en"}},
                     timeout=300)
             gen_ok = r.status_code in (200, 201)
             check("Generate Course (LLM)", gen_ok, f"got {r.status_code}: {r.text[:100]}")
@@ -275,7 +275,7 @@ def main():
 
             if gen_ok and pages_gen > 0:
                 r = api("POST", f"/api/v1/ai/generate-course/{job_id}/apply",
-                        json={"session_id": session_id})
+                        json={"idempotency_key": ""})
                 apply_ok = r.status_code == 200
                 check("Apply Course", apply_ok, f"got {r.status_code}: {r.text[:100]}")
                 if apply_ok:
