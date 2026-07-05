@@ -238,7 +238,7 @@ class DocumentSplitter:
         # Pre-compiled heading patterns
         heading_patterns = [
             # ALL CAPS short line (typical for PowerPoint-exported headings)
-            re.compile(r'^[A-Z][A-Z\s]{4,119}$'),
+            re.compile(r'^[A-Z][A-Z0-9\s\-\–\.\,\:\;\!\/\(\)]{4,119}$'),
             # Numbered module/unit/lesson/chapter/section/topic/part
             re.compile(
                 r'^(?:Module|Unit|Lesson|Chapter|Section|Topic|Part)\s+\d+',

@@ -167,7 +167,7 @@ ALL_RULES = [
 
 DEFAULT_TEMPLATE = TemplateScore(
     "content-text", 0.40, 0.30, "heuristic",
-    "Fallback — no strong signal detected",
+    "Fallback — no strong signal",
 )
 
 

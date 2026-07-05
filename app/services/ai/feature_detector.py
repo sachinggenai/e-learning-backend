@@ -245,7 +245,7 @@ class FeatureDetector:
             has_term_definitions=bool(self._TERM_PAT.search(text)),
             has_procedure_steps=bool(self._PROCEDURE_PAT.search(text)),
             has_narrative_structure=(
-                len(text) > 500 and len(non_empty) > 3 and not self._LIST_PAT.search(text)
+                len(text) > 500 and len(non_empty) > 3
             ),
 
             # Position
