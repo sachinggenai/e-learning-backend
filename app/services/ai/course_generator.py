@@ -119,14 +119,61 @@ class CourseGenerator:
             raise GenerationError("IMPORT_JOB_NOT_FOUND",
                                   f"Import job '{import_job_id}' not found.", 404)
 
-        # Guard: job must be in plan_approved state
-        if job.status not in ("plan_approved", "generated"):
+        # Guard: job must be in plan_approved, generated, or completed state.
+        # Completed jobs can re-enter generation via the idempotency path below.
+        if job.status not in ("plan_approved", "generated", "completed"):
             raise GenerationError(
                 "INVALID_STATE",
-                f"Job must be in 'plan_approved' or 'generated' state, currently '{job.status}'. "
+                f"Job must be in 'plan_approved', 'generated', or 'completed' state, "
+                f"currently '{job.status}'. "
                 "Approve the page plan before generating content.",
                 400,
             )
+
+        # ── Idempotency: completed job → reset and return cached course ──
+        if job.status == "completed":
+            meta_check = dict(job.source_metadata or {})
+            existing_course = meta_check.get("generated_course")
+            if not existing_course or not isinstance(existing_course, dict):
+                raise GenerationError(
+                    "NO_GENERATED_COURSE",
+                    "Job is completed but has no cached course data. "
+                    "Re-upload the source document to regenerate.",
+                    400,
+                )
+            meta_check["generation_status"] = GenerationStatus.READY_FOR_REVIEW.value
+            meta_check.pop("applied_at", None)
+            meta_check.pop("applied_pages", None)
+            job.source_metadata = meta_check
+            job.status = "generated"
+            await self.db.commit()
+            pages_data = existing_course.get("pages", [])
+            return {
+                "job_id": import_job_id,
+                "status": GenerationStatus.READY_FOR_REVIEW.value,
+                "total_pages": len(pages_data),
+                "generated_pages": len(pages_data),
+                "course_title": existing_course.get("title", "Generated Course"),
+                "idempotent": True,
+                "message": (
+                    "Returning existing course — generation_status reset "
+                    "to ready_for_review for re-apply."
+                ),
+                "pages": [
+                    {
+                        "title": p["title"],
+                        "template_type": p.get("template_type", "content-text"),
+                        "component_count": len(p.get("components", [])),
+                        "validation_status": "valid",
+                    }
+                    for p in pages_data
+                ],
+                "validation": {
+                    "total": len(pages_data),
+                    "errors": 0,
+                    "warnings": 0,
+                },
+            }
 
         # Check plan is approved
         raw = job.extracted_sections or {}

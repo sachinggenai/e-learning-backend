@@ -292,6 +292,114 @@ async def test_reupload_empty_course_id_noop():
 
 
 # ═══════════════════════════════════════════════════════════════════
+# PEND-021-GEN: generate-course idempotency on completed jobs
+# ═══════════════════════════════════════════════════════════════════
+
+async def test_generate_idempotent_completed_job():
+    """PEND021-GEN-01: Completed job with cached course → resets to ready_for_review."""
+    from app.services.ai.course_generator import CourseGenerator, GenerationStatus
+    from app.db.config import SessionLocal
+    import hashlib
+
+    async with SessionLocal() as db:
+        svc = CourseGenerator(db)
+        content = b"test-gen-io-01-" + uuid.uuid4().bytes
+        file_hash = hashlib.sha256(content).hexdigest()
+
+        # Create a completed job with generated course data
+        from app.services.ai.ingestion_service import AIIngestionService
+        ing_svc = AIIngestionService(db)
+        job = await ing_svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-gen-01.docx",
+            session_id="test-session-gen",
+            user_id="u-gen",
+            organization_id="org-gen",
+            course_id="COURSE-GEN-01",
+        )
+        job.source_metadata = {
+            "generation_status": "completed",
+            "applied_at": "2026-01-01",
+            "applied_pages": 5,
+            "generated_course": {
+                "title": "Test Course",
+                "description": "A test",
+                "pages": [
+                    {"title": "Page 1", "template_type": "content-text", "order": 0, "components": [
+                        {"component_type": "content-text", "order_index": 0, "data": {"content": "Hello"}}
+                    ]},
+                    {"title": "Page 2", "template_type": "content-text", "order": 1, "components": []},
+                ],
+                "validation_results": [],
+            },
+        }
+        job.status = "completed"
+        await db.commit()
+
+        result = await svc.start_generation(
+            import_job_id=job.job_id, session_id="ses", user_id="u", course_id="C1",
+        )
+        check("PEND021-GEN-01: status = ready_for_review",
+              result["status"] == GenerationStatus.READY_FOR_REVIEW.value)
+        check("PEND021-GEN-01: idempotent = True",
+              result.get("idempotent") is True)
+        check("PEND021-GEN-01: pages preserved",
+              result["total_pages"] == 2)
+
+        # Verify metadata updated
+        await db.refresh(job)
+        meta_after = job.source_metadata or {}
+        check("PEND021-GEN-01: gen_status reset in DB",
+              meta_after.get("generation_status") == "ready_for_review")
+        check("PEND021-GEN-01: applied_at removed",
+              "applied_at" not in meta_after)
+        check("PEND021-GEN-01: job.status = generated",
+              job.status == "generated")
+
+        # Clean up
+        await db.delete(job)
+        await db.commit()
+
+
+async def test_generate_completed_no_cached_course_raises():
+    """PEND021-GEN-02: Completed job WITHOUT cached course → raises error."""
+    from app.services.ai.course_generator import CourseGenerator, GenerationError
+    from app.db.config import SessionLocal
+    import hashlib
+
+    async with SessionLocal() as db:
+        content = b"test-gen-io-02-" + uuid.uuid4().bytes
+        from app.services.ai.ingestion_service import AIIngestionService
+        ing_svc = AIIngestionService(db)
+        job = await ing_svc.create_job(
+            file=__import__("io").BytesIO(content),
+            filename="test-gen-02.docx",
+            session_id="test-session-gen",
+            user_id="u-gen",
+            organization_id="org-gen",
+            course_id="COURSE-GEN-02",
+        )
+        job.source_metadata = {"generation_status": "completed"}  # No generated_course key
+        job.status = "completed"
+        await db.commit()
+
+        svc = CourseGenerator(db)
+        raised = False
+        try:
+            await svc.start_generation(
+                import_job_id=job.job_id, session_id="ses", user_id="u", course_id="C2",
+            )
+        except GenerationError as e:
+            raised = True
+            check("PEND021-GEN-02: raises GenerationError", e.code == "NO_GENERATED_COURSE")
+        check("PEND021-GEN-02: error was raised", raised)
+
+        # Clean up
+        await db.delete(job)
+        await db.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════
 # PEND-022: LLM Context Summarization
 # ═══════════════════════════════════════════════════════════════════
 
@@ -382,6 +490,8 @@ async def run_all_tests():
     await test_reupload_different_course_resets_gen_status()
     await test_reupload_different_course_not_completed()
     await test_reupload_empty_course_id_noop()
+    await test_generate_idempotent_completed_job()
+    await test_generate_completed_no_cached_course_raises()
     test_pend022_llm_summarize_exists()
     test_pend022_summarize_threshold()
     test_pend022_summary_cache()
