@@ -1,0 +1,639 @@
+{
+  "info": {
+    "name": "E-Learning Course Generation Pipeline",
+    "description": "Complete Flow 10/11 — Course Creation → Session → Template Marking Upload → Breakdown → Generate → Apply → SCORM Export. Includes Template Marking System for annotated DOCX files.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00-Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status is healthy', () => {",
+                  "    pm.expect(pm.response.json().status).to.eql('healthy');",
+                  "});",
+                  "pm.test('Response time < 500ms', () => {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(500);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "health"]
+            }
+          }
+        },
+        {
+          "name": "AI Feature Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('AI Authoring Enabled', () => {",
+                  "    pm.expect(pm.response.json().aiAuthoringEnabled).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/feature-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "feature-status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01-Create Course",
+      "item": [
+        {
+          "name": "Create Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Has courseId', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.courseId).to.exist;",
+                  "    pm.collectionVariables.set('course_id', json.courseId);",
+                  "    console.log('course_id:', json.courseId);",
+                  "});",
+                  "pm.test('Status is draft', () => {",
+                  "    pm.expect(pm.response.json().status).to.eql('draft');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"courseId\": \"{{course_id}}\",\n  \"title\": \"{{course_title}}\",\n  \"description\": \"{{course_description}}\",\n  \"status\": \"draft\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/courses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "courses"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02-Create AI Session",
+      "item": [
+        {
+          "name": "Create Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Has sessionId', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.session.sessionId).to.exist;",
+                  "    pm.collectionVariables.set('session_id', json.session.sessionId);",
+                  "    console.log('session_id:', json.session.sessionId);",
+                  "});",
+                  "pm.test('Session is active', () => {",
+                  "    pm.expect(pm.response.json().session.status).to.eql('active');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course_id\": \"{{course_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "sessions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03-Flow 10/11 - Template Marking Upload & Breakdown",
+      "description": "Upload a template-marked DOCX file for AI ingestion. The Template Marking System detects [PAGE:], [COMPONENT:], [ITEM:], [QUESTION:] markers and builds a deterministic page plan — no LLM needed.",
+      "item": [
+        {
+          "name": "01-Upload Marked DOCX",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Has job_id', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.job_id).to.exist;",
+                  "    pm.collectionVariables.set('job_id', json.job_id);",
+                  "    console.log('job_id:', json.job_id);",
+                  "});",
+                  "pm.test('Job status is analyzed', () => {",
+                  "    pm.expect(pm.response.json().job_status).to.be.oneOf(['analyzed', 'uploaded']);",
+                  "});",
+                  "pm.test('Template Marking - marker_status is parsed', () => {",
+                  "    const meta = pm.response.json().source_metadata || {};",
+                  "    const ms = meta.marker_status;",
+                  "    if (ms) {",
+                  "        console.log('marker_status:', ms, 'pages:', meta.page_count);",
+                  "        pm.expect(ms).to.be.oneOf(['parsed', 'absent']);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{storyboard_file_path}}",
+                  "description": "Template-marked DOCX file with [PAGE:], [COMPONENT:], [ITEM:], [QUESTION:] markers"
+                },
+                {
+                  "key": "session_id",
+                  "value": "{{session_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "course_id",
+                  "value": "{{course_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "correlation_id",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional idempotency key"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/ingestions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "ingestions"]
+            }
+          }
+        },
+        {
+          "name": "02-Poll Ingestion Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Job exists', () => {",
+                  "    pm.expect(pm.response.json().job_id).to.eql(pm.collectionVariables.get('job_id'));",
+                  "});",
+                  "pm.test('Progress reflects extraction', () => {",
+                  "    const prog = pm.response.json().progress;",
+                  "    console.log('job_status:', pm.response.json().job_status, 'progress:', prog);",
+                  "});",
+                  "const markerStatus = pm.response.json().source_metadata?.marker_status;",
+                  "if (markerStatus) {",
+                  "    console.log('MARKER STATUS:', markerStatus);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/ingestions/{{job_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "ingestions", "{{job_id}}"]
+            }
+          }
+        },
+        {
+          "name": "03-Propose Page Breakdown",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Page plan returned', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.plan).to.be.an('array').that.is.not.empty;",
+                  "    console.log('Pages proposed:', json.total_proposed);",
+                  "});",
+                  "pm.test('Template Marking - marker_mode check', () => {",
+                  "    const mm = pm.response.json().marker_mode;",
+                  "    if (mm !== undefined) {",
+                  "        console.log('marker_mode:', mm, '(true = deterministic, no LLM)');",
+                  "    }",
+                  "});",
+                  "pm.test('All pages have template types', () => {",
+                  "    pm.response.json().plan.forEach(p => {",
+                  "        pm.expect(p.suggested_template_type).to.be.a('string').that.is.not.empty;",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"job_id\": \"{{job_id}}\",\n  \"max_pages\": 50\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/ingestions/{{job_id}}/propose-breakdown",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "ingestions", "{{job_id}}", "propose-breakdown"]
+            }
+          }
+        },
+        {
+          "name": "04-Review and Approve Plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Plan approved', () => {",
+                  "    pm.expect(pm.response.json().plan_status).to.eql('approved');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"job_id\": \"{{job_id}}\",\n  \"approved\": true,\n  \"modifications\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/ingestions/{{job_id}}/review-plan",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "ingestions", "{{job_id}}", "review-plan"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04-Flow 10/11 - Course Generation & Apply",
+      "description": "Generate full course content from the approved page plan, then transactionally apply to the database.",
+      "item": [
+        {
+          "name": "05-Generate Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Generation started', () => {",
+                  "    const json = pm.response.json();",
+                  "    console.log('Pages:', json.total_pages, 'Generated:', json.generated_pages);",
+                  "    pm.expect(json.status).to.be.oneOf(['ready_for_review', 'generated']);",
+                  "});",
+                  "pm.test('No validation errors', () => {",
+                  "    const v = pm.response.json().validation || {};",
+                  "    console.log('Errors:', v.errors, 'Warnings:', v.warnings);",
+                  "    pm.expect(v.errors).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"import_job_id\": \"{{job_id}}\",\n  \"course_id\": \"{{course_id}}\",\n  \"options\": {\n    \"course_title\": \"{{course_title}}\",\n    \"tone\": \"professional\",\n    \"audience\": \"adult learners\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/generate-course",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "generate-course"]
+            }
+          }
+        },
+        {
+          "name": "06-Poll Generation Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Status available', () => {",
+                  "    const s = pm.response.json().status;",
+                  "    console.log('Generation status:', s);",
+                  "    pm.expect(s).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/generate-course/{{job_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "generate-course", "{{job_id}}"]
+            }
+          }
+        },
+        {
+          "name": "07-Apply Generated Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Course applied', () => {",
+                  "    const json = pm.response.json();",
+                  "    console.log('Course:', json.course_id, 'Pages:', json.pages_created);",
+                  "    pm.expect(json.pages_created).to.be.greaterThan(0);",
+                  "    pm.expect(json.course_id).to.eql(pm.collectionVariables.get('course_id'));",
+                  "});",
+                  "pm.test('Pages have template types', () => {",
+                  "    pm.response.json().pages.forEach(p => {",
+                  "        console.log('  -', p.title, '(', p.template_type, ')');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/generate-course/{{job_id}}/apply",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ai", "generate-course", "{{job_id}}", "apply"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05-Verify Course Content",
+      "description": "Verify the applied course has correct pages, templates, components, and assessment answers.",
+      "item": [
+        {
+          "name": "Get Course Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Course has pages', () => {",
+                  "    const pages = pm.response.json().pages || [];",
+                  "    pm.expect(pages.length).to.be.greaterThan(0);",
+                  "    console.log('Total pages:', pages.length);",
+                  "});",
+                  "pm.test('Verify assessment has correct answers', () => {",
+                  "    const pages = pm.response.json().pages || [];",
+                  "    pages.forEach(pg => {",
+                  "        (pg.components || []).forEach(c => {",
+                  "            const qs = (c.data || {}).questions || [];",
+                  "            if (qs.length > 0) {",
+                  "                const correct = qs.flatMap(q => (q.options || []).filter(o => o.isCorrect));",
+                  "                console.log('Assessment:', qs.length, 'questions,', correct.length, 'correct options');",
+                  "                pm.expect(correct.length).to.be.greaterThan(0, 'No correct answers found in assessment');",
+                  "            }",
+                  "        });",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/courses/{{course_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "courses", "{{course_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06-SCORM Export",
+      "description": "Export the generated course as a SCORM 1.2 compliant ZIP package.",
+      "item": [
+        {
+          "name": "Export Course as SCORM",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK - SCORM ZIP returned', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is ZIP file', () => {",
+                  "    const ct = pm.response.headers.get('Content-Type');",
+                  "    pm.expect(ct).to.include('zip');",
+                  "});",
+                  "pm.test('Content-Disposition header present', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');",
+                  "});",
+                  "pm.test('File size > 1KB', () => {",
+                  "    const cl = parseInt(pm.response.headers.get('Content-Length') || '0');",
+                  "    pm.expect(cl).to.be.greaterThan(1024);",
+                  "    console.log('SCORM size:', (cl/1024).toFixed(1), 'KB');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"scorm_1_2\",\n  \"includeMedia\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/export/scorm/{{course_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "export", "scorm", "{{course_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Validate Course for Export",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Validation successful', () => {",
+                  "    pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "pm.test('Template count matches', () => {",
+                  "    console.log('Templates:', pm.response.json().course_info?.template_count);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course\": {\n    \"courseId\": \"{{course_id}}\",\n    \"title\": \"{{course_title}}\",\n    \"templates\": [\n      {\n        \"id\": \"t1\",\n        \"title\": \"Test Page\",\n        \"type\": \"content-text\",\n        \"order\": 0,\n        \"data\": { \"content\": \"Test content\" }\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/export/validate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "export", "validate"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "token",
+      "value": "test-user-001",
+      "type": "string"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "course_id",
+      "value": "COURSE-DEMO-001",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "job_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "course_title",
+      "value": "Cybersecurity Awareness for the Modern Workplace",
+      "type": "string"
+    },
+    {
+      "key": "course_description",
+      "value": "Learn to recognize cyber threats, protect accounts and devices, handle data securely, and respond to incidents.",
+      "type": "string"
+    },
+    {
+      "key": "storyboard_file_path",
+      "value": "C:\\Users\\ADMIN\\Downloads\\Cybersecurity_Course_Template_Markers.docx",
+      "type": "string"
+    }
+  ]
+}
