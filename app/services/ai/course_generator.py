@@ -24,6 +24,7 @@ from enum import Enum
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import normalize_template_type
+from app.services.ai.marked_document_parser import MarkedPage, MarkedComponent
 
 logger = logging.getLogger(__name__)
 
@@ -251,12 +252,16 @@ class CourseGenerator:
         pages = []
         for section in plan:
             if isinstance(section, dict):
-                pages.append({
+                page_dict = {
                     "title": section.get("proposed_title") or section.get("title", "Untitled"),
                     "template_type": section.get("suggested_template_type") or section.get("template_type", "content-text"),
                     "order": section.get("order", len(pages)),
                     "source_excerpt": section.get("content_preview") or section.get("content", section.get("text", "")),
-                })
+                }
+                # ── Template Marking System: carry forward marked page data ──
+                if section.get("_marked_page"):
+                    page_dict["_marked_page"] = section["_marked_page"]
+                pages.append(page_dict)
 
         if not pages:
             raise GenerationError("EMPTY_PAGE_PLAN",
@@ -579,7 +584,22 @@ class CourseGenerator:
         TRD-CGQ Phase 3A/3D: Pages are grouped by template tier (SMALL/MID/LARGE)
         and each group gets the optimal model + specialized agent.
         Falls back through model escalation chain on failure.
+
+        Template Marking System: Pages with _marked_page data skip LLM
+        entirely — their content is already fully specified by markers.
         """
+        # ── Template Marking System: separate marked pages from LLM pages ──
+        marked_results: Dict[int, Dict[str, Any]] = {}
+        llm_pages = []
+        for i, page in enumerate(pages):
+            if page.get("_marked_page"):
+                marked_results[i] = self._generate_page_content(page, options, i)
+            else:
+                llm_pages.append((i, page))
+
+        if not llm_pages:
+            return [marked_results[i] for i in sorted(marked_results.keys())]
+
         from app.services.ai.fanout import StreamManager
         from app.services.ai.config import get_ai_config
         from app.services.ai.llm_client import LLMClient
@@ -740,7 +760,12 @@ class CourseGenerator:
             stats["routing_counts"].get("large", 0), stats["large_pct"],
         )
 
-        return generated
+        # ── Template Marking System: merge marked + LLM results ──
+        all_results: Dict[int, Dict[str, Any]] = dict(marked_results)
+        for i, (orig_idx, _) in enumerate(llm_pages):
+            if i < len(generated):
+                all_results[orig_idx] = generated[i]
+        return [all_results[i] for i in sorted(all_results.keys())]
 
     # ═══════════════════════════════════════════════════════════════════
     # Phase 2A: Template-Specific Content Generators (TRD-CGQ §5.4)
@@ -757,7 +782,23 @@ class CourseGenerator:
 
         TRD-CGQ Phase 2A: Routes each template type to its dedicated generator
         which uses FeatureDetector results to decide on multi-component output.
+        Phase 3C: When the page has a `_marked_page` attached, uses marker-
+        defined structures directly instead of LLM/heuristic generation.
         """
+        # ── Template Marking System: marker-derived page content ──────
+        marked_data = page.get("_marked_page")
+        if marked_data is not None and isinstance(marked_data, dict) and marked_data.get("components"):
+            logger.info(
+                "TMS: Using marked data for page '%s' — %d components",
+                page.get("title", "?"), len(marked_data.get("components", [])),
+            )
+            return self._generate_from_marked_data(marked_data, options, index)
+        elif marked_data is not None:
+            logger.warning(
+                "TMS: _marked_page present but no components for page '%s' — falling through",
+                page.get("title", "?"),
+            )
+
         template_type = page.get("template_type", "text-content")
         title = page.get("title", f"Page {index + 1}")
         source = page.get("source_excerpt", "")
@@ -803,6 +844,260 @@ class CourseGenerator:
             "order": page.get("order", index),
             "components": components,
             "source_excerpt": source[:500] if source else "",
+        }
+
+    # ── Template Marking System: marker-driven generation ─────────
+
+    def _generate_from_marked_data(
+        self, marked_data: dict, options: dict, index: int
+    ) -> dict:
+        """Generate page content from serialized marked page data.
+
+        Works with the dict representation of a MarkedPage (from _convert_marked_to_plan)
+        rather than the MarkedPage dataclass directly, since dataclasses
+        can't be stored in JSON columns.
+        """
+        components = []
+        for comp_data in marked_data.get("components", []):
+            comp = self._build_component_from_marker_data(comp_data)
+            components.append(comp)
+        return self._build_page(
+            marked_data.get("title", "Untitled"),
+            marked_data.get("template_type", "content-text"),
+            {"order": marked_data.get("order", index),
+             "source_excerpt": marked_data.get("raw_content", "")},
+            index,
+            marked_data.get("raw_content", ""),
+            components,
+        )
+
+    def _build_component_from_marker_data(self, comp_data: dict) -> dict:
+        """Build an output component dict from serialized marked component data."""
+        comp_type = comp_data.get("component_type", "content-text")
+        raw_content = comp_data.get("raw_content", "")
+        items = comp_data.get("items", [])
+        attributes = comp_data.get("attributes", {})
+
+        if comp_type == "content-text":
+            return {
+                "component_type": "content-text",
+                "order_index": comp_data.get("order_index", 0),
+                "data": {
+                    "content": raw_content or (
+                        items[0].get("content", "") if items else ""
+                    ),
+                },
+            }
+        elif comp_type == "tabs":
+            return {
+                "component_type": "tabs",
+                "order_index": comp_data.get("order_index", 0),
+                "data": {
+                    "tabs": [
+                        {"title": item.get("title", ""),
+                         "content": item.get("content", "")}
+                        for item in items
+                        if item.get("item_type") == "tab"
+                    ],
+                },
+            }
+        elif comp_type == "accordion":
+            return {
+                "component_type": "accordion",
+                "order_index": comp_data.get("order_index", 0),
+                "data": {
+                    "items": [
+                        {"title": item.get("title", ""),
+                         "content": item.get("content", "")}
+                        for item in items
+                        if item.get("item_type") == "accordion-item"
+                    ],
+                },
+            }
+        elif comp_type == "click-reveal":
+            return {
+                "component_type": "click-reveal",
+                "order_index": comp_data.get("order_index", 0),
+                "data": {
+                    "items": [
+                        {"title": item.get("title", ""),
+                         "content": item.get("content", "")}
+                        for item in items
+                        if item.get("item_type") == "reveal-item"
+                    ],
+                },
+            }
+        elif comp_type in ("final-assessment", "mcq", "multi-select", "true-false"):
+            return self._build_assessment_from_marker_data(comp_data)
+        else:
+            return {
+                "component_type": "content-text",
+                "order_index": comp_data.get("order_index", 0),
+                "data": {
+                    "content": raw_content or (
+                        items[0].get("content", "") if items else ""
+                    ),
+                },
+            }
+
+    def _build_assessment_from_marker_data(self, comp_data: dict) -> dict:
+        """Build an assessment component from serialized marker data."""
+        questions = []
+        for item in comp_data.get("items", []):
+            if item.get("item_type") != "question":
+                continue
+            q_children = item.get("metadata", {}).get("_children", [])
+            options = []
+            feedback = ""
+            for child in q_children:
+                item_type = child.get("item_type", "")
+                if item_type == "option":
+                    options.append({
+                        "id": child.get("title", ""),
+                        "text": child.get("content", ""),
+                        "isCorrect": child.get("is_correct", False),
+                    })
+                elif item_type == "feedback":
+                    feedback = child.get("content", "")
+
+            questions.append({
+                "id": item.get("metadata", {}).get("id", f"q-{len(questions) + 1}"),
+                "type": item.get("title", "mcq"),
+                "question": item.get("content", ""),
+                "options": options,
+                "feedback": feedback,
+            })
+
+        return {
+            "component_type": "final-assessment",
+            "order_index": comp_data.get("order_index", 0),
+            "data": {
+                "passing_score": int(
+                    comp_data.get("attributes", {}).get("passing_score", "80")
+                ),
+                "questions": questions,
+            },
+        }
+
+    def _generate_from_marked_page(
+        self, marked_page: MarkedPage, options: dict, index: int
+    ) -> dict:
+        """Generate page content from marked components.
+
+        Each MarkedComponent becomes one output component in the page.
+        Nested components are preserved. Content text within components
+        comes from the markers (raw_content and item content).
+        """
+        components = []
+        for mc in marked_page.components:
+            comp = self._build_component_from_marker(mc, options)
+            components.append(comp)
+        return self._build_page(
+            marked_page.title,
+            marked_page.template_type,
+            {"order": marked_page.order, "source_excerpt": marked_page.raw_content},
+            index,
+            marked_page.raw_content,
+            components,
+        )
+
+    def _build_component_from_marker(
+        self, mc: MarkedComponent, options: dict
+    ) -> dict:
+        """Build an output component dict from a MarkedComponent."""
+        if mc.component_type == "content-text":
+            return {
+                "component_type": "content-text",
+                "order_index": mc.order_index,
+                "data": {
+                    "content": mc.raw_content or (
+                        mc.items[0].content if mc.items else ""
+                    ),
+                },
+            }
+        elif mc.component_type == "tabs":
+            return {
+                "component_type": "tabs",
+                "order_index": mc.order_index,
+                "data": {
+                    "tabs": [
+                        {"title": item.title, "content": item.content}
+                        for item in mc.items
+                        if item.item_type == "tab"
+                    ],
+                },
+            }
+        elif mc.component_type == "accordion":
+            return {
+                "component_type": "accordion",
+                "order_index": mc.order_index,
+                "data": {
+                    "items": [
+                        {"title": item.title, "content": item.content}
+                        for item in mc.items
+                        if item.item_type == "accordion-item"
+                    ],
+                },
+            }
+        elif mc.component_type == "click-reveal":
+            return {
+                "component_type": "click-reveal",
+                "order_index": mc.order_index,
+                "data": {
+                    "items": [
+                        {"title": item.title, "content": item.content}
+                        for item in mc.items
+                        if item.item_type == "reveal-item"
+                    ],
+                },
+            }
+        elif mc.component_type in ("final-assessment", "mcq", "multi-select", "true-false"):
+            return self._build_assessment_from_marker(mc)
+        else:
+            return {
+                "component_type": "content-text",
+                "order_index": mc.order_index,
+                "data": {
+                    "content": mc.raw_content or (
+                        mc.items[0].content if mc.items else ""
+                    ),
+                },
+            }
+
+    def _build_assessment_from_marker(self, mc: MarkedComponent) -> dict:
+        """Build an assessment component from marker-parsed questions."""
+        questions = []
+        for item in mc.items:
+            if item.item_type != "question":
+                continue
+            q_children = item.metadata.get("_children", [])
+            options = []
+            feedback = ""
+            for child in q_children:
+                if child.item_type == "option":
+                    options.append({
+                        "id": child.title,
+                        "text": child.content,
+                        "isCorrect": child.metadata.get("is_correct", False),
+                    })
+                elif child.item_type == "feedback":
+                    feedback = child.content
+
+            questions.append({
+                "id": item.metadata.get("id", f"q-{len(questions) + 1}"),
+                "type": item.title,
+                "question": item.content,
+                "options": options,
+                "feedback": feedback,
+            })
+
+        return {
+            "component_type": "final-assessment",
+            "order_index": mc.order_index,
+            "data": {
+                "passing_score": int(mc.attributes.get("passing_score", "80")),
+                "questions": questions,
+            },
         }
 
     # ── Text Content ──────────────────────────────────────────────────

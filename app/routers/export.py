@@ -446,10 +446,15 @@ def _component_data_with_content(comp_type: str, data: dict) -> dict:
         ).strip() or comp_type
 
     elif comp_type == "accordion":
-        panels = data.get("panels") or []
+        # Support both legacy "panels" key and AI-generated "items" key
+        panels = data.get("panels") or data.get("items") or []
         out["content"] = " ".join(
-            f"{p.get('title', '')} {p.get('body', '')}" for p in panels
+            f"{p.get('title', '')} {p.get('content', p.get('body', ''))}"
+            for p in panels
         ).strip() or comp_type
+        # Preserve items/panels for runtime rendering
+        if panels and not data.get("panels"):
+            out["panels"] = panels
 
     elif comp_type == "click-reveal":
         # Legacy type: data uses items: [{title, content}]
@@ -582,11 +587,16 @@ def _map_template_record(template_record) -> dict:
     if normalized_type == "accordion":
         panels = []
         if isinstance(raw_content, dict):
-            panels = raw_content.get("panels") or []
+            panels = raw_content.get("panels") or raw_content.get("items") or []
         if not panels:
-            panels = template_payload.get("panels") or []
+            panels = template_payload.get("panels") or template_payload.get("items") or []
         if isinstance(panels, list):
-            mapped_data["panels"] = panels
+            # Normalize items to panels format for SCORM contract
+            mapped_data["panels"] = [
+                {"title": p.get("title", ""),
+                 "body": p.get("content", p.get("body", ""))}
+                for p in panels
+            ]
 
     if normalized_type in ("content-media", "text-with-media"):
         # Preserve all text-with-media fields from the template payload.
@@ -833,7 +843,11 @@ async def export_persisted_course(
 
             course_data["templates"] = []
             for pg in db_pages:
-                for comp in comp_map.get(pg.page_id, []):
+                comps = comp_map.get(pg.page_id, [])
+                if not comps:
+                    continue
+                if len(comps) == 1:
+                    comp = comps[0]
                     normalized_type = _normalize_component_type_to_template_type(comp.component_type)
                     course_data["templates"].append({
                         "id": comp.component_id,
@@ -844,6 +858,34 @@ async def export_persisted_course(
                         "data": _component_data_with_content(
                             comp.component_type, comp.data or {}
                         ),
+                    })
+                else:
+                    # Multi-component page: merge into single template
+                    primary = None
+                    intro_text = ""
+                    for comp in comps:
+                        ctype = comp.component_type
+                        if ctype in ("tabs", "accordion", "click-reveal",
+                                    "final-assessment", "mcq", "content-video"):
+                            primary = comp
+                        elif ctype == "content-text":
+                            ct_data = comp.data or {}
+                            intro_text = ct_data.get("content", "")
+                    if primary is None:
+                        primary = comps[0]
+                    normalized_type = _normalize_component_type_to_template_type(primary.component_type)
+                    merged_data = _component_data_with_content(
+                        primary.component_type, dict(primary.data or {})
+                    )
+                    if intro_text:
+                        merged_data["intro"] = intro_text
+                    course_data["templates"].append({
+                        "id": primary.component_id,
+                        "type": normalized_type,
+                        "title": pg.title,
+                        "order": len(course_data["templates"]),
+                        "pageId": pg.page_id,
+                        "data": merged_data,
                     })
 
         # ── Resolve theme cascade ────────────────────────────────────────

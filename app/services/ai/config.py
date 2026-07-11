@@ -118,6 +118,12 @@ class AIConfig:
     similar_course_max_results: int = 20
     similar_course_cache_ttl_minutes: int = 60
 
+    # ── Template Marking System ───────────────────────────────────
+    template_marking_enabled: bool = False
+    template_marking_strict_mode: bool = False
+    template_marking_max_nesting: int = 4
+    template_marking_max_pages: int = 50
+
     # ── Durable Workflow Engine (US-BKND-AI-034) ──────────
     workflow_enabled: bool = True
     workflow_worker_id: str = "worker-1"
@@ -355,6 +361,11 @@ def load_ai_config() -> AIConfig:
         workflow_lock_timeout_ms=_env_int("WORKFLOW_LOCK_TIMEOUT_MS", 5000),
         workflow_stale_threshold=_env_int("WORKFLOW_STALE_THRESHOLD", 30),
         workflow_max_duration_seconds=_env_int("WORKFLOW_MAX_DURATION_SECONDS", 86400),
+        # ── Template Marking System ────────────────────────────
+        template_marking_enabled=_env_bool("AI_TEMPLATE_MARKING_ENABLED", False),
+        template_marking_strict_mode=_env_bool("AI_TEMPLATE_MARKING_STRICT_MODE", False),
+        template_marking_max_nesting=_env_int("AI_TEMPLATE_MARKING_MAX_NESTING", 4),
+        template_marking_max_pages=_env_int("AI_TEMPLATE_MARKING_MAX_PAGES", 50),
         # ── TRD-CGQ Phase 1: Course Generation Quality ──────────
         generation_provider=os.getenv("AI_GENERATION_PROVIDER", "").lower(),
         template_selector_llm_enabled=_env_bool("AI_TEMPLATE_SELECTOR_LLM_ENABLED", False),

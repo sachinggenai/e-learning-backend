@@ -187,6 +187,53 @@ async def propose_page_breakdown(
             ),
         }
 
+    # ── Template Marking System: deterministic page plan from markers ──
+    marked_doc = _get_marked_document(job)
+    if marked_doc and marked_doc.has_markers:
+        meta = job.source_metadata or {}
+        if meta.get("marker_status") == "parse_error":
+            return ai_error(
+                "MARKER_PARSE_ERROR",
+                "The document has template markers with parse errors. "
+                "Fix the errors and re-upload.",
+                status=422,
+            )
+
+        pages = _convert_marked_to_plan(marked_doc)
+
+        job.extracted_sections = {
+            "plan": pages,
+            "total_sections": len(marked_doc.pages),
+            "pages_proposed": len(pages),
+            "generated_at": __import__("datetime").datetime.utcnow().isoformat(),
+            "marker_mode": True,
+        }
+        job.status = "page_plan_ready"
+        await db.commit()
+
+        return {
+            "status": "ok",
+            "job_id": job.job_id,
+            "plan": pages,
+            "total_proposed": len(pages),
+            "source_sections": len(marked_doc.pages),
+            "validation": {
+                "valid": True,
+                "coverage": 1.0,
+                "errors": [],
+                "warnings": [
+                    e.message for e in marked_doc.parse_errors
+                    if e.severity == "warning"
+                ],
+            },
+            "idempotent": False,
+            "marker_mode": True,
+            "message": (
+                f"Page plan derived from {len(marked_doc.pages)} "
+                f"document markers — no LLM needed."
+            ),
+        }
+
     # ── State guard: only allow regeneration from fresh states ─────
     if job.status not in ("analyzed", "uploaded"):
         return ai_error(
@@ -1212,4 +1259,105 @@ def _apply_plan_modifications(plan: list, mods: list) -> list:
                 plan[idx]["source_section_ids"].extend(plan[idx + 1]["source_section_ids"])
                 plan[idx]["content_preview"] += " | " + plan[idx + 1].get("content_preview", "")
                 plan.pop(idx + 1)
+    return plan
+
+
+# ── Template Marking System helpers ──────────────────────────────────
+
+
+def _get_marked_document(job) -> object:
+    """Extract the MarkedDocument from a job's source_metadata.
+
+    Returns None if no markers were present or parse failed.
+    """
+    meta = job.source_metadata or {}
+    md_data = meta.get("marked_document") if isinstance(meta, dict) else None
+    if not md_data:
+        return None
+    from app.services.ai.marked_document_parser import MarkedDocument
+    return MarkedDocument.from_dict(md_data)
+
+
+def _convert_marked_to_plan(marked_doc) -> list[dict]:
+    """Convert MarkedDocument pages to the page plan format.
+
+    This is DETERMINISTIC — no LLM, no heuristics, no regex guessing.
+    Template types, component structure, and items come directly from markers.
+    """
+    def _serialize_item(item) -> dict:
+        """Deep-serialize a MarkedItem, handling _children with MarkedItem objects."""
+        meta = {}
+        for key, value in item.metadata.items():
+            if key == "_children":
+                meta[key] = [
+                    {
+                        "title": getattr(ch, "title", ""),
+                        "content": getattr(ch, "content", ""),
+                        "item_type": getattr(ch, "item_type", ""),
+                        "order_index": getattr(ch, "order_index", 0),
+                        "is_correct": (
+                            ch.metadata.get("is_correct", False)
+                            if hasattr(ch, "metadata") and isinstance(ch.metadata, dict)
+                            else False
+                        ),
+                        "metadata": (
+                            dict(ch.metadata) if hasattr(ch, "metadata") and isinstance(ch.metadata, dict)
+                            else {}
+                        ),
+                    }
+                    for ch in value
+                ]
+            else:
+                meta[key] = value
+        return {
+            "title": item.title,
+            "content": item.content,
+            "item_type": item.item_type,
+            "order_index": item.order_index,
+            "metadata": meta,
+        }
+
+    def _serialize_component(comp) -> dict:
+        """Deep-serialize a MarkedComponent."""
+        return {
+            "component_type": comp.component_type,
+            "order_index": comp.order_index,
+            "items": [_serialize_item(item) for item in comp.items],
+            "children": [_serialize_component(ch) for ch in comp.children],
+            "raw_content": comp.raw_content,
+            "attributes": dict(comp.attributes),
+        }
+
+    plan = []
+    for page in marked_doc.pages:
+        component_items = [_serialize_component(c) for c in page.components]
+
+        char_count = sum(
+            len(c.raw_content) + sum(len(i.content) for i in c.items)
+            for c in page.components
+        )
+
+        plan.append({
+            "proposed_title": page.title,
+            "suggested_template_type": page.template_type,
+            "rationale": (
+                f"Template specified by document markers: "
+                f"{page.template_type}"
+            ),
+            "source_section_ids": [
+                str(i) for i in page.source_paragraph_indices
+            ],
+            "order": page.order,
+            "char_count": char_count,
+            "content_preview": page.raw_content[:200],
+            "_marked_page": {
+                "title": page.title,
+                "template_type": page.template_type,
+                "order": page.order,
+                "raw_content": page.raw_content,
+                "source_paragraph_indices": list(page.source_paragraph_indices),
+                "attributes": dict(page.attributes),
+                "components": component_items,
+            },
+        })
     return plan

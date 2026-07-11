@@ -122,20 +122,103 @@ class AIIngestionService:
                     raw_text = structured.get("raw_text", "")
                     paragraphs = structured.get("paragraphs", [])
 
-                    from app.services.ai.document_splitter import DocumentSplitter
-                    splitter = DocumentSplitter(use_llm=False)
-                    sections = splitter.split_structured(paragraphs, filename)
+                    # ── Template Marking System: check for markers before splitting ──
+                    from app.services.ai.marked_document_parser import (
+                        MarkedDocumentParser,
+                    )
+                    from app.services.ai.config import get_ai_config
 
-                    extracted = [s.to_dict() for s in sections]
-                    source_meta = {
-                        "page_count": len(sections),
-                        "total_chars": sum(s.char_count for s in sections),
-                        "language": "en",
-                        "title": filename,
-                        "splitter_method": "structured_paragraphs",
-                        "paragraph_count": len(paragraphs),
-                        "heading_count": sum(1 for p in paragraphs if p.get("is_heading")),
-                    }
+                    cfg = get_ai_config()
+                    if cfg.template_marking_enabled:
+                        marker_parser = MarkedDocumentParser(
+                            max_pages=cfg.template_marking_max_pages,
+                            strict_mode=cfg.template_marking_strict_mode,
+                        )
+                        if marker_parser.has_markers(paragraphs):
+                            marked_doc = marker_parser.parse(paragraphs)
+                            has_errors = any(
+                                e.severity == "error"
+                                for e in marked_doc.parse_errors
+                            )
+                            if has_errors:
+                                # Store errors for user feedback
+                                source_meta = {
+                                    "marked_document": marked_doc.to_dict(),
+                                    "marker_status": "parse_error",
+                                    "title": filename,
+                                    "paragraph_count": len(paragraphs),
+                                    "error_count": len([
+                                        e for e in marked_doc.parse_errors
+                                        if e.severity == "error"
+                                    ]),
+                                    "warning_count": len([
+                                        e for e in marked_doc.parse_errors
+                                        if e.severity == "warning"
+                                    ]),
+                                }
+                                extracted = None
+                                logger.warning(
+                                    "Marker parse errors in %s: %d errors, %d warnings",
+                                    filename,
+                                    source_meta["error_count"],
+                                    source_meta["warning_count"],
+                                )
+                            else:
+                                # Successful marker parse
+                                sections = _marked_doc_to_sections(marked_doc)
+                                extracted = [s.to_dict() for s in sections]
+                                source_meta = {
+                                    "marked_document": marked_doc.to_dict(),
+                                    "marker_status": "parsed",
+                                    "page_count": len(marked_doc.pages),
+                                    "total_chars": sum(
+                                        len(p.raw_content)
+                                        for p in marked_doc.pages
+                                    ),
+                                    "language": "en",
+                                    "title": filename,
+                                    "paragraph_count": len(paragraphs),
+                                    "heading_count": sum(
+                                        1 for p in paragraphs
+                                        if p.get("is_heading")
+                                    ),
+                                }
+                                logger.info(
+                                    "Template markers parsed in %s: %d pages, %d components",
+                                    filename,
+                                    len(marked_doc.pages),
+                                    sum(len(p.components) for p in marked_doc.pages),
+                                )
+                        else:
+                            # No markers — use existing DocumentSplitter
+                            from app.services.ai.document_splitter import DocumentSplitter
+                            splitter = DocumentSplitter(use_llm=False)
+                            sections = splitter.split_structured(paragraphs, filename)
+                            extracted = [s.to_dict() for s in sections]
+                            source_meta = {
+                                "page_count": len(sections),
+                                "total_chars": sum(s.char_count for s in sections),
+                                "language": "en",
+                                "title": filename,
+                                "splitter_method": "structured_paragraphs",
+                                "paragraph_count": len(paragraphs),
+                                "heading_count": sum(1 for p in paragraphs if p.get("is_heading")),
+                            }
+                    else:
+                        # Feature flag off — existing pipeline unchanged
+                        from app.services.ai.document_splitter import DocumentSplitter
+                        splitter = DocumentSplitter(use_llm=False)
+                        sections = splitter.split_structured(paragraphs, filename)
+                        extracted = [s.to_dict() for s in sections]
+                        source_meta = {
+                            "page_count": len(sections),
+                            "total_chars": sum(s.char_count for s in sections),
+                            "language": "en",
+                            "title": filename,
+                            "splitter_method": "structured_paragraphs",
+                            "paragraph_count": len(paragraphs),
+                            "heading_count": sum(1 for p in paragraphs if p.get("is_heading")),
+                        }
                 else:
                     # PDF: existing flow (pdfplumber doesn't expose styles)
                     mime = self._mime_for(f".{detected}")
@@ -266,3 +349,37 @@ class AIIngestionService:
             ".md": "text/markdown",
             ".zip": "application/zip",
         }.get(ext, "application/octet-stream")
+
+
+# ── Template Marking System helper ────────────────────────────────────
+
+
+def _marked_doc_to_sections(marked_doc) -> list:
+    """Convert a MarkedDocument to the section dict format expected by the pipeline.
+
+    Each page becomes one "section" with its component structure preserved
+    in the content_preview. The full MarkedDocument is stored in
+    source_metadata for the breakdown and generation steps.
+    """
+    from app.services.ai.document_splitter import Section
+
+    sections = []
+    for i, page in enumerate(marked_doc.pages):
+        heading = page.title or f"Page {i + 1}"
+        content_parts = []
+        for comp in page.components:
+            content_parts.append(f"[{comp.component_type}] {comp.raw_content}")
+            for item in comp.items:
+                content_parts.append(
+                    f"  [{item.item_type}] {item.title}: {item.content}"
+                )
+        content = "\n".join(content_parts)
+        sections.append(Section(
+            index=i,
+            heading=heading,
+            content=content,
+            content_preview=content[:500],
+            char_count=len(content),
+            source_style="marker",
+        ))
+    return sections
